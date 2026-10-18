@@ -14,6 +14,8 @@ enum MainSheet: Identifiable {
     case textPrompt(TextPromptRequest)
     case preview(id: String)
     case lockPassword(lockAfterSaving: Bool)
+    case importData(ImportSheetRequest)
+    case importResult(ImportOutcome)
 
     var id: String {
         switch self {
@@ -29,6 +31,8 @@ enum MainSheet: Identifiable {
         case .textPrompt(let request): "prompt-\(request.id)"
         case .preview(let id): "preview-\(id)"
         case .lockPassword: "lockPassword"
+        case .importData(let request): "import-\(request.id)"
+        case .importResult: "importResult"
         }
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 /// Content of the main window's sheets.
 struct MainSheetContent: View {
     let sheet: MainSheet
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         switch sheet {
@@ -18,6 +19,8 @@ struct MainSheetContent: View {
         case .textPrompt(let request): TextPromptSheet(request: request)
         case .preview(let id): PreviewSheet(id: id)
         case .lockPassword(let lockAfterSaving): LockPasswordSheet(lockAfterSaving: lockAfterSaving)
+        case .importData(let request): ImportSheet(request: request, client: model.importClient, profileDirectory: model.launch.profileDirectory)
+        case .importResult(let outcome): ImportResultSheet(outcome: outcome)
         }
     }
 }

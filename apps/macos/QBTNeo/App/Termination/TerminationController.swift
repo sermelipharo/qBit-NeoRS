@@ -97,7 +97,8 @@ final class TerminationController {
             isSystemSessionEnd: isSystemSessionEnd,
             confirmOnExit: app.gui.confirmOnExit,
             isTransferring: app.status.isTransferring,
-            isAutoExiting: CompletionActionController.isAutoExiting
+            // The import sheet already asked: restarting for it skips the exit confirmation.
+            isAutoExiting: CompletionActionController.isAutoExiting || app.isRestartingForImport
         )
     }
 
@@ -145,9 +146,14 @@ final class TerminationController {
         app?.stopRefreshing()
         app?.widgets?.publishTermination()
         let client = app?.client
+        let relaunches = app?.isRestartingForImport == true
         Task.detached {
             await AppModel.shutdown(client)
-            Self.onMainRunLoop { NSApp.reply(toApplicationShouldTerminate: true) }
+            Self.onMainRunLoop {
+                // Only once the core is down: the new instance imports into a profile nobody uses.
+                if relaunches { AppRelauncher.spawnAfterExit() }
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
         }
     }
 

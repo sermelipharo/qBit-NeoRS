@@ -7,7 +7,7 @@ struct StartupOverlay: View {
     var body: some View {
         switch model.phase {
         case .starting:
-            ProgressView("Loading torrents…")
+            ProgressView(model.startupImport.map { String(localized: "Importing from \($0.appName)…") } ?? String(localized: "Loading torrents…"))
                 .padding(Design.Spacing.xLarge)
                 .background(.regularMaterial, in: .rect(cornerRadius: Design.Radius.large))
         case .failed(let message):

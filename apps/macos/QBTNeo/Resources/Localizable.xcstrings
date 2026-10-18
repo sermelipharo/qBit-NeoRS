@@ -1745,6 +1745,16 @@
         }
       }
     },
+    "%@ has no torrents or settings on this Mac.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этом Mac нет торрентов или настроек %@."
+          }
+        }
+      }
+    },
     "%@ ms": {
       "localizations": {
         "ar": {
@@ -2069,6 +2079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 毫秒"
+          }
+        }
+      }
+    },
+    "%@ saves the state of its torrents when it quits. Quit it, then check again. qBit NeoRS never quits it for you.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ сохраняет состояние торрентов при выходе. Закройте его и проверьте снова. qBit NeoRS никогда не закрывает его сам."
           }
         }
       }
@@ -2701,6 +2721,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ 已被封鎖。原因：%2$@。"
+          }
+        }
+      }
+    },
+    "%@ was open, so nothing was imported. Quit it and choose File > Import from %@… again.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ был открыт, поэтому ничего не импортировано. Закройте его и снова выберите «Файл» > «Импорт из %@…»."
           }
         }
       }
@@ -3422,6 +3452,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld мин"
+          }
+        }
+      }
+    },
+    "%lld torrent(s) couldn't be imported; the report says why.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось импортировать торрентов: %lld; причины в отчёте."
+          }
+        }
+      }
+    },
+    "%lld torrent(s) imported: %lld kept their progress, %lld are checked when they start.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импортировано торрентов: %lld. Прогресс сохранён у %lld, при запуске проверяются %lld."
           }
         }
       }
@@ -5459,6 +5509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld年%2$lld天"
+          }
+        }
+      }
+    },
+    "%u torrent(s) can't be imported (see the report)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удаётся импортировать торрентов: %u (см. отчёт)"
           }
         }
       }
@@ -28372,6 +28432,16 @@
         }
       }
     },
+    "Already in qBit NeoRS (statistics added)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже есть в qBit NeoRS (статистика добавляется)"
+          }
+        }
+      }
+    },
     "Also delete .torrent files whose addition was cancelled": {
       "localizations": {
         "ar": {
@@ -49521,6 +49591,16 @@
         }
       }
     },
+    "Brings over %@'s torrents, their progress and its settings.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Переносит торренты %@, их прогресс и настройки."
+          }
+        }
+      }
+    },
     "Brown": {
       "localizations": {
         "ru": {
@@ -52173,6 +52253,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "如果 torrent 處於「停止」、「排隊」、「錯誤」或「檢查」狀態，則無法強制重新公告"
+          }
+        }
+      }
+    },
+    "Can't Import from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось импортировать из %@"
           }
         }
       }
@@ -55917,6 +56007,16 @@
         }
       }
     },
+    "Check Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить снова"
+          }
+        }
+      }
+    },
     "Check for program updates": {
       "localizations": {
         "ar": {
@@ -56643,6 +56743,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Отмечено"
+          }
+        }
+      }
+    },
+    "Checked when they start": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверяются при запуске"
           }
         }
       }
@@ -70175,6 +70285,16 @@
         }
       }
     },
+    "Cookies (add them again in Manage Cookies)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie (добавьте их снова в «Управлении cookie»)"
+          }
+        }
+      }
+    },
     "Copy": {
       "localizations": {
         "ar": {
@@ -76691,6 +76811,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前的維護者"
+          }
+        }
+      }
+    },
+    "Current settings kept": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущие настройки сохраняются"
           }
         }
       }
@@ -128836,6 +128966,16 @@
         }
       }
     },
+    "Full Report": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Полный отчёт"
+          }
+        }
+      }
+    },
     "GNU General Public License v3.0": {
       "localizations": {
         "ru": {
@@ -131675,6 +131815,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Зелёный"
+          }
+        }
+      }
+    },
+    "Group colors and automatic group rules": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цвета групп и правила автоматического назначения групп"
           }
         }
       }
@@ -139727,6 +139877,16 @@
         }
       }
     },
+    "Import Cancelled": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт отменён"
+          }
+        }
+      }
+    },
     "Import RSS rules": {
       "localizations": {
         "ar": {
@@ -140055,6 +140215,26 @@
         }
       }
     },
+    "Import Your Torrents": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт торрентов"
+          }
+        }
+      }
+    },
+    "Import and Restart": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импортировать и перезапустить"
+          }
+        }
+      }
+    },
     "Import error": {
       "localizations": {
         "ar": {
@@ -140331,6 +140511,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "匯入錯誤"
+          }
+        }
+      }
+    },
+    "Import from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт из %@"
+          }
+        }
+      }
+    },
+    "Import from Transmission…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт из Transmission…"
+          }
+        }
+      }
+    },
+    "Import from qBittorrent…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт из qBittorrent…"
+          }
+        }
+      }
+    },
+    "Import from:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт из:"
+          }
+        }
+      }
+    },
+    "Imported from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импортировано из %@"
+          }
+        }
+      }
+    },
+    "Importing from %@…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Импорт из %@…"
           }
         }
       }
@@ -148159,6 +148399,16 @@
         }
       }
     },
+    "Keep my current qBit NeoRS settings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить текущие настройки qBit NeoRS"
+          }
+        }
+      }
+    },
     "Keep unselected files in \".unwanted\" folder": {
       "localizations": {
         "az-Latn": {
@@ -149438,6 +149688,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "KiB/s"
+          }
+        }
+      }
+    },
+    "Known peers, bandwidth priority and per-torrent peer limits": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Известные пиры, приоритет полосы и лимиты пиров для торрентов"
           }
         }
       }
@@ -156230,6 +156490,16 @@
         }
       }
     },
+    "Logs and the GeoIP database (downloaded again)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журналы и база GeoIP (скачивается заново)"
+          }
+        }
+      }
+    },
     "Look for peers on your local network": {
       "localizations": {
         "ar": {
@@ -157288,6 +157558,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Magnet-ссылки"
+          }
+        }
+      }
+    },
+    "Magnet links waiting for metadata": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Магнет-ссылки, ожидающие метаданные"
           }
         }
       }
@@ -178375,6 +178655,16 @@
         }
       }
     },
+    "No %@ Data": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет данных %@"
+          }
+        }
+      }
+    },
     "No API key": {
       "localizations": {
         "ru": {
@@ -180511,6 +180801,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "一般優先度"
+          }
+        }
+      }
+    },
+    "Not Carried Over": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не переносится"
+          }
+        }
+      }
+    },
+    "Not Now": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не сейчас"
           }
         }
       }
@@ -186023,6 +186333,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "開啟目標資料夾"
+          }
+        }
+      }
+    },
+    "Open Report": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть отчёт"
           }
         }
       }
@@ -192679,6 +192999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "遵循 POSIX"
+          }
+        }
+      }
+    },
+    "Partially downloaded pieces and known peers": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Частично скачанные части и известные пиры"
           }
         }
       }
@@ -211110,6 +211440,16 @@
         }
       }
     },
+    "Progress kept without a recheck": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогресс сохраняется без перепроверки"
+          }
+        }
+      }
+    },
     "Progress:": {
       "localizations": {
         "ar": {
@@ -213588,6 +213928,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Завершить"
+          }
+        }
+      }
+    },
+    "Quit %@ First": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сначала закройте %@"
           }
         }
       }
@@ -218858,6 +219208,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "讀取快取超過負荷："
+          }
+        }
+      }
+    },
+    "Reading %@'s data…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтение данных %@…"
           }
         }
       }
@@ -225980,6 +226340,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Удаленный доступ"
+          }
+        }
+      }
+    },
+    "Remote access (RPC) is on in Transmission. Its password is not copied; qBit NeoRS offers the Web UI instead.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В Transmission включено удалённое управление (RPC). Его пароль не копируется; вместо него в qBit NeoRS есть веб-интерфейс."
           }
         }
       }
@@ -259268,6 +259638,16 @@
         }
       }
     },
+    "Settings stay as they are; torrents, categories and tags are added.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки не меняются; добавляются торренты, категории и метки."
+          }
+        }
+      }
+    },
     "Settings…": {
       "localizations": {
         "ru": {
@@ -259980,6 +260360,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Показать все торренты"
+          }
+        }
+      }
+    },
+    "Show Backup in Finder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать копию в Finder"
           }
         }
       }
@@ -279694,6 +280084,16 @@
         }
       }
     },
+    "Taken from %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Берутся из %@"
+          }
+        }
+      }
+    },
     "Teal": {
       "localizations": {
         "ru": {
@@ -280594,6 +280994,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "替補的 WebUI 檔案位置不應該為空白。"
+          }
+        }
+      }
+    },
+    "The blocklist and the DHT cache (built again)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Список блокировки и кэш DHT (создаются заново)"
           }
         }
       }
@@ -285320,6 +285730,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "下載者「%@」無效。"
+          }
+        }
+      }
+    },
+    "The previous profile was backed up to %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Резервная копия прежнего профиля: %@."
           }
         }
       }
@@ -306849,6 +307269,16 @@
         }
       }
     },
+    "Try Again": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
+          }
+        }
+      }
+    },
     "Tunnel settings": {
       "localizations": {
         "ru": {
@@ -325285,6 +325715,16 @@
         }
       }
     },
+    "Warnings": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупреждения"
+          }
+        }
+      }
+    },
     "Wasted:": {
       "localizations": {
         "ar": {
@@ -326769,6 +327209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "監視資料夾："
+          }
+        }
+      }
+    },
+    "Watched folders": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наблюдаемые папки"
           }
         }
       }
@@ -333031,6 +333481,16 @@
         }
       }
     },
+    "Will Be Imported": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Будет импортировано"
+          }
+        }
+      }
+    },
     "Will watch the folder and all its subfolders. In Manual torrent management mode it will also add subfolder name to the selected Save path.": {
       "localizations": {
         "ru": {
@@ -333203,6 +333663,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "視窗(W)"
+          }
+        }
+      }
+    },
+    "Window layout and other settings only Transmission has": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расположение окон и другие настройки, которые есть только в Transmission"
+          }
+        }
+      }
+    },
+    "Window layout, column widths and Qt styles": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расположение окон, ширина столбцов и стили Qt"
           }
         }
       }
@@ -338796,6 +339276,24 @@
         }
       }
     },
+    "palette.keywords.import": {
+      "comment": "Command Palette search words, comma-separated",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "migrate, move, switch"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "перенос, миграция, переход, migrate, move, switch"
+          }
+        }
+      }
+    },
     "palette.keywords.pauseSession": {
       "comment": "Command Palette search words, comma-separated",
       "extractionState": "extracted_with_value",
@@ -339331,6 +339829,26 @@
         }
       }
     },
+    "qBit NeoRS already has torrents: its settings are kept, its torrents keep their state, and the others are added.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В qBit NeoRS уже есть торренты: его настройки сохраняются, имеющиеся торренты остаются как есть, остальные добавляются."
+          }
+        }
+      }
+    },
+    "qBit NeoRS found %@ on this Mac. You can bring over its torrents and settings.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qBit NeoRS нашёл на этом Mac %@. Можно перенести его торренты и настройки."
+          }
+        }
+      }
+    },
     "qBit NeoRS is built on the work of the qBittorrent project and its contributors and translators.": {
       "localizations": {
         "ru": {
@@ -339357,6 +339875,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "qBit NeoRS заново реализует функции, настройки и WebAPI qBittorrent 5.2.4."
+          }
+        }
+      }
+    },
+    "qBit NeoRS restarts to import. Its profile is backed up first. %@'s files are only read, and downloaded files are never moved.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для импорта qBit NeoRS перезапустится, предварительно сделав резервную копию своего профиля. Файлы %@ только читаются, скачанные файлы никуда не перемещаются."
+          }
+        }
+      }
+    },
+    "qBit NeoRS takes over %@'s settings: folders, speed limits, connection, queue and seeding limits.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qBit NeoRS возьмёт настройки %@: папки, ограничения скорости, соединение, очередь и ограничения раздачи."
           }
         }
       }

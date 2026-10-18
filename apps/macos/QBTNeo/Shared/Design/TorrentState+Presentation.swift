@@ -60,6 +60,22 @@ extension TorrentState {
         }
     }
 
+    /// The state color for small bold text on a card (the status word): the
+    /// same hue, lightened or darkened where `nsColor` is below 4.5:1 on the
+    /// card background (stalled green and blue, and brown, gray, purple and
+    /// red in dark mode). Measured on #F9F9F9 / #2F2F2F: 4.8–6.8 : 1.
+    var cardTextNSColor: NSColor {
+        switch self {
+        case .stalledDownloading: Self.green
+        case .stalledUploading: Self.blue
+        case .queuedDownloading, .queuedUploading: Self.brownText
+        case .stoppedDownloading: Self.grayText
+        case .stoppedUploading: Self.purpleText
+        case .missingFiles, .error: Self.redText
+        default: nsColor
+        }
+    }
+
     private static let green = NSColor(light: 0x1A7F37, dark: 0x3FB950)
     private static let stalledGreen = NSColor(light: 0x2DA44E, dark: 0x238636)
     private static let blue = NSColor(light: 0x0969DA, dark: 0x58A6FF)
@@ -68,6 +84,10 @@ extension TorrentState {
     private static let gray = NSColor(light: 0x57606A, dark: 0x8B949E)
     private static let purple = NSColor(light: 0x8250DF, dark: 0xA371F7)
     private static let red = NSColor(light: 0xCF222E, dark: 0xF85149)
+    private static let brownText = NSColor(light: 0x7D4E00, dark: 0xD29922)
+    private static let grayText = NSColor(light: 0x57606A, dark: 0x9198A1)
+    private static let purpleText = NSColor(light: 0x8250DF, dark: 0xBC8CFF)
+    private static let redText = NSColor(light: 0xCF222E, dark: 0xFF7B72)
 
     // MARK: Classification (TorrentFilter::matchStatus)
 

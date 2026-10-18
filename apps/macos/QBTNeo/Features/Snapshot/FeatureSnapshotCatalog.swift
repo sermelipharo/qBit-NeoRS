@@ -7,6 +7,8 @@ enum FeatureSnapshotCatalog {
         let name: String
         let title: String
         let size: CGSize
+        /// Drawn as the active window (colored window controls).
+        var active = false
         let view: @MainActor (AppModel) -> AnyView
     }
 
@@ -59,6 +61,6 @@ enum FeatureSnapshotCatalog {
             Entry(name: "palette-torrent", title: AppWindowID.main.title, size: paletteSize) { model in
                 AnyView(PaletteSnapshot(model: model, query: "sintel", drillIn: true))
             },
-        ] + LabelSnapshots.entries
+        ] + LabelSnapshots.entries + ImportSnapshots.entries + CardSnapshots.entries
     }
 }

@@ -37,6 +37,9 @@ extension MainMenuController {
         menu.addItem(commandItem(.addTorrentFile))
         menu.addItem(commandItem(.addTorrentLink))
         menu.addItem(.separator())
+        menu.addItem(commandItem(.importFromQBittorrent))
+        menu.addItem(commandItem(.importFromTransmission))
+        menu.addItem(.separator())
         menu.addItem(standardItem(SystemMenuTitle.text("Close"), #selector(NSWindow.performClose(_:)), "w"))
         let closeAll = standardItem(SystemMenuTitle.text("Close All"), Selector(("closeAll:")), "w", [.command, .option])
         closeAll.isAlternate = true

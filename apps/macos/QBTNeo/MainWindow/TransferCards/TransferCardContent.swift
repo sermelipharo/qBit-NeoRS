@@ -12,6 +12,7 @@ struct TransferCardContent: Equatable {
     var labels: [TableCellContent.Label] = []
     /// Whether `labels` starts with the category.
     var hasCategory = false
+    /// Drawn large in the top-right corner, always in the state color.
     var stateSymbol = ""
     var stateColor: NSColor = .secondaryLabelColor
     var statusText = ""
@@ -25,6 +26,11 @@ struct TransferCardContent: Equatable {
     var sizeText = ""
     var downloadText = ""
     var uploadText = ""
-    /// ETA while downloading, the share ratio otherwise.
-    var trailingText = ""
+    /// Before the size on the status line.
+    var ratioText = ""
+    /// While downloading, after the speeds.
+    var etaText = ""
+
+    /// Speeds or an ETA to show: the card has a second status line.
+    var hasActivity: Bool { !downloadText.isEmpty || !uploadText.isEmpty || !etaText.isEmpty }
 }

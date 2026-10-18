@@ -162,6 +162,10 @@ Rules:
   main-actor job waiting there would starve the job that replies.
   `QBT_UI_SCRIPT=quit-presented` (DEBUG) checks quitting with sheets,
   alerts, menus and closed windows.
+* Importing from qBittorrent or Transmission (`Features/Import`,
+  `docs/MIGRATION.md`) never touches a live core: the sheet runs a dry run,
+  records the request and restarts the app (`AppRelauncher`); the next
+  launch migrates before `App::new`.
 * `--snapshot <dir>` launch argument renders key windows with demo data to
   PNG files off-screen (UI verification without screen recording).
 * Widgets (`apps/macos/QBTNeoWidgets`, a sandboxed WidgetKit extension:

@@ -18,7 +18,7 @@ struct FeatureSnapshots {
         await model.refresh()
         let renderer = OffscreenWindowRenderer(directory: directory)
         for entry in FeatureSnapshotCatalog.entries where isWanted(entry.name) {
-            await renderer.render(entry.name, title: entry.title, size: entry.size) {
+            await renderer.render(entry.name, title: entry.title, size: entry.size, active: entry.active) {
                 entry.view(model)
                     .environment(model)
                     .environment(model.gui)

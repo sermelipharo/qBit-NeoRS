@@ -7,7 +7,8 @@ import AppKit
 /// and tags, and drops of .torrent files and links. A sync reconfigures only
 /// the realized cards of changed torrents; cards skip identical content.
 /// Cards are as tall as their content (`TransferCardHeights`); a sync
-/// re-lays out the grid only when a changed torrent's title or tags changed.
+/// re-lays out the grid only when a changed torrent's title, tags or
+/// activity (speeds or ETA, a second status line) changed.
 @MainActor
 final class TransferCardsController: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegateFlowLayout {
     let model: AppModel
@@ -176,7 +177,7 @@ final class TransferCardsController: NSObject, NSCollectionViewDataSource, NSCol
         }
         let changed = model.list.changedIDs
         let builder = builder
-        // A changed name, category or tag can change a card's height.
+        // A changed name, category or tag, or a torrent starting or stopping transfers, can change a card's height.
         var relayout = false
         for id in changed {
             guard let index = indexByID[id] else { continue }

@@ -69,6 +69,10 @@ final class AppModel {
     @ObservationIgnored var widgets: WidgetPublisher?
     /// A torrent a widget link asked for before the transfer list arrived.
     @ObservationIgnored var pendingRevealID: String?
+    /// Quitting to run a recorded import at the next launch (`restartForImport`).
+    @ObservationIgnored var isRestartingForImport = false
+    /// The import running before the core starts (start-up overlay).
+    var startupImport: ImportSource?
 
     init(launch: LaunchOptions = .current, gui: GUIPreferences = GUIPreferences()) {
         self.launch = launch
@@ -90,9 +94,11 @@ final class AppModel {
     func start() async {
         guard client == nil else { return }
         phase = .starting
+        await runPendingImport()
         do {
             let client = try await Self.makeClient(launch)
             attach(client)
+            offerImportIfNeeded()
         } catch {
             phase = .failed(error.userMessage)
         }

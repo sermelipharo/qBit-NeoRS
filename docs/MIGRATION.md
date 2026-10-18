@@ -1,4 +1,11 @@
-# Migrating from qBittorrent 5.x
+# Migrating from qBittorrent 5.x or Transmission
+
+qBit NeoRS imports a qBittorrent 5.x installation or the Transmission app for
+macOS (3.x and 4.x), from the app (File > Import from qBittorrent… /
+Import from Transmission…, see "In-app import" below) or with
+`qbit-neors-nox migrate-from-qbittorrent` / `migrate-from-transmission`.
+
+## qBittorrent 5.x
 
 `qbit-neors-nox migrate-from-qbittorrent` builds a qBit NeoRS profile from a
 qBittorrent 5.x installation (code: `crates/qbt-core/src/migrate/`).
@@ -8,7 +15,7 @@ target profile. The tool refuses a profile in use: a process started with that
 `--profile`, the app on the default profile, or a process holding the
 profile's engine files open.
 
-## Quick cutover (default profile)
+### Quick cutover (default profile)
 
 1. Quit qBittorrent and qBit NeoRS. qBittorrent saves its resume data on exit.
 2. `scripts/migrate-from-qbittorrent.sh` runs a dry run and prints the report.
@@ -20,7 +27,7 @@ script uses merge mode (below). Before writing, it copies the profile's
 `config/`, `data/BT_backup` and `data/stats.json`, plus an export of the
 `mk.lex.qbitneors` defaults domain, to `qBit NeoRS.before-migration-<time>/`.
 
-## Command
+### Command
 
 ```
 qbit-neors-nox migrate-from-qbittorrent --profile <dir> [options]
@@ -41,7 +48,7 @@ The report goes to stdout and to `<profile>/migration/report.txt`. It never
 contains the password hash, API key, tracker URLs (they can carry passkeys)
 or cookies.
 
-## What is carried over
+### What is carried over
 
 * **Preferences:** every WebAPI preference (`app/preferences`), read from
   `qBittorrent.ini` through the ini key, type and unit table in
@@ -83,7 +90,7 @@ or cookies.
     file: if one fails, that torrent alone is fully checked. Without a usable
     bitfield (wrong length, seed mode, no metadata) the torrent is checked.
 
-### Pieces shared with skipped files
+#### Pieces shared with skipped files
 
 libtorrent keeps the bytes of "Do not download" files in a part file
 (`<save path>/.<id>.parts`), not in the files. Our engine has no part file. A
@@ -98,7 +105,7 @@ and downloaded again later. With `unclaim`, every such piece is unclaimed.
 Then the wanted file next to it is one piece short, and qBit NeoRS renames it
 to `.!qB` until the piece arrives.
 
-## Merge mode (`--merge`)
+### Merge mode (`--merge`)
 
 Merge mode is for a profile that already has the torrents, for example after
 adding them by hand:
@@ -124,7 +131,7 @@ adding them by hand:
 * The global all-time statistics are added once. `migration/qbittorrent-merge.json`
   records what was merged, so running merge again changes nothing.
 
-## Not carried over
+### Not carried over
 
 * Window geometry, column layouts, dialog sizes, the Qt style and custom UI
   themes (Qt-specific). The report lists every ini key left out.
@@ -136,6 +143,125 @@ adding them by hand:
 * qBittorrent's logs, GeoIP database (downloaded again) and execution state.
 * The SQLite resume storage (`torrents.db`). Switch qBittorrent to "Fastresume
   files", restart and quit it, then migrate.
+
+
+## Transmission (macOS app)
+
+`qbit-neors-nox migrate-from-transmission` (code:
+`crates/qbt-core/src/migrate/transmission.rs`) reads
+`~/Library/Application Support/Transmission` (`Torrents/`, `Resume/`,
+`Transfers.plist`, `queue.json`, `stats.json`) and the app's settings, the
+`org.m0k.transmission` defaults domain (with `defaults export`, which only
+reads, or a file given with `--defaults`). Quit Transmission first: it saves
+its resume data when it quits, and the tool refuses to write while it runs.
+Nothing of Transmission is written, and content files are only looked at
+(existence and modification time), never moved or renamed.
+
+```
+qbit-neors-nox migrate-from-transmission --profile <dir> [options]
+  --source <dir>        Transmission's folder (default ~/Library/Application Support/Transmission)
+  --defaults <file>     exported settings (default: the org.m0k.transmission domain, read only)
+  --dry-run             report only
+  --merge | --force     as for qBittorrent
+  --no-backup           don't copy the profile to <profile>.before-migration-<time> first
+  --stop-all, --sandbox [--sandbox-listen-port N --sandbox-webui-port N]
+```
+
+With `--merge` or `--force` the profile's small files (`config/`,
+`data/BT_backup`, `data/engine/fastresume`, `data/stats.json`,
+`data/session_state.json`, `migration/`) are copied to
+`<profile>.before-migration-<time>` first. The report goes to stdout and
+`<profile>/migration/report.txt`; it never contains tracker URLs, the
+blocklist URL or the RPC user name and password.
+
+### What is carried over
+
+* **Torrents** from `Torrents/<hash>.torrent` (4.x) or
+  `<name>.<hash16>.torrent` (3.x) and the matching `.resume`, and magnet
+  links without metadata (`<hash>.magnet`):
+  * the `.torrent` bytes, trackers and web seeds from it;
+  * the data folder (`destination`, or `incomplete-dir` while incomplete) as
+    a manual save path (no automatic mode), the incomplete folder as the
+    download path;
+  * renamed torrent and file names (`name`, `files`), skipped files (`dnd`)
+    and file priorities (high stays high; low becomes normal);
+  * started/stopped (Transfers.plist `Active`/`WaitToStart`, else `paused`);
+  * the group (Transfers.plist `GroupValue`) as the category, labels as tags;
+  * per-torrent speed limits, ratio limit (own/unlimited/global) and idle
+    limit (as the inactive seeding time limit), "remove when seeding
+    completes" as the Remove share-limit action;
+  * added, completed and last-activity dates, uploaded/downloaded totals,
+    seeding and active time, sequential download;
+  * queue order (`queue.json`, 3.x: the Transfers.plist order) for torrents
+    still downloading;
+  * **progress without a recheck** when the resume data proves it: a piece
+    counts when all of its 16 KiB blocks are set in `progress.blocks`, and
+    every file holding claimed data must still have the modification time
+    Transmission recorded when it checked it (`progress.mtimes`, 3.x: not
+    newer than `time-checked`). Then the bitfield is written as
+    `data/engine/fastresume/<hash>.bitv` and the engine only spot-checks a
+    few pieces per file at start. If a file changed, has no recorded time,
+    or the bitfield doesn't fit the torrent, the torrent is checked in full.
+    Missing files keep the bitfield and show as "Missing Files".
+  * Incomplete files that carry Transmission's `.part` suffix keep that name
+    (a file rename in qBit NeoRS) so their data is found; rename them once
+    they complete. The ".!qB" option is left off.
+* **Groups** used by torrents, or with their own download folder, become
+  categories (that folder as the category save path). `GroupDicts` is an
+  `NSKeyedArchiver` archive in the defaults; without it Transmission's seven
+  color groups are assumed.
+* **Settings:** download folder, incomplete folder, start added torrents,
+  delete the .torrent after adding, the watch folder (`AutoImportDirectory`),
+  speed limits and alternative limits (kB/s = 1000 B/s), the alternative
+  speed schedule (days and times; the alternative speed state when no
+  schedule), peer port, port forwarding, global and per-torrent peer limits,
+  encryption (required or allowed), DHT, PeX, LSD, uTP, download/seed queue
+  sizes, stalled torrents not counting (`CheckStalled`, `StalledMinutes`),
+  ratio and idle seeding limits (action Stop), the removal confirmation.
+  GUI settings: the quit confirmation, the Add Torrent dialog switch and
+  preventing sleep.
+* **All-time statistics** (`stats.json`).
+
+### Not carried over
+
+* Remote access (RPC): the report says whether it was on; its password lives
+  in Transmission's keychain item and is never read. qBit NeoRS offers the
+  qBittorrent Web UI/WebAPI instead.
+* Group colors and automatic group rules (`NSPredicate`), bandwidth groups,
+  bandwidth priority, per-torrent peer limits, known peers (`peers2`), the
+  blocklist (downloaded from a URL; choose a list file under IP filtering),
+  the DHT cache (`dht.dat`), "same folder as the .torrent" as the download
+  location, a random port at each start, the done script (Transmission passes
+  `TR_*` environment variables), bind addresses, window state and update
+  settings. The report lists every one found.
+
+### Merge mode
+
+As for qBittorrent: torrents already in the profile keep paths, category,
+tags, priorities, state and pieces, and get Transmission's statistics (added
+once, `migration/transmission-merge.json`), dates, missing trackers, limits
+left at their defaults and the queue position; the others are added fully;
+the profile's settings stay, its GUI settings are only offered in
+`migration/gui-preferences.plist`.
+
+## In-app import
+
+File > Import from qBittorrent… / Import from Transmission… (and, on the
+first launch with an empty profile, an offer when either has torrents)
+opens a sheet with the dry run: counts, settings taken over or kept ("Keep my
+current qBit NeoRS settings"; always kept when the profile has torrents,
+which means merge mode), what doesn't carry over and the full report. The
+source application must be quit; the app never quits it.
+
+The import never runs next to a live core. Confirming records
+`migration/pending-import.json` (valid 15 minutes), quits normally (resume
+data saved, engine stopped) and opens the app again once the process has
+exited. The new instance applies the source's GUI settings to its defaults
+(full import; old values in `migration/gui-defaults-before-import.plist`),
+backs the profile up to `<profile>.before-migration-<time>`, migrates with
+the same code as the command line, and only then starts its core. A result
+sheet shows the counts, the backup and the report. Core side:
+`crates/qbt-core/src/migrate/import.rs` (UniFFI functions).
 
 ## Verification (developers)
 

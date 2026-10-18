@@ -1,12 +1,14 @@
 import AppKit
 
-/// One card, drawn in a single view (no subviews): the content kind symbol
-/// and the title (semibold, one or two lines), the name's tags followed by
-/// the category and tags, the progress bar, then status and percent with the
-/// size, and speeds with the ETA or ratio. Content is top-aligned; a card in
-/// a row with a taller one keeps the extra height at its bottom. Redraws only
-/// when its content, selection or width changes. VoiceOver reads it as one
-/// element with a summary, and each tag as a child with its category.
+/// One card, drawn in a single view (no subviews). Pinned to the top: the
+/// content kind symbol, the title (semibold, one or two lines) and the state
+/// symbol (large, in the top-right corner), then the name's tags followed by
+/// the category and tags. Pinned to the bottom: the progress bar, the status
+/// word (bold rounded) and percent with the ratio and size, and, only while
+/// transferring, the speeds with the ETA. A card in a row with a taller one
+/// keeps the extra height between the two blocks. Redraws only when its
+/// content, selection or size changes. VoiceOver reads it as one element
+/// with a summary, and each tag as a child with its category.
 @MainActor
 final class TransferCardView: NSView {
     var content = TransferCardContent() {
@@ -94,26 +96,27 @@ final class TransferCardView: NSView {
         let metrics = TransferCardMetrics.self
         let x = metrics.padding
         let width = innerWidth
-        let lines = titleLines
-        drawKind(lineMidY: metrics.padding + metrics.titleLineHeight / 2)
+        let firstLineMidY = metrics.padding + metrics.titleLineHeight / 2
+        drawKind(lineMidY: firstLineMidY)
+        drawStateSymbol(lineMidY: firstLineMidY)
         drawTitle(in: CGRect(x: x + metrics.titleIndent, y: metrics.padding, width: metrics.titleWidth(cardWidth: bounds.width),
-                             height: CGFloat(lines) * metrics.titleLineHeight))
-        var y = chipsOrigin.y
+                             height: CGFloat(titleLines) * metrics.titleLineHeight))
 
         let chips = currentChipLayout()
-        if chips.lineCount > 0 {
-            chips.draw(at: chipsOrigin)
-            y += NameChipLayout.height(lines: chips.lineCount) + metrics.groupSpacing
-        }
+        if chips.lineCount > 0 { chips.draw(at: chipsOrigin) }
 
+        // The bottom block, from the card's bottom edge up.
+        let infoLines = content.hasActivity ? 2 : 1
+        var y = bounds.height - metrics.bottomBlockHeight(infoLines: infoLines)
         drawProgress(in: CGRect(x: x, y: y, width: width, height: metrics.progressHeight))
         y += metrics.progressHeight + metrics.groupSpacing
 
-        let line = metrics.lineHeight(metrics.infoFont)
+        let line = metrics.infoLineHeight
         drawStatusLine(in: CGRect(x: x, y: y, width: width, height: line))
+        guard infoLines > 1 else { return }
         y += line + metrics.infoLineSpacing
         let speeds = [content.downloadText, content.uploadText].filter { !$0.isEmpty }.joined(separator: "   ")
-        drawInfoLine(left: speeds, right: content.trailingText, in: CGRect(x: x, y: y, width: width, height: line))
+        drawInfoLine(left: speeds, right: content.etaText, in: CGRect(x: x, y: y, width: width, height: line))
     }
 
     private func drawBackground() {
@@ -155,9 +158,23 @@ final class TransferCardView: NSView {
                               width: size.width, height: size.height))
     }
 
+    /// The state symbol in the top-right corner, centered on the title's first
+    /// line, always in the state color.
+    private func drawStateSymbol(lineMidY: CGFloat) {
+        let box = TransferCardMetrics.stateSymbolBox
+        guard let image = Self.symbol(content.stateSymbol, color: content.stateColor) else { return }
+        let scale = min(box / max(image.size.width, 1), box / max(image.size.height, 1), 1)
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let centerX = bounds.width - TransferCardMetrics.padding - box / 2
+        image.draw(in: CGRect(x: centerX - size.width / 2, y: lineMidY - size.height / 2, width: size.width, height: size.height))
+    }
+
+    /// Fixed line height: a fallback font (an em dash, CJK) must not make two lines taller than the card allows.
     private static let titleParagraph: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byWordWrapping
+        style.minimumLineHeight = TransferCardMetrics.titleLineHeight
+        style.maximumLineHeight = TransferCardMetrics.titleLineHeight
         return style
     }()
 
@@ -190,26 +207,40 @@ final class TransferCardView: NSView {
         [.font: TransferCardMetrics.infoFont, .foregroundColor: color, .paragraphStyle: Self.tailParagraph]
     }
 
-    /// State icon, status and percent on the left; the size on the right.
+    /// Status (bold rounded, in the state color when "Color by state" includes
+    /// the status) and percent on the left; the ratio and size on the right.
+    /// What does not fit gives way: the ratio first, then the percent (the bar
+    /// shows it), then the status is truncated. VoiceOver reads them all.
     private func drawStatusLine(in rect: CGRect) {
-        var left = rect
-        let iconSize = TransferCardMetrics.iconSize
-        if let image = Self.symbol(content.stateSymbol, color: content.stateColor) {
-            image.draw(in: CGRect(x: rect.minX, y: rect.midY - iconSize / 2, width: iconSize, height: iconSize))
-            left.origin.x += iconSize + TransferCardMetrics.iconGap
-            left.size.width -= iconSize + TransferCardMetrics.iconGap
-        }
-        let status = NSMutableAttributedString(string: content.statusText,
-                                               attributes: infoAttributes(content.statusTextColor ?? .secondaryLabelColor))
+        let status = NSMutableAttributedString(string: content.statusText, attributes: [
+            .font: TransferCardMetrics.statusFont, .foregroundColor: content.statusTextColor ?? NSColor.labelColor,
+            .paragraphStyle: Self.tailParagraph,
+        ])
+        let size = content.sizeText
+        let sizeWidth = textWidth(size)
+        var fits = true
         if !content.percentText.isEmpty, content.progress < 1 {
-            status.append(NSAttributedString(string: " · " + content.percentText, attributes: infoAttributes(.secondaryLabelColor)))
+            let percent = NSAttributedString(string: " · " + content.percentText, attributes: infoAttributes(.secondaryLabelColor))
+            fits = ceil(status.size().width) + ceil(percent.size().width) + Self.pairGap + sizeWidth <= rect.width
+            if fits { status.append(percent) }
         }
-        drawPair(left: status, right: content.sizeText, in: left)
+        var right = size
+        if fits, !content.ratioText.isEmpty {
+            let full = content.ratioText + " · " + size
+            if ceil(status.size().width) + Self.pairGap + textWidth(full) <= rect.width { right = full }
+        }
+        drawPair(left: status, right: right, in: rect)
+    }
+
+    private func textWidth(_ text: String) -> CGFloat {
+        text.isEmpty ? 0 : ceil(NSAttributedString(string: text, attributes: infoAttributes(.secondaryLabelColor)).size().width)
     }
 
     private func drawInfoLine(left: String, right: String, in rect: CGRect) {
         drawPair(left: NSAttributedString(string: left, attributes: infoAttributes(.secondaryLabelColor)), right: right, in: rect)
     }
+
+    private static let pairGap: CGFloat = 8
 
     /// `right` at full width (right-aligned), `left` truncated to the rest.
     private func drawPair(left: NSAttributedString, right: String, in rect: CGRect) {
@@ -220,7 +251,7 @@ final class TransferCardView: NSView {
             attributed.draw(with: CGRect(x: rect.maxX - rightWidth, y: rect.minY, width: rightWidth, height: rect.height),
                             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
-        let leftWidth = rect.width - rightWidth - (rightWidth > 0 ? 8 : 0)
+        let leftWidth = rect.width - rightWidth - (rightWidth > 0 ? Self.pairGap : 0)
         guard leftWidth > 0, left.length > 0 else { return }
         left.draw(with: CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height),
                   options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
@@ -228,7 +259,7 @@ final class TransferCardView: NSView {
 
     private static func symbol(_ name: String, color: NSColor) -> NSImage? {
         guard !name.isEmpty else { return nil }
-        let configuration = NSImage.SymbolConfiguration(pointSize: TransferCardMetrics.iconSize - 1, weight: .regular)
+        let configuration = NSImage.SymbolConfiguration(pointSize: TransferCardMetrics.stateSymbolBox - 2, weight: .regular)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
         return SymbolImageCache.image(name)?.withSymbolConfiguration(configuration)
     }
@@ -243,8 +274,7 @@ final class TransferCardView: NSView {
         parts += content.labels.map(\.name)
         parts.append(content.statusText)
         if content.progress < 1 { parts.append(content.percentText) }
-        parts.append(content.sizeText)
-        parts += [content.downloadText, content.uploadText, content.trailingText].filter { !$0.isEmpty }
+        parts += [content.ratioText, content.sizeText, content.downloadText, content.uploadText, content.etaText]
         return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 

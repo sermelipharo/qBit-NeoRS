@@ -228,6 +228,7 @@ targets:
       - path: QBTNeo/App/Termination/TerminationGate.swift
       - path: QBTNeo/App/Termination/SheetHosting.swift
       - path: QBTNeo/App/Termination/SheetDismissal.swift
+      - path: QBTNeo/App/AppRelaunchArguments.swift
       - path: QBTNeo/Features/TorrentNames/Parsing
       - path: QBTNeo/Shared/Design/Symbol.swift
     settings:

@@ -19,7 +19,15 @@ extension CommandRegistry {
                                               comment: "Command Palette search words, comma-separated"))) {
                 $0.model.sheet = .addLinks(initialText: AppModel.clipboardLinks())
             },
-        ]
+        ] + ImportSource.all.map { source in
+            AppCommand(source == .transmission ? .importFromTransmission : .importFromQBittorrent, source.commandTitle,
+                       symbol: Symbol.trayAndArrowDown,
+                       keywords: words(String(localized: "palette.keywords.import", defaultValue: "migrate, move, switch",
+                                              comment: "Command Palette search words, comma-separated"))) {
+                $0.model.showImport(source)
+            }
+            .available { $0.model.canImport }
+        }
     }
 
     private static var viewCommands: [AppCommand] {

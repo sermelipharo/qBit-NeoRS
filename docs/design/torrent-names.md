@@ -199,26 +199,47 @@ an unchanged row costs a cache lookup.
 * `NSCollectionView` with a flow layout: columns of 240–380 pt cards that fill
   the width, 12 pt gaps and insets.
 * A card is as tall as its content, and the cards of a grid row take the
-  tallest one's height (content is top-aligned, so a shorter card's spare
-  height is at its bottom). Top to bottom: 12 pt inset; kind symbol (13 pt,
-  secondary color, in a 22 pt column) and title (Title 3 of the macOS type
-  scale, 15 pt semibold, 18 pt lines, one or two lines, truncated, full name
-  in the tooltip); 8 pt; tags (none, one or two 18 pt rows, 4 pt apart);
-  8 pt; progress bar (4 pt, state color when "Color by state" includes the
-  bar); 8 pt; status line (state symbol, status and percent, size, done of
-  total while incomplete) and info line (↓/↑ speeds when non-zero, ETA while
-  downloading, else the ratio), 14 pt lines 2 pt apart; 12 pt inset. Heights
-  (measured on the scratch profile): 90 pt without tags, 116 pt with one tag
-  row, 138 pt with two, +18 pt for a two-line title (before: 165 pt for every
-  card with tags, 120 pt without).
+  tallest one's height. The title block is pinned to the top and the
+  progress block to the bottom, so a shorter card's spare height lies
+  between them and the progress bars of a row line up when their cards have
+  the same number of status lines. Top block: 12 pt inset; kind symbol
+  (13 pt, secondary color, in a 22 pt column), title (Title 3 of the macOS
+  type scale, 15 pt semibold, fixed 18 pt lines, one or two lines,
+  truncated, full name in the tooltip) and state symbol (in an 18 pt box in
+  the top-right corner, centered on the title's first line, always in the
+  state color; the title wraps 8 pt before it); 8 pt; tags (none, one or two
+  18 pt rows, 4 pt apart). At least 8 pt between the blocks. Bottom block:
+  progress bar (4 pt, state color when "Color by state" includes the bar);
+  8 pt; status line: the status word in bold SF Pro Rounded (11 pt), tinted
+  when "Color by state" includes the status (else the label color), and the
+  percent while incomplete on the left, "Ratio 2,40 · 1,39 GiB" (done of
+  total while incomplete) on the right; when they do not fit, the ratio gives
+  way first, then the percent, then the status is truncated (VoiceOver reads
+  all of them). An info line (↓/↑ speeds when non-zero, the ETA while
+  downloading) follows only while something is transferring, 2 pt below;
+  13 pt lines; 12 pt inset.
+* The tinted status word uses `TorrentState.cardTextNSColor`: the state
+  color, except where it is below 4.5:1 on the card (#F9F9F9 light,
+  #2F2F2F dark): stalled green and blue take the active green and blue, and
+  in dark mode queued brown, stopped gray, completed purple and error red are
+  lighter (#D29922, #9198A1, #BC8CFF, #FF7B72). Measured contrast 4.5–6.8:1
+  (state colors as they were: 2.85–3.07:1 for stalled green/blue, 3.03:1
+  dark brown, 3.94:1 dark purple and red). On a gray (unfocused) selection
+  (#EEEEEE) green, blue and purple are 4.4–4.5:1.
+* Heights (measured on the demo data, `--snapshot-only cards`): 101 pt idle
+  and 116 pt transferring with one tag row, 123 / 138 pt with two, +18 pt
+  for a two-line title, 75 / 90 pt without tags (before: one height for
+  idle and transferring cards, 116 pt with one tag row, 138 pt with two).
+  Of the 50 demo cards, 3 columns of 317 pt: 16 are 101 pt (were 116).
 * Tags: the name's tags, then the category and tags as neutral tags with
   their icon and color; when the rows are full, the name's last tags give way
   to "+N" so the category and tags stay visible.
 * `TransferCardHeights` keeps each card's title, tags and labels with the
-  title's single-line width (one line if it fits, else two) and computes the
+  title's single-line width (one line if it fits, else two) and whether it
+  is transferring (speeds or an ETA: two status lines), and computes the
   rows from them; a resize redoes only arithmetic (tag widths are cached), a
-  sync re-lays out the grid only when a changed torrent's title, tags or
-  labels changed. Sizing the grid parses every listed name once (cached);
+  sync re-lays out the grid only when a changed torrent's title, tags,
+  labels or transferring changed. Sizing the grid parses every listed name once (cached);
   drawing and reconfiguring still touch only realized cards.
 * One self-drawn view per card (no subviews), reused by the collection view
   (9 views for a 1 180 × 780 window with the details pane); a new size
@@ -232,8 +253,9 @@ an unchanged row costs a cache lookup.
   keys (the collection view's own). A sync reconfigures only realized cards of
   changed torrents.
 * VoiceOver: a card is one element whose label lists the kind, the title,
-  each tag with its category, the category and tags, status, progress, size,
-  speeds, ETA or ratio; each tag is also a child element ("1080p,
+  each tag with its category, the category and tags, status (once; the
+  state symbol is not read separately), progress, ratio, size, speeds and
+  ETA; each tag is also a child element ("1080p,
   Resolution", "Anime, Category").
 * View › as List (⌘1) / as Cards (⌘2) like Finder, also in the Command Palette
   and as a Settings option; the mode persists (`GUI/TransferList/ViewMode`).

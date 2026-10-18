@@ -3,7 +3,7 @@ import Foundation
 /// Stable command identifiers (also the keys of the palette's recent items).
 enum CommandID: String, CaseIterable, Sendable {
     // File
-    case addTorrentFile, addTorrentLink
+    case addTorrentFile, addTorrentLink, importFromQBittorrent, importFromTransmission
     // Torrents
     case start, stop, forceStart, remove, forceRecheck, forceReannounce
     case setLocation, rename, editTrackers, setCategory, editTags, torrentOptions

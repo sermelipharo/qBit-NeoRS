@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if LaunchOptions.current.profileDirectory.isEmpty, !LaunchOptions.current.usesDemoData {
             LegacyDefaultsMigration.runIfNeeded()
         }
+        // Before `GUIPreferences` loads: a pending import's GUI settings apply on this launch.
+        PendingImportSettings.applyIfNeeded(LaunchOptions.current)
         model = AppModel()
         // Never restore or save AppKit window state. The main window is always
         // presented at launch; a run that ended with no window open (snapshot

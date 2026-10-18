@@ -19,7 +19,7 @@ This is the parity checklist for rewriting qBittorrent 5.2.4 (C++/Qt/libtorrent)
 |---|---|
 | 1 | Main window: layout, toolbar, menus, status bar, filters sidebar, torrent list columns, torrent states, context menu, macOS integration |
 | 2 | Properties panel: General, Trackers, Peers, HTTP Sources, Content, Speed tabs; preview dialog |
-| 3 | Dialogs: add torrent, add links, torrent creator, location/rename, speed limits, share limits, torrent options, trackers, statistics, log, about, cookies, banned IPs, subnet whitelist, watched folders, categories, tags, search plugins, RSS feed/rules, shutdown confirmation, UI theme, legal notice, and others |
+| 3 | Dialogs: add torrent, add links, import from qBittorrent/Transmission (§3.37), torrent creator, location/rename, speed limits, share limits, torrent options, trackers, statistics, log, about, cookies, banned IPs, subnet whitelist, watched folders, categories, tags, search plugins, RSS feed/rules, shutdown confirmation, UI theme, legal notice, and others |
 | 4 | Core behaviours (engine): torrent lifecycle, queueing, share limits, scheduler, watched folders, ATM, file handling, external programs, email, auto-shutdown, magnets, trackers from URL, IP filter, proxy, encryption, port forwarding, GeoIP, favicons, persistence, logging, command line |
 | 5 | Search engine (nova3 Python plugins) and RSS (feeds, parser, auto-downloader, UI) |
 | 6 | WebAPI v2: transport, authentication, every endpoint with parameters and response fields, `sync/maindata` diff format |
@@ -477,7 +477,7 @@ Not part of qBittorrent 5.2.4; GUI-only, no WebAPI change. Details in
 `docs/design/torrent-names.md`.
 - Torrent names are split into a title and technical tags by an ordered list of editable regular-expression rules (181 built-in, by category: Season & Episode, Volume & Part, Resolution, HDR & Dolby Vision, Source, Video Codec, Audio, Language & Dub, Subtitles, Edition, Platform, Version, Region, Format, Year, Release Group, Other, Hidden), covering video, music, software, games, ROM sets, audiobooks, books, comics and adult release names. A content kind (Video, Music, Software, Game, ROM Collection, Audiobook, Book, Comic, Adult, Other) is guessed from the name, else the category name.
 - List: the Name column shows the title semibold and the technical part regular (switchable).
-- View › "as List" (⌘1) / "as Cards" (⌘2), also a List / Cards switch in the main toolbar: cards show the kind symbol and the title, the name's tags in fixed per-category styles followed by the category and tags, the progress bar, state, size, speeds, ETA or ratio; cards are as tall as their content; same selection, sorting, filters, context menu, actions and properties pane as the list.
+- View › "as List" (⌘1) / "as Cards" (⌘2), also a List / Cards switch in the main toolbar: cards show the kind symbol, the title and a large state symbol, the name's tags in fixed per-category styles followed by the category and tags, then, pinned to the bottom, the progress bar, the status in bold, ratio and size, and speeds and ETA only while transferring; cards are as tall as their content; same selection, sorting, filters, context menu, actions and properties pane as the list.
 - Settings › Interface › Torrent Names: master switch, per-view options, rules editor (reorder, add, remove, reset, JSON import/export, validation), preview.
 
 ### 1.7 Torrent states
@@ -1918,6 +1918,15 @@ Desktop notifications (not dialogs, listed for completeness): `Torrent added` / 
 - Persistence (`<data>/SearchUI/`): `History.txt` (search history, length = Options › Search "search history length" spin box), `Session.json` (`{"Tabs":[{"ID","SearchPattern"}], "CurrentTab"}`) when Options › Search "store opened tabs" group is checked, and per-tab result files with keys `FileName`, `FileURL`, `FileSize`, `SeedersCount`, `LeechersCount`, `EngineName`, `SiteURL`, `DescrLink`, `PubDate` when "store opened tabs results" is on.
 
 ---
+
+### 3.37 Import from qBittorrent or Transmission (qBit NeoRS extension — not in qBittorrent)
+
+File menu, after "Add Torrent Link…": "Import from qBittorrent…" and "Import from Transmission…" (also in the Command Palette; hidden in demo and snapshot runs). On the first launch with a profile that has no torrents, the same sheet is offered once (defaults key `qBitNeoRS/ImportOfferShown`) when qBittorrent 5.x or the Transmission app (macOS) has torrents on this Mac; with both, a segmented "Import from:" picker switches between them.
+
+* The sheet runs a dry run of the migration (`docs/MIGRATION.md`) and shows counts: torrents, those whose progress carries over without a recheck, those checked when they start, magnets waiting for metadata, torrents already in the profile (merge), categories, tags, watched folders, RSS feeds and search plugins (qBittorrent), and whether the settings are taken over or kept. "Keep my current qBit NeoRS settings" switches to merge mode; it is on and fixed when the profile already has torrents. "Not Carried Over" lists what never transfers (localized) plus Transmission's remote access when it is on (its password is never copied). "Full Report" shows `migration/report.txt` as it would be written.
+* The source application must be quit (checked by bundle id `org.qbittorrent.qBittorrent` / `org.m0k.transmission` before the dry run, before confirming and again at the restart). The app never quits it: the sheet shows "Quit <app> First" with "Check Again".
+* "Import and Restart" records `<profile>/migration/pending-import.json` (valid for 15 minutes) and quits through the normal termination path (no exit confirmation; resume data saved, core stopped). Once the core is down, a detached `/bin/sh` waits for the process to exit and runs `open -n` on the bundle with the same launch arguments. The new instance applies the source's GUI settings to its defaults store before they load (full import only; previous values saved to `migration/gui-defaults-before-import.plist`), shows "Importing from <app>…", backs the profile up to `<profile>.before-migration-<time>`, migrates, and only then creates its core. A result sheet shows the counts, the backup folder ("Show Backup in Finder") and "Open Report". If the source application was opened meanwhile, the import is dropped with an alert.
+* Why a restart and not an in-place session restart: the import rewrites `config/` and `data/BT_backup` of the running profile; with the old core gone, nothing can save resume data or statistics over the imported files afterwards, and the WebUI port, log file and engine files are free.
 
 ## 4. Core behaviors (engine)
 

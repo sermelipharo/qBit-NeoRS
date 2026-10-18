@@ -10,10 +10,13 @@
 //! new files next to the torrent's data and only when that is enabled.
 
 pub mod gui;
+pub mod import;
 pub mod ini;
 pub mod libtorrent;
 pub mod partfile;
+pub mod plist;
 pub mod prefs_map;
+pub mod transmission;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -72,6 +75,9 @@ pub struct Options {
     /// what is missing (statistics, tracker tiers, web seeds, limits,
     /// queue position); its settings are kept.
     pub merge: bool,
+    /// Write the GUI settings to `migration/` only (the app applies them
+    /// itself through its defaults store).
+    pub gui_plist_in_migration: bool,
 }
 
 impl Options {
@@ -90,6 +96,7 @@ impl Options {
             skipped_data: SkippedData::Recover,
             force: false,
             merge: false,
+            gui_plist_in_migration: false,
         }
     }
 }
@@ -121,6 +128,10 @@ pub struct TorrentSummary {
 
 #[derive(Clone, Debug, Default)]
 pub struct Report {
+    /// The source application ("" = qBittorrent).
+    pub source_app: String,
+    /// Transmission's remote access (RPC) was on; its password is never copied.
+    pub remote_access_enabled: bool,
     pub dry_run: bool,
     pub profile: String,
     pub sources: Vec<String>,
@@ -149,7 +160,7 @@ pub struct Report {
     pub files_written: Vec<String>,
 }
 
-fn read_opt(path: &Path, limit: u64) -> Option<Vec<u8>> {
+pub(crate) fn read_opt(path: &Path, limit: u64) -> Option<Vec<u8>> {
     resume::read_limited(path, limit).ok()
 }
 
@@ -161,7 +172,7 @@ fn find_file(opts: &Options, rel: &str) -> Option<PathBuf> {
 
 /// Canonical form of a path that may not exist yet: its deepest existing
 /// ancestor resolved (symbolic links, `/var` -> `/private/var`), the rest kept.
-fn canonical(p: &Path) -> PathBuf {
+pub(crate) fn canonical(p: &Path) -> PathBuf {
     let mut rest = Vec::new();
     let mut cur = p.to_path_buf();
     loop {
@@ -178,7 +189,7 @@ fn canonical(p: &Path) -> PathBuf {
     }
 }
 
-fn is_inside(child: &Path, parent: &Path) -> bool {
+pub(crate) fn is_inside(child: &Path, parent: &Path) -> bool {
     let (c, p) = (canonical(child), canonical(parent));
     c.starts_with(&p)
 }
@@ -204,26 +215,26 @@ fn webui_get(base: &str, path: &str) -> Result<Value, String> {
     })
 }
 
-const MAX_CONFIG: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_CONFIG: u64 = 16 * 1024 * 1024;
 
-struct Writer {
-    root: PathBuf,
-    dry_run: bool,
-    merge: bool,
-    written: Vec<String>,
+pub(crate) struct Writer {
+    pub(crate) root: PathBuf,
+    pub(crate) dry_run: bool,
+    pub(crate) merge: bool,
+    pub(crate) written: Vec<String>,
 }
 
 impl Writer {
     /// In merge mode, files the profile already has are kept.
-    fn keeps(&self, rel: &str) -> bool {
+    pub(crate) fn keeps(&self, rel: &str) -> bool {
         self.merge && self.root.join(rel).exists()
     }
 
-    fn write_new(&mut self, rel: &str, data: &[u8]) -> Result<(), String> {
+    pub(crate) fn write_new(&mut self, rel: &str, data: &[u8]) -> Result<(), String> {
         if self.keeps(rel) { Ok(()) } else { self.write(rel, data) }
     }
 
-    fn write(&mut self, rel: &str, data: &[u8]) -> Result<(), String> {
+    pub(crate) fn write(&mut self, rel: &str, data: &[u8]) -> Result<(), String> {
         self.written.push(rel.to_owned());
         if self.dry_run {
             return Ok(());
@@ -231,7 +242,7 @@ impl Writer {
         resume::write_private_atomic(&self.root.join(rel), data).map_err(|e| format!("{rel}: {e}"))
     }
 
-    fn copy(&mut self, from: &Path, rel: &str, limit: u64) -> Result<(), String> {
+    pub(crate) fn copy(&mut self, from: &Path, rel: &str, limit: u64) -> Result<(), String> {
         let data = resume::read_limited(from, limit).map_err(|e| format!("{}: {e}", from.display()))?;
         self.write(rel, &data)
     }
@@ -553,7 +564,7 @@ pub fn run(opts: &Options) -> Result<Report, String> {
     rep.gui_keys = gui_values.iter().map(|(k, _)| k.clone()).collect();
     ini_used.extend(gui_used);
     // Merge: the profile's GUI settings stay; the plist is only offered.
-    let plist_rel = if opts.merge { "migration/gui-preferences.plist" } else { "config/gui-preferences.plist" };
+    let plist_rel = if opts.merge || opts.gui_plist_in_migration { "migration/gui-preferences.plist" } else { "config/gui-preferences.plist" };
     writer.write(plist_rel, gui::to_plist(&gui_values).as_bytes())?;
     let mut keys = rep.gui_keys.join("\n");
     keys.push('\n');
@@ -593,6 +604,55 @@ pub fn run(opts: &Options) -> Result<Report, String> {
     Ok(rep)
 }
 
+/// Copies the small files of an existing profile (`config/`,
+/// `data/BT_backup`, `data/engine/fastresume`, `data/stats.json`,
+/// `data/session_state.json`) to a new sibling folder
+/// `<profile>.before-migration-<time>` before a migration writes into it.
+/// Returns that folder, or None when there is no profile yet. Content files
+/// are never part of a profile, so none are copied.
+pub fn backup_profile(profile: &Path) -> Result<Option<PathBuf>, String> {
+    let parts = ["config", "data/BT_backup", "data/engine/fastresume", "data/stats.json", "data/session_state.json", "migration"];
+    if !parts.iter().any(|p| profile.join(p).exists()) {
+        return Ok(None);
+    }
+    let name = profile.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "profile".into());
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let parent = profile.parent().unwrap_or(Path::new("."));
+    let mut dest = parent.join(format!("{name}.before-migration-{stamp}"));
+    let mut n = 1;
+    while dest.exists() {
+        n += 1;
+        dest = parent.join(format!("{name}.before-migration-{stamp}-{n}"));
+    }
+    for p in parts {
+        let from = profile.join(p);
+        if from.exists() {
+            copy_tree(&from, &dest.join(p), 0).map_err(|e| format!("backup of {p}: {e}"))?;
+        }
+    }
+    Ok(Some(dest))
+}
+
+/// Copies files and folders; symbolic links are skipped, never followed.
+fn copy_tree(from: &Path, to: &Path, depth: usize) -> std::io::Result<()> {
+    let meta = std::fs::symlink_metadata(from)?;
+    if meta.file_type().is_symlink() || depth > 16 {
+        return Ok(());
+    }
+    if meta.is_dir() {
+        std::fs::create_dir_all(to)?;
+        for e in std::fs::read_dir(from)?.flatten() {
+            copy_tree(&e.path(), &to.join(e.file_name()), depth + 1)?;
+        }
+        Ok(())
+    } else {
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(from, to).map(|_| ())
+    }
+}
+
 /// What a merge already imported (`migration/qbittorrent-merge.json`), so
 /// running it again never counts qBittorrent's statistics twice.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -615,7 +675,7 @@ pub fn profile_in_use(profile: &Path) -> Option<String> {
             if pid == me {
                 continue;
             }
-            let is_neo = (args.contains("qbit-neors-nox") && !args.contains("migrate-from-qbittorrent"))
+            let is_neo = (args.contains("qbit-neors-nox") && !args.contains("migrate-from-qbittorrent") && !args.contains("migrate-from-transmission"))
                 || args.contains("/Contents/MacOS/qBit NeoRS")
                 || args.contains("/Contents/MacOS/QBTNeo");
             if !is_neo {
@@ -983,11 +1043,16 @@ fn migrate_torrent(
 }
 
 impl Report {
+    /// "qBittorrent" or "Transmission".
+    pub fn source_name(&self) -> &str {
+        if self.source_app.is_empty() { "qBittorrent" } else { &self.source_app }
+    }
+
     /// Human-readable report. Never contains secrets (no password, API
     /// key, tracker URLs or cookies).
     pub fn to_text(&self) -> String {
         let mut s = String::new();
-        let _ = writeln!(s, "qBittorrent -> qBit NeoRS migration{}", if self.dry_run { " (dry run: nothing written)" } else { "" });
+        let _ = writeln!(s, "{} -> qBit NeoRS migration{}", self.source_name(), if self.dry_run { " (dry run: nothing written)" } else { "" });
         let _ = writeln!(s, "Profile: {}", self.profile);
         for src in &self.sources {
             let _ = writeln!(s, "Source {src}");
@@ -1016,14 +1081,16 @@ impl Report {
         let _ = writeln!(s, "Categories ({}): {}", self.categories.len(), self.categories.join(", "));
         let _ = writeln!(s, "Tags ({}): {}", self.tags.len(), self.tags.join(", "));
         let _ = writeln!(s, "Watched folders: {}", self.watched_folders);
-        let _ = writeln!(s, "RSS: {} feed(s), {} rule(s), {} article file(s)", self.rss_feeds, self.rss_rules, self.rss_article_files);
-        let _ = writeln!(
-            s,
-            "Search plugins ({}): {}; disabled: {}",
-            self.search_plugins.len(),
-            self.search_plugins.join(", "),
-            if self.disabled_plugins.is_empty() { "none".to_owned() } else { self.disabled_plugins.join(", ") }
-        );
+        if self.source_app.is_empty() {
+            let _ = writeln!(s, "RSS: {} feed(s), {} rule(s), {} article file(s)", self.rss_feeds, self.rss_rules, self.rss_article_files);
+            let _ = writeln!(
+                s,
+                "Search plugins ({}): {}; disabled: {}",
+                self.search_plugins.len(),
+                self.search_plugins.join(", "),
+                if self.disabled_plugins.is_empty() { "none".to_owned() } else { self.disabled_plugins.join(", ") }
+            );
+        }
         let _ = writeln!(s, "GUI settings: {} key(s) -> config/gui-preferences.plist", self.gui_keys.len());
         let _ = writeln!(s, "Profile files {}: {}", if self.dry_run { "to write" } else { "written" }, self.files_written.len());
         if let Some((dl, ul)) = self.stats {
@@ -1072,11 +1139,13 @@ impl Report {
         for (id, e) in &self.failed_torrents {
             let _ = writeln!(s, "FAILED {id}: {e}");
         }
-        let _ = writeln!(s, "\n== Preferences that read differently ({})", self.prefs_diff.len());
+        if self.source_app.is_empty() || !self.prefs_diff.is_empty() {
+            let _ = writeln!(s, "\n== Preferences that read differently ({})", self.prefs_diff.len());
+        }
         for (k, a, b, why) in &self.prefs_diff {
             let _ = writeln!(s, "  {k}: qBittorrent {a} -> qBit NeoRS {b}  [{why}]");
         }
-        let _ = writeln!(s, "\n== qBittorrent.ini keys not carried over");
+        let _ = writeln!(s, "\n== {} not carried over", if self.source_app.is_empty() { "qBittorrent.ini keys" } else { "Settings and data" });
         for (why, keys) in &self.ini_unused {
             let _ = writeln!(s, "  {why}: {}", keys.join(", "));
         }

@@ -1,10 +1,12 @@
 import AppKit
 
-/// Heights of the cards: each card's from its title (one or two lines) and
-/// its tags (none, one or two rows), and each grid row's from its tallest
-/// card. A card's input is kept with its title's single-line width, so a
-/// resize only redoes arithmetic (tag widths are cached by `NameChipLayout`);
-/// inputs are refreshed when the torrents, names or labels change.
+/// Heights of the cards: each card's from its title (one or two lines), its
+/// tags (none, one or two rows) and its status (one line, or two with speeds
+/// or an ETA), and each grid row's from its tallest card. A card's input is
+/// kept with its title's single-line width, so a resize only redoes
+/// arithmetic (tag widths are cached by `NameChipLayout`); inputs are
+/// refreshed when the torrents, names or labels change, and a torrent that
+/// starts or stops transferring changes its input.
 @MainActor
 final class TransferCardHeights {
     private struct Entry {
@@ -45,7 +47,7 @@ final class TransferCardHeights {
             rowsKey = key
         }
         let row = index / max(columns, 1)
-        return row < rows.count ? rows[row] : TransferCardMetrics.height(titleLines: 1, chipLines: 0)
+        return row < rows.count ? rows[row] : TransferCardMetrics.height(titleLines: 1, chipLines: 0, infoLines: 1)
     }
 
     /// Recomputes the rows on next use (the torrents' order changed).
@@ -78,6 +80,6 @@ final class TransferCardHeights {
             chipLines = NameChipLayout(chips: entry.input.chips, labels: entry.input.labels, width: max(cardWidth - 2 * TransferCardMetrics.padding, 0),
                                        maxLines: TransferCardMetrics.chipLines).lineCount
         }
-        return TransferCardMetrics.height(titleLines: titleLines, chipLines: chipLines)
+        return TransferCardMetrics.height(titleLines: titleLines, chipLines: chipLines, infoLines: entry.input.hasActivity ? 2 : 1)
     }
 }

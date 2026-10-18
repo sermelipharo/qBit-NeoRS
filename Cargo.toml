@@ -1,0 +1,169 @@
+[workspace]
+resolver = "3"
+members = [
+    "engine/librqbit",
+    "engine/buffers",
+    "engine/clone_to_owned",
+    "engine/bencode",
+    "engine/sha1w",
+    "engine/librqbit_core",
+    "engine/librqbit_lsd",
+    "engine/peer_binary_protocol",
+    "engine/dht",
+    "engine/upnp",
+    "engine/tracker_comms",
+    "engine/mse",
+    "engine/webseed",
+    "engine/natpmp",
+    "engine/proxy",
+    "engine/i2p",
+    "crates/qbt-core",
+    "crates/qbt-ffi",
+    "crates/qbt-nox",
+    "crates/qbt-e2e",
+]
+
+[workspace.package]
+# Engine crates keep the upstream librqbit version they were forked from.
+version = "9.0.1"
+
+[profile.dev]
+panic = "abort"
+# Disk space matters on this machine: keep only line tables for our crates
+# and no debug info for dependencies.
+debug = "line-tables-only"
+# Keep dependencies optimized even in debug builds: hashing and the
+# peer protocol are unusably slow at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+# RC4 (protocol encryption) runs over every payload byte.
+[profile.dev.package.librqbit-mse]
+opt-level = 2
+
+[profile.release]
+panic = "abort"
+debug = false
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = "debuginfo"
+
+[workspace.dependencies]
+uniffi = "0.32"
+# Internal crates - keys are import names used in source code, package is the actual crate name
+librqbit = { path = "engine/librqbit", version = "9.0.1", default-features = false }
+bencode = { path = "engine/bencode", package = "librqbit-bencode", version = "9.0.1", default-features = false }
+buffers = { path = "engine/buffers", package = "librqbit-buffers", version = "9.0.1" }
+clone_to_owned = { path = "engine/clone_to_owned", package = "librqbit-clone-to-owned", version = "9.0.1" }
+librqbit-core = { path = "engine/librqbit_core", version = "9.0.1", default-features = false }
+dht = { path = "engine/dht", package = "librqbit-dht", version = "9.0.1", default-features = false }
+librqbit-lsd = { path = "engine/librqbit_lsd", version = "9.0.1", default-features = false }
+peer_binary_protocol = { path = "engine/peer_binary_protocol", package = "librqbit-peer-protocol", version = "9.0.1", default-features = false }
+sha1w = { path = "engine/sha1w", package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false }
+tracker_comms = { path = "engine/tracker_comms", package = "librqbit-tracker-comms", version = "9.0.1", default-features = false }
+librqbit-mse = { path = "engine/mse", version = "9.0.1" }
+librqbit-webseed = { path = "engine/webseed", version = "9.0.1" }
+librqbit-natpmp = { path = "engine/natpmp", version = "9.0.1" }
+librqbit-proxy = { path = "engine/proxy", version = "9.0.1" }
+librqbit-i2p = { path = "engine/i2p", version = "9.0.1" }
+librqbit-upnp = { path = "engine/upnp", version = "9.0.1" }
+
+# External crates
+anyhow = "1"
+arc-swap = "1.7"
+arrayvec = "0.7"
+assert_cfg = "0.1"
+async-backtrace = "0.2"
+async-compression = "0.4"
+async-stream = "0.3"
+async-trait = "0.1"
+atoi = "3"
+aws-lc-rs = "1.12"
+axum = "0.8"
+axum-extra = "0.12"
+backon = "1.5"
+base64 = "0.23"
+bitvec = "1"
+bstr = "1"
+byteorder = "1"
+bytes = "1"
+chardetng = "1"
+chrono = "0.4"
+clap = "4"
+clap_complete = "4"
+console-subscriber = "0.5"
+criterion = "0.8"
+crypto-hash = "0.3"
+dashmap = "6"
+data-encoding = "2"
+directories = "6"
+encoding_rs = "0.8"
+flate2 = "1"
+futures = "0.3"
+gethostname = "1"
+hex = "0.4"
+http-body-util = "0.1"
+home = "0.5"
+http = "1"
+httparse = "1"
+hyper = "1"
+hyper-util = "0.1"
+indexmap = "2"
+intervaltree = "0.2"
+itertools = "0.15"
+leaky-bucket = "1.1"
+lettre = { version = "0.11", default-features = false }
+libc = "0.2"
+librqbit-dualstack-sockets = "0.7"
+librqbit-utp = "0.7"
+lru = "0.18"
+maxminddb = "0.32"
+mdns-sd = "0.21"
+memchr = "2"
+memmap2 = "0.9"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+mime_guess = { version = "2", default-features = false }
+network-interface = "2"
+nix = "0.30"
+notify = "8"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false }
+openssl = "0.10"
+parking_lot = "0.12"
+parse_duration = "2"
+pollster = "1"
+quick-xml = "0.41"
+rand = "0.10"
+regex = "1"
+reqwest = { version = "0.13", default-features = false }
+rlimit = "0.11"
+rustls = { version = "0.23", default-features = false }
+rustls-pki-types = "1"
+serde = "1"
+serde_derive = "1"
+serde_json = "1"
+serde_urlencoded = "0.7"
+serde_with = "3"
+sha2 = "0.10"
+signal-hook = "0.3"
+size_format = "1"
+socket2 = "0.6"
+subtle = "2"
+sqlx = { version = "0.9", default-features = false }
+tempfile = "3"
+thiserror = "2"
+tokio = "1"
+tokio-rustls = { version = "0.26", default-features = false }
+tokio-socks = "0.5"
+tokio-stream = "0.1"
+tokio-test = "0.4"
+tokio-util = "0.7"
+tower-http = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false }
+url = { version = "2", default-features = false }
+urlencoding = "2"
+uuid = "1"
+walkdir = "2"
+windows = "0.62"

@@ -1,0 +1,34 @@
+qBit NeoRS
+===============
+
+qBit NeoRS is a Rust/SwiftUI reimplementation of qBittorrent 5.2.4.
+It is distributed under the GNU General Public License, version 3 or (at your
+option) any later version (see LICENSE).
+
+It contains or is derived from the following third-party work:
+
+* qBittorrent (https://www.qbittorrent.org), GPLv2-or-later (binary
+  distribution GPLv3-or-later). Behaviour, UI texts and the WebAPI are derived
+  from the qBittorrent 5.2.4 sources (pinned at reference/qBittorrent). The
+  bundled WebUI (crates/qbt-core/webui/www) and the nova3 search engine helper
+  scripts (crates/qbt-core/resources/nova3) are copied from qBittorrent and keep
+  their original copyright headers. Copyright the qBittorrent project
+  contributors; see reference/qBittorrent/AUTHORS.
+  Original author: Christophe Dumez. Current maintainer: Sledgehammer999.
+  Contributors: Vladimir Golovnev, Stefanos Antaris, Mohammad Dib, Mirco
+  Chinelli, Ishan Arora, Arnaud Demaizière, Grigis Gaëtan, Christian Kandeler,
+  Silvan Scherrer, Nick Tiskov and the contributors listed at
+  https://github.com/qbittorrent/qBittorrent/graphs/contributors. The
+  translations are imported from qBittorrent's, made by its volunteer
+  translators (https://explore.transifex.com/sledgehammer999/qbittorrent/).
+  qBittorrent carries the OpenSSL linking exception.
+
+* rqbit / librqbit (https://github.com/ikatson/rqbit), Apache License 2.0,
+  Copyright 2021 Igor Katson. The engine/ directory is a modified fork; see
+  engine/LICENSE and docs/ENGINE.md for the list of changes.
+
+* DB-IP "IP to Country Lite" database (downloaded at runtime when peer country
+  resolution is enabled), Creative Commons Attribution 4.0, https://db-ip.com.
+
+Rust crate and Swift package dependencies are listed in Cargo.lock and the
+Xcode project; their licenses apply to their respective code.

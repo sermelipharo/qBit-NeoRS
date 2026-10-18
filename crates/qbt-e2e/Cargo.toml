@@ -1,0 +1,22 @@
+[package]
+name = "qbt-e2e"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "End-to-end acceptance tests: real qbt-core instances transferring torrents over localhost"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+qbt-core = { path = "../qbt-core" }
+librqbit.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync"] }
+anyhow.workspace = true
+
+[dev-dependencies]
+# Logs of the interop example (RUST_LOG).
+tracing-subscriber = { workspace = true, features = ["fmt", "std", "env-filter"] }

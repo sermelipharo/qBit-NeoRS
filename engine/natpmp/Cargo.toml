@@ -1,0 +1,14 @@
+[package]
+name = "librqbit-natpmp"
+version.workspace = true
+edition = "2024"
+license = "Apache-2.0"
+description = "NAT-PMP (RFC 6886) port mapping client with lease renewal"
+
+[dependencies]
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "time", "rt", "process", "sync", "macros"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "time", "rt-multi-thread", "macros"] }

@@ -1,0 +1,15 @@
+[package]
+name = "librqbit-proxy"
+version.workspace = true
+edition = "2024"
+license = "Apache-2.0"
+description = "Outgoing TCP connections through HTTP CONNECT, SOCKS4/4a and SOCKS5 proxies"
+
+[dependencies]
+base64.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "time"] }
+tokio-socks.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "io-util", "time", "macros", "rt-multi-thread"] }

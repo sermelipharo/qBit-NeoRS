@@ -1,0 +1,15 @@
+[package]
+name = "librqbit-webseed"
+version.workspace = true
+edition = "2024"
+license = "Apache-2.0"
+description = "BEP 19 (GetRight-style) web seed piece fetching"
+
+[dependencies]
+reqwest = { workspace = true, features = ["default-tls"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util"] }

@@ -1,0 +1,11 @@
+/target
+/build
+/apps/macos/build
+/apps/macos/*.xcodeproj
+/apps/macos/Generated
+*.xcframework
+.DS_Store
+xcuserdata/
+DerivedData/
+*.swp
+/apps/macos/Local.xcconfig

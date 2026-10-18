@@ -1,0 +1,17 @@
+[package]
+name = "qbt-ffi"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Static library and Swift bindings generator for the qBit NeoRS macOS app"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+qbt-core = { path = "../qbt-core", features = ["ffi"] }
+uniffi = { workspace = true, features = ["cli"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"

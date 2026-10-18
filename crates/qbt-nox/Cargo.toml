@@ -1,0 +1,13 @@
+[package]
+name = "qbt-nox"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Headless qBit NeoRS daemon with the WebUI (qbittorrent-nox equivalent)"
+
+[[bin]]
+name = "qbit-neors-nox"
+path = "src/main.rs"
+
+[dependencies]
+qbt-core = { path = "../qbt-core" }

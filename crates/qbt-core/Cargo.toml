@@ -1,0 +1,63 @@
+[package]
+name = "qbt-core"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "qBit NeoRS application core: session, torrents, preferences, RSS, search, WebAPI"
+build = "build.rs"
+
+[features]
+default = []
+# Exposes the UniFFI bindings used by the macOS app.
+ffi = ["dep:uniffi"]
+
+[dependencies]
+librqbit = { workspace = true, features = ["default-tls"] }
+uniffi = { workspace = true, optional = true }
+anyhow.workspace = true
+aws-lc-rs.workspace = true
+axum.workspace = true
+base64.workspace = true
+bytes.workspace = true
+chrono = { workspace = true, features = ["clock"] }
+encoding_rs.workspace = true
+flate2.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+httparse.workspace = true
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util = { workspace = true, features = ["tokio", "server", "http1", "service"] }
+libc.workspace = true
+memchr.workspace = true
+lettre = { workspace = true, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls", "rustls-platform-verifier", "aws-lc-rs"] }
+maxminddb = { workspace = true, features = ["mmap"] }
+parking_lot.workspace = true
+quick-xml.workspace = true
+rand.workspace = true
+regex.workspace = true
+reqwest = { workspace = true, features = ["default-tls", "gzip", "socks", "json"] }
+rustls = { workspace = true, features = ["std", "tls12", "aws_lc_rs"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive"] }
+# `preserve_order`: the WebAPI emits JSON objects in qBittorrent's key order.
+serde_json = { workspace = true, features = ["preserve_order"] }
+sha1w.workspace = true
+sha2.workspace = true
+socket2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "fs", "process", "net", "io-util", "signal"] }
+tokio-rustls = { workspace = true, features = ["tls12", "aws_lc_rs"] }
+tracing.workspace = true
+url = { workspace = true, features = ["std"] }
+
+[build-dependencies]
+flate2.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation = { workspace = true, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["default-tls", "form", "multipart"] }
+tempfile.workspace = true

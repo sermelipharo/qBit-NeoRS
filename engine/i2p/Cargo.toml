@@ -1,0 +1,16 @@
+[package]
+name = "librqbit-i2p"
+version.workspace = true
+edition = "2024"
+license = "Apache-2.0"
+description = "I2P SAM v3.1 client: streaming sessions, connect/accept, name lookup"
+
+[dependencies]
+base64.workspace = true
+rand.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "io-util", "time", "macros", "rt-multi-thread"] }

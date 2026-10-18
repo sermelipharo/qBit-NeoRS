@@ -1,0 +1,28 @@
+[package]
+name = "librqbit-tracker-comms"
+version.workspace = true
+edition = "2024"
+description = "BitTorrent tracker protocol (HTTP, UDP, scrape) and tiered tracker state machine."
+license = "Apache-2.0"
+documentation = "https://docs.rs/librqbit-tracker-comms"
+repository = "https://github.com/ikatson/rqbit"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+tokio = { workspace = true, features = ["macros", "net", "time", "sync", "rt"] }
+anyhow.workspace = true
+librqbit-core.workspace = true
+serde.workspace = true
+serde_derive.workspace = true
+urlencoding.workspace = true
+rand.workspace = true
+tracing.workspace = true
+reqwest.workspace = true
+url.workspace = true
+parking_lot.workspace = true
+tokio-util.workspace = true
+librqbit-dualstack-sockets.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "net", "time", "sync", "rt", "rt-multi-thread", "io-util"] }

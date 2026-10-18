@@ -1,0 +1,238 @@
+name: QBTNeo
+options:
+  bundleIdPrefix: mk.lex
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEAD_CODE_STRIPPING: YES
+    # Shared by the app and the widget extension. Starting with the team ID
+    # lets macOS honour it without a provisioning profile.
+    QBT_APP_GROUP: YWA2X8G6VY.mk.lex.qbitneors
+targets:
+  QBTNeo:
+    type: application
+    platform: macOS
+    sources:
+      - path: QBTNeo
+      - path: Generated
+      - path: WidgetShared
+    dependencies:
+      - framework: ../../build/QBTCoreFFI.xcframework
+        embed: false
+      - target: QBTNeoWidgets
+      - sdk: SystemConfiguration.framework
+      - sdk: Security.framework
+      - sdk: CoreFoundation.framework
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    entitlements:
+      path: QBTNeo/QBTNeo.entitlements
+      properties:
+        com.apple.security.automation.apple-events: true
+        com.apple.security.application-groups:
+          - $(QBT_APP_GROUP)
+    info:
+      path: QBTNeo/Info.plist
+      properties:
+        LSMinimumSystemVersion: "27.0"
+        QBTAppGroup: $(QBT_APP_GROUP)
+        NSPrincipalClass: NSApplication
+        CFBundleLocalizations:
+          - en
+          - ar
+          - az-Latn
+          - be
+          - bg
+          - bs
+          - ca
+          - cs
+          - da
+          - de
+          - el
+          - en-AU
+          - en-GB
+          - es
+          - et
+          - eu
+          - fi
+          - fr
+          - gl
+          - he
+          - hi-IN
+          - hr
+          - hu
+          - id
+          - it
+          - ja
+          - ka
+          - ko
+          - lt
+          - lv-LV
+          - ms-MY
+          - nb
+          - ne-NP
+          - nl
+          - pl
+          - pt-BR
+          - pt-PT
+          - ro
+          - ru
+          - sk
+          - sl
+          - sr
+          - sr-Latn
+          - sv
+          - th
+          - tr
+          - uk
+          - vi
+          - zh-HK
+          - zh-Hans
+          - zh-Hant
+        NSAppleEventsUsageDescription: qBit NeoRS asks System Events to shut down or restart the Mac when you choose that action for finished downloads.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: BitTorrent Document
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Default
+            LSItemContentTypes:
+              - org.bittorrent.torrent
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.bittorrent.torrent
+            UTTypeDescription: BitTorrent Document
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - torrent
+              public.mime-type:
+                - application/x-bittorrent
+        CFBundleURLTypes:
+          - CFBundleURLName: Magnet Link
+            CFBundleURLSchemes:
+              - magnet
+          - CFBundleURLName: qBit NeoRS Widget Link
+            CFBundleURLSchemes:
+              - qbitneors
+    preBuildScripts:
+      - name: Build Rust core
+        script: |
+          # Shared cargo target dir keeps disk usage down across worktrees.
+          if [ -z "$CARGO_TARGET_DIR" ]; then
+            COMMON_GIT_DIR="$(git -C "$SRCROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+            export CARGO_TARGET_DIR="$(dirname "${COMMON_GIT_DIR:-$SRCROOT/../../.git}")/target/shared"
+          fi
+          export CARGO_PROFILE_DEV_DEBUG="${CARGO_PROFILE_DEV_DEBUG:-line-tables-only}"
+          "$SRCROOT/../../scripts/build-core.sh"
+        basedOnDependencyAnalysis: false
+    postCompileScripts:
+      - name: SwiftLint
+        script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          if command -v swiftlint >/dev/null; then
+            cd "$SRCROOT" && swiftlint lint --quiet --config .swiftlint.yml
+          else
+            echo "warning: SwiftLint not installed"
+          fi
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_NAME: qBit NeoRS
+        PRODUCT_MODULE_NAME: QBTNeo
+        PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: qBit NeoRS
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSHumanReadableCopyright: "GPL-3.0-or-later"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: YES
+        OTHER_LDFLAGS: ["-lresolv"]
+
+  QBTNeoWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: QBTNeoWidgets
+      - path: WidgetShared
+      - path: QBTNeo/Shared/Formatting/UnitFormatter.swift
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+      - sdk: AppIntents.framework
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    entitlements:
+      path: QBTNeoWidgets/QBTNeoWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(QBT_APP_GROUP)
+    info:
+      path: QBTNeoWidgets/Info.plist
+      properties:
+        QBTAppGroup: $(QBT_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_NAME: QBTNeoWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.widgets
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: qBit NeoRS
+        INFOPLIST_KEY_NSHumanReadableCopyright: "GPL-3.0-or-later"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+
+  QBTNeoWidgetTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: QBTNeoWidgetTests
+      - path: WidgetShared
+        excludes:
+          - "Intents/**"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.widget-tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+
+  QBTNeoUnitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: QBTNeoUnitTests
+      # Pure logic shared with the app (no app host needed).
+      - path: QBTNeo/Shared/Components/WindowVisibility.swift
+      - path: QBTNeo/Shared/Components/WindowReleasePolicy.swift
+      - path: QBTNeo/App/Termination/TerminationGate.swift
+      - path: QBTNeo/App/Termination/SheetHosting.swift
+      - path: QBTNeo/App/Termination/SheetDismissal.swift
+      - path: QBTNeo/Features/TorrentNames/Parsing
+      - path: QBTNeo/Shared/Design/Symbol.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"

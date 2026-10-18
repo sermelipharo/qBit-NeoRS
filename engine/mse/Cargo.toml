@@ -1,0 +1,16 @@
+[package]
+name = "librqbit-mse"
+version.workspace = true
+edition = "2024"
+license = "Apache-2.0"
+description = "BitTorrent Message Stream Encryption (MSE/PE) handshake and RC4 stream wrapper"
+
+[dependencies]
+num-bigint = "0.5"
+sha1_smol = "1"
+rand.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread", "time"] }

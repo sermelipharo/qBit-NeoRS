@@ -1,0 +1,4 @@
+[submodule "reference/qBittorrent"]
+	path = reference/qBittorrent
+	url = https://github.com/qbittorrent/qBittorrent.git
+	shallow = true

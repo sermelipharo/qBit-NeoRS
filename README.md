@@ -18,7 +18,23 @@ SwiftUI interface.
   feature set needs (see `docs/ENGINE.md`), and upstream improvements are
   merged regularly (`scripts/engine-upstream.sh`).
 
-![Main window](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/main-light.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/cards-dark.png">
+  <img alt="Cards view" src="docs/screenshots/cards-light.png">
+</picture>
+
+Torrents can be shown as cards or as a list (⌘1 / ⌘2 or the toolbar switch).
+Names are split by editable rules: the title is set in semibold and release
+details (resolution, codec, source, group, format, version…) in regular weight
+in the list, or as color-coded tags on the cards, with an icon for the kind of
+content (video, music, software, game, ROM set, book, audiobook, comic).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/list-dark.png">
+  <img alt="List view with semibold titles" src="docs/screenshots/list-light.png">
+</picture>
+
+More of the interface:
 
 | | |
 |---|---|
@@ -29,7 +45,7 @@ SwiftUI interface.
 qBit NeoRS shares its interface with
 [qBittorrent Neo](https://github.com/sermelipharo/qBittorrent-Neo), which runs
 qBittorrent's own C++ engine (libtorrent and Qt) under the same SwiftUI app, so
-the screenshots above come from it; only the window title differs.
+the screenshots in the table come from it; only the window title differs.
 Pick qBittorrent Neo if you want qBittorrent's engine exactly; pick qBit NeoRS
 for a smaller, all-Rust app. qBit NeoRS is younger and less tested.
 

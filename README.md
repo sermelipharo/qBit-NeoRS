@@ -18,14 +18,18 @@ SwiftUI interface.
   feature set needs (see `docs/ENGINE.md`), and upstream improvements are
   merged regularly (`scripts/engine-upstream.sh`).
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/cards-dark.png">
-  <img alt="qBit NeoRS main window in the cards view" src="docs/screenshots/cards-light.png">
-</picture>
+![Main window](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/main-light.png)
+
+| | |
+|---|---|
+| ![Main window, dark](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/main-dark.png) | ![Command palette](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/command-palette-dark.png) |
+| ![Add Torrent window](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/add-torrent-light.png) | ![RSS reader](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/rss-light.png) |
+| ![Settings](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/settings-light.png) | ![Settings search](https://github.com/sermelipharo/qBittorrent-Neo/raw/neo/docs/screenshots/settings-search-dark.png) |
 
 qBit NeoRS shares its interface with
 [qBittorrent Neo](https://github.com/sermelipharo/qBittorrent-Neo), which runs
-qBittorrent's own C++ engine (libtorrent and Qt) under the same SwiftUI app.
+qBittorrent's own C++ engine (libtorrent and Qt) under the same SwiftUI app, so
+the screenshots above come from it; only the window title differs.
 Pick qBittorrent Neo if you want qBittorrent's engine exactly; pick qBit NeoRS
 for a smaller, all-Rust app. qBit NeoRS is younger and less tested.
 

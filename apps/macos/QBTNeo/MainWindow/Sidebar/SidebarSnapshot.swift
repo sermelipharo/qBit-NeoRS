@@ -41,14 +41,33 @@ struct SidebarSnapshot: Equatable, Sendable {
         var rows: [Row]
     }
 
-    /// The rows above the filters that switch the main window's tab (Transfers, Search, RSS).
+    /// The rows above the filters that switch the main window's tab (Search).
     struct PaneRow: Equatable, Sendable {
         let pane: MainPane
         var count: Int
     }
 
+    /// An RSS folder or feed below the filters, or the "Manage Feeds" row
+    /// (`id` empty) while there are none. Selecting one opens the RSS tab.
+    struct FeedRow: Equatable, Sendable {
+        static let manageID = ""
+        let id: String
+        var title: String
+        var symbol: String
+        var tint: Tint
+        var count: Int
+        var children: [Self] = []
+    }
+
+    struct FeedSection: Equatable, Sendable {
+        var isExpanded: Bool
+        var rows: [FeedRow]
+    }
+
     var panes: [PaneRow]
     var sections: [Section]
+    /// Nil when hidden.
+    var feeds: FeedSection?
 
     // MARK: Building
 
@@ -56,10 +75,8 @@ struct SidebarSnapshot: Equatable, Sendable {
     init(model: AppModel) {
         let gui = model.gui
         let counts = model.list.counts
-        var panes = [PaneRow(pane: .transfers, count: counts.count(for: .all))]
-        if gui.searchEnabled { panes.append(PaneRow(pane: .search, count: 0)) }
-        if gui.rssEnabled { panes.append(PaneRow(pane: .rss, count: model.rssUnread)) }
-        self.panes = panes
+        // Transfers have no row of their own: any filter row shows them.
+        panes = [PaneRow(pane: .search, count: 0)]
         var sections = [
             Section(id: .status, title: String(localized: "Status"), isExpanded: gui.statusSectionExpanded, rows: Self.statusRows(model, counts)),
             Section(id: .category, title: String(localized: "Categories"), isExpanded: gui.categorySectionExpanded,
@@ -73,6 +90,20 @@ struct SidebarSnapshot: Equatable, Sendable {
         sections.append(Section(id: .tracker, title: String(localized: "Trackers"), isExpanded: gui.trackerSectionExpanded,
                                 rows: Self.trackerRows(model, counts)))
         self.sections = sections.filter { !gui.hiddenSidebarSections.contains($0.id) }
+        feeds = gui.hiddenSidebarSections.contains(.rss) ? nil
+            : FeedSection(isExpanded: gui.rssSectionExpanded, rows: Self.feedRows(model.rssTab.nodes))
+    }
+
+    private static func feedRows(_ nodes: [RSSNode]) -> [FeedRow] {
+        func row(_ node: RSSNode) -> FeedRow {
+            let symbol = node.kind == .folder ? Symbol.folder : node.hasError ? Symbol.exclamationmarkTriangleFill : Symbol.dotRadiowavesUpForward
+            return FeedRow(id: node.id, title: node.name, symbol: symbol, tint: node.kind == .folder ? .accent : .orange,
+                           count: Int(node.unreadCount), children: (node.children ?? []).map(row))
+        }
+        let rows = nodes.filter { $0.kind != .unread }.map(row)
+        guard rows.isEmpty else { return rows }
+        return [FeedRow(id: FeedRow.manageID, title: String(localized: "Manage Feeds"), symbol: Symbol.dotRadiowavesUpForward,
+                        tint: .orange, count: 0)]
     }
 
     @MainActor
@@ -155,6 +186,7 @@ struct SidebarSnapshot: Equatable, Sendable {
         case pane(MainPane)
         case section(SidebarItem.Section)
         case row(SidebarItem, depth: Int)
+        case feed(String, depth: Int)
     }
 
     /// Sections and rows in display order with their depth; a different list means the outline reloads.
@@ -162,7 +194,11 @@ struct SidebarSnapshot: Equatable, Sendable {
         func flatten(_ rows: [Row], depth: Int) -> [Node] {
             rows.flatMap { [Node.row($0.item, depth: depth)] + flatten($0.children, depth: depth + 1) }
         }
-        return panes.map { Node.pane($0.pane) } + sections.flatMap { [Node.section($0.id)] + flatten($0.rows, depth: 0) }
+        func flatten(_ rows: [FeedRow], depth: Int) -> [Node] {
+            rows.flatMap { [Node.feed($0.id, depth: depth)] + flatten($0.children, depth: depth + 1) }
+        }
+        let feedNodes = feeds.map { [Node.section(.rss)] + flatten($0.rows, depth: 0) } ?? []
+        return panes.map { Node.pane($0.pane) } + sections.flatMap { [Node.section($0.id)] + flatten($0.rows, depth: 0) } + feedNodes
     }
 }
 

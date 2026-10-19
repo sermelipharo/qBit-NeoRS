@@ -9,6 +9,7 @@ final class SidebarEntry: NSObject {
         case pane(MainPane)
         case section(SidebarItem.Section)
         case row(SidebarItem)
+        case feed(String)
     }
 
     let key: Key
@@ -33,6 +34,13 @@ final class SidebarEntry: NSObject {
 
     /// Set for pane rows.
     var paneRow: SidebarSnapshot.PaneRow?
+    /// Set for RSS rows.
+    var feedRow: SidebarSnapshot.FeedRow?
+
+    var feed: String? {
+        if case .feed(let id) = key { return id }
+        return nil
+    }
 
     var section: SidebarItem.Section? {
         if case .section(let section) = key { return section }

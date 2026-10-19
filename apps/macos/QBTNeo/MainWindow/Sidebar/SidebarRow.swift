@@ -42,6 +42,10 @@ final class SidebarRow: NSTableCellView {
         configure(title: row.title, symbol: row.symbol, tint: row.tint, count: row.count, favicon: favicon)
     }
 
+    func configure(_ feed: SidebarSnapshot.FeedRow) {
+        configure(title: feed.title, symbol: feed.symbol, tint: feed.tint, count: feed.count, favicon: nil)
+    }
+
     func configure(_ pane: SidebarSnapshot.PaneRow) {
         configure(title: pane.pane.title, symbol: pane.pane.symbol, tint: .accent, count: pane.count, favicon: nil)
     }

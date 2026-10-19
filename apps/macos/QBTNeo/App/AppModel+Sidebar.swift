@@ -12,6 +12,7 @@ extension AppModel {
             case .tag: list.tagFilter = .all
             case .trackerStatus: list.trackerStatusFilter = .all
             case .tracker: list.trackerFilter = .all
+            case .rss: break
             }
         } else {
             gui.hiddenSidebarSections.remove(section)

@@ -26,22 +26,30 @@ struct RSSWindow: View {
 }
 
 /// The RSS reader: feed tree | articles | article preview, with its sheets
-/// and alerts. The toolbar and the filter field belong to the host window.
+/// and alerts. The toolbar and the filter field belong to the host window;
+/// in the main window the feeds are listed in the sidebar instead
+/// (`showsFeedList` off).
 struct RSSPane: View {
     @Environment(AppModel.self) private var app
     @Bindable var model: RSSModel
+    var showsFeedList = true
 
     var body: some View {
-        HSplitView {
-            RSSFeedList(model: model)
-                .frame(minWidth: 200, idealWidth: 240, maxWidth: 360)
-            RSSArticleList(model: model)
-                .frame(minWidth: 260, idealWidth: 340)
-            RSSArticleView(item: model.currentArticle, showsFeed: model.showsFeedColumn) {
-                if let item = model.currentArticle { model.download([item], app: app) }
+        Group {
+            if !showsFeedList, model.nodes.allSatisfy({ $0.kind == .unread }) {
+                ContentUnavailableView {
+                    Label("No Feeds", systemImage: Symbol.dotRadiowavesUpForward)
+                } description: {
+                    Text("Subscribe to an RSS feed to read its items and download torrents from it.")
+                } actions: {
+                    Button("New Subscription…") { model.sheet = .newSubscription(url: RSSFeedSheet.clipboardURL()) }
+                    Button("New Folder…") { model.sheet = .newFolder }
+                }
+            } else {
+                reader
             }
-            .frame(minWidth: 300, maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(item: $model.sheet) { sheet in
             RSSSheetView(sheet: sheet, model: model)
         }
@@ -55,6 +63,21 @@ struct RSSPane: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("Are you sure you want to delete the selected RSS feeds?")
+        }
+    }
+
+    private var reader: some View {
+        HSplitView {
+            if showsFeedList {
+                RSSFeedList(model: model)
+                    .frame(minWidth: 200, idealWidth: 240, maxWidth: 360, maxHeight: .infinity)
+            }
+            RSSArticleList(model: model)
+                .frame(minWidth: 260, idealWidth: 340, maxHeight: .infinity)
+            RSSArticleView(item: model.currentArticle, showsFeed: model.showsFeedColumn) {
+                if let item = model.currentArticle { model.download([item], app: app) }
+            }
+            .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

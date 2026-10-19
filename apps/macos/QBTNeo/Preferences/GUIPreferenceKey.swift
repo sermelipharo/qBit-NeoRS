@@ -69,6 +69,7 @@ enum GUIPreferenceKey: String, CaseIterable {
     case tagSectionExpanded = "TransferListFilters/TagFilterState"
     case trackerStatusSectionExpanded = "TransferListFilters/TrackerStatusFilterState"
     case trackerSectionExpanded = "TransferListFilters/trackerFilterState"
+    case rssSectionExpanded = "GUI/MainWindow/RSSSectionExpanded"
     /// Sidebar sections hidden from its context menu (`SidebarItem.Section` raw values).
     case hiddenSidebarSections = "GUI/MainWindow/HiddenSidebarSections"
     case lastOpenDirectory = "MainWindow/LastDir"

@@ -58,6 +58,7 @@ extension AppModel {
         case .tag: gui.tagSectionExpanded = true
         case .trackerStatus: gui.trackerStatusSectionExpanded = true
         case .tracker: gui.trackerSectionExpanded = true
+        case .rss: break
         }
         list.select(filter)
     }

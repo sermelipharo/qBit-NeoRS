@@ -53,6 +53,14 @@ struct SnapshotRenderer {
         if let focus { model.list.selection = [focus.id] }
         await settle(model)
 
+        // The other tabs of the main window.
+        for pane in [MainPane.search, .rss, .log] {
+            model.show(pane: pane)
+            try? await Task.sleep(for: .seconds(1))
+            await renderMain(model, name: "main-tab-\(pane)", appearance: .light)
+        }
+        model.mainPane = .transfers
+
         await render(UILockScreen().environment(model), size: Design.Window.snapshotSize, name: "lock-screen", appearance: .light)
         await SnapshotDialogs(renderer: self, model: model, client: client).renderAll()
         await FeatureSnapshots(directory: directory, launch: launch).run()
@@ -85,6 +93,7 @@ struct SnapshotRenderer {
             ? ActiveSnapshotWindow(contentRect: frame, styleMask: style, backing: .buffered, defer: false)
             : SnapshotWindow(contentRect: frame, styleMask: style, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.tabbingMode = .disallowed
         if launch.snapshotClear {
             window.backgroundColor = .clear
             window.isOpaque = false

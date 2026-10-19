@@ -24,6 +24,7 @@ struct MainWindow: View {
                         )
                 } detail: {
                     detail
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .toolbar(id: "main") { MainToolbar(model: model) }
                 .searchable(text: searchText, placement: .toolbar, prompt: Text(searchPrompt))
@@ -54,7 +55,7 @@ struct MainWindow: View {
         switch model.mainPane {
         case .transfers: TransferDetailView()
         case .search: SearchPane(model: model.searchTab, showsPatternField: false)
-        case .rss: RSSPane(model: model.rssTab)
+        case .rss: RSSPane(model: model.rssTab, showsFeedList: false)
         case .log:
             LogPane(model: model.logTab, resize: LogFilterBar.Resize(isFull: true) {
                 gui.propertiesTab = .log
@@ -94,7 +95,8 @@ struct MainWindow: View {
 }
 
 /// Keeps the tabs' models fed whether or not their tab shows: plugin search
-/// and RSS attach to the core once enabled, the log follows the log store.
+/// attaches to the core once enabled, RSS always (its feeds are listed in
+/// the sidebar), the log follows the log store.
 private struct MainTabFeeds: ViewModifier {
     let model: AppModel
 
@@ -106,12 +108,10 @@ private struct MainTabFeeds: ViewModifier {
                 await model.searchTab.attach(model.client, profileRoot: model.launch.isSnapshot ? nil : model.launch.profileDirectory)
                 runPendingPluginSearch()
             }
-            .task(id: SearchAttachKey(phase: model.phase, enabled: model.gui.rssEnabled)) {
-                guard model.gui.rssEnabled else { return }
+            .task(id: model.phase) {
                 await model.rssTab.attach(model.client)
             }
-            .task(id: model.gui.rssEnabled) {
-                guard model.gui.rssEnabled else { return }
+            .task {
                 await model.rssTab.observe(model.events())
             }
             .onChange(of: model.pendingPluginSearch) { runPendingPluginSearch() }

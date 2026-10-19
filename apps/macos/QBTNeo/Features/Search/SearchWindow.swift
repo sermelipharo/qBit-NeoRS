@@ -37,16 +37,21 @@ struct SearchPane: View {
             SearchQueryBar(model: model, showsPatternField: showsPatternField)
             Divider()
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
             HStack {
                 Text(model.currentTab?.status.text ?? "")
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("Search plugins…") { openWindow(id: FeatureWindowID.searchPlugins.rawValue) }
+                // The main window has it in the toolbar.
+                if showsPatternField {
+                    Button("Search plugins…") { openWindow(id: FeatureWindowID.searchPlugins.rawValue) }
+                }
             }
             .padding(Design.Spacing.medium)
             .background(.bar)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .alert(model.alert?.title ?? "", item: $model.alert) { _ in
             Button("OK") {}
         } message: { alert in
@@ -80,10 +85,12 @@ struct SearchPane: View {
             ContentUnavailableView("Search", systemImage: Symbol.magnifyingglass,
                                    description: Text("Type a phrase and press Return to search with the enabled plugins."))
         } else {
-            SearchTabStrip(model: model)
-            if let tab = model.currentTab {
-                SearchResultsView(model: model, tab: tab)
-                    .id(tab.id)
+            VStack(spacing: 0) {
+                SearchTabStrip(model: model)
+                if let tab = model.currentTab {
+                    SearchResultsView(model: model, tab: tab)
+                        .id(tab.id)
+                }
             }
         }
     }

@@ -5,7 +5,7 @@ import SwiftUI
 /// NeoRS extension, like Finder's view picker), remove, start/stop, queue
 /// (when queueing is enabled), lock and options; buttons render from the
 /// command registry, like the menus. The RSS tab shows the reader's actions,
-/// the full-size log its General / Blocked IPs switch. The search field is
+/// the full-size log nothing of its own. The search field is
 /// the window's `.searchable`.
 struct MainToolbar: CustomizableToolbarContent {
     let model: AppModel
@@ -24,10 +24,8 @@ struct MainToolbar: CustomizableToolbarContent {
         case .rss:
             rssItems
         case .log:
-            ToolbarItem(id: "log.tabs", placement: .principal) {
-                LogTabPicker(model: model.logTab)
-            }
-            .customizationBehavior(.disabled)
+            // General / Blocked IPs sit in the log's own bar.
+            ToolbarItem(id: "log.none", placement: .automatic) { EmptyView() }
         case .search:
             ToolbarItem(id: "search.plugins") {
                 Button("Search Plugins…", systemImage: Symbol.puzzlepieceExtension) {

@@ -39,6 +39,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.menuProvider = { [weak self] row in
             guard let self, let entry = outline.item(atRow: row) as? SidebarEntry else { return nil }
             if let item = entry.item { return SidebarMenu.make(for: item, model: model) }
+            if let feed = entry.feed { return SidebarMenu.make(forFeed: feed, model: model) }
             if let section = entry.section { return SidebarMenu.make(forSection: section, model: model) }
             return nil
         }
@@ -56,7 +57,8 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         let model = model
         let list = model.list
         observations.observe({ SidebarSnapshot(model: model) }, apply: { [weak self] in self?.apply($0) })
-        observations.observe({ (list.sidebarSelection, model.mainPane) }, apply: { [weak self] in self?.applySelection($0.0) })
+        let rss = model.rssTab
+        observations.observe({ (list.sidebarSelection, model.mainPane, rss.selection) }, apply: { [weak self] in self?.applySelection($0.0) })
     }
 
     func stop() {
@@ -83,6 +85,17 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         }
     }
 
+    private func entries(for rows: [SidebarSnapshot.FeedRow], used: inout Set<SidebarEntry.Key>) -> [SidebarEntry] {
+        rows.map { row in
+            let entry = entry(.feed(row.id))
+            entry.title = row.title
+            entry.feedRow = row
+            entry.children = entries(for: row.children, used: &used)
+            used.insert(entry.key)
+            return entry
+        }
+    }
+
     private func apply(_ next: SidebarSnapshot) {
         guard next != snapshot else { return }
         let structureChanged = snapshot?.structure != next.structure
@@ -101,6 +114,13 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             used.insert(entry.key)
             return entry
         }
+        if let feeds = next.feeds {
+            let entry = entry(.section(.rss))
+            entry.title = SidebarItem.Section.rss.title
+            entry.children = entries(for: feeds.rows, used: &used)
+            used.insert(entry.key)
+            roots.append(entry)
+        }
         entries = entries.filter { used.contains($0.key) }
         snapshot = next
         isApplying = true
@@ -111,11 +131,13 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         } else {
             refreshRows()
         }
-        for section in next.sections {
-            guard let entry = entries[.section(section.id)] else { continue }
-            if section.isExpanded, !outline.isItemExpanded(entry) {
+        var expansion = next.sections.map { ($0.id, $0.isExpanded) }
+        if let feeds = next.feeds { expansion.append((.rss, feeds.isExpanded)) }
+        for (id, isExpanded) in expansion {
+            guard let entry = entries[.section(id)] else { continue }
+            if isExpanded, !outline.isItemExpanded(entry) {
                 outline.expandItem(entry)
-            } else if !section.isExpanded, outline.isItemExpanded(entry) {
+            } else if !isExpanded, outline.isItemExpanded(entry) {
                 outline.collapseItem(entry)
             }
         }
@@ -127,6 +149,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.enumerateAvailableRowViews { rowView, row in
             guard let entry = outline.item(atRow: row) as? SidebarEntry, let cell = rowView.view(atColumn: 0) as? SidebarRow else { return }
             if let pane = entry.paneRow { cell.configure(pane); return }
+            if let feed = entry.feedRow { cell.configure(feed); return }
             guard let content = entry.row else { return }
             cell.configure(content, favicon: favicon(content))
         }
@@ -138,16 +161,17 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     // MARK: Selection
 
-    /// Off the Transfers tab only its row is selected; on it, the Transfers
-    /// row and the filter rows (the filters keep applying either way).
+    /// Transfers (and the full-size log) select the filter rows (which keep
+    /// applying on every tab), Search its row, RSS the shown feeds.
     private func applySelection(_ selection: Set<SidebarItem>) {
-        var rows = IndexSet()
-        if let entry = entries[.pane(model.mainPane == .log ? .transfers : model.mainPane)] {
-            let row = outline.row(forItem: entry)
-            if row >= 0 { rows.insert(row) }
+        let keys: [SidebarEntry.Key] = switch model.mainPane {
+        case .transfers, .log: selection.map { .row($0) }
+        case .search: [.pane(.search)]
+        case .rss: feedKeys
         }
-        for item in model.mainPane == .search || model.mainPane == .rss ? [] : selection {
-            if let entry = entries[.row(item)] {
+        var rows = IndexSet()
+        for key in keys {
+            if let entry = entries[key] {
                 let row = outline.row(forItem: entry)
                 if row >= 0 { rows.insert(row) }
             }
@@ -158,19 +182,26 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         isApplying = false
     }
 
+    private var feedKeys: [SidebarEntry.Key] {
+        if entries[.feed(SidebarSnapshot.FeedRow.manageID)] != nil { return [.feed(SidebarSnapshot.FeedRow.manageID)] }
+        return model.rssTab.selection.map { .feed($0) }
+    }
+
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isApplying else { return }
         let selected = outline.selectedRowIndexes.compactMap { outline.item(atRow: $0) as? SidebarEntry }
         let items = selected.compactMap(\.item)
-        let current: MainPane = model.mainPane == .log ? .transfers : model.mainPane
-        if let pane = selected.compactMap(\.pane).first(where: { $0 != current }) {
-            model.mainPane = pane
-        } else if model.mainPane == .log, selected.contains(where: { $0.pane == .transfers }) {
-            // The Transfers row leaves the full-size log.
-            model.mainPane = .transfers
+        let feeds = selected.compactMap(\.feed)
+        if let pane = selected.compactMap(\.pane).first(where: { $0 != model.mainPane }) {
+            model.show(pane: pane)
+        } else if !feeds.isEmpty, Set(feeds) != Set(model.mainPane == .rss ? model.rssTab.selection : []) {
+            // A feed or folder opens the RSS tab on it.
+            let shown = feeds.filter { model.rssTab.node($0) != nil }
+            model.show(pane: .rss)
+            if !shown.isEmpty { model.rssTab.selection = Set(shown) }
         } else if !items.isEmpty {
             // A filter row shows the transfers it filters.
-            if model.mainPane == .search || model.mainPane == .rss { model.mainPane = .transfers }
+            if model.mainPane != .transfers { model.mainPane = .transfers }
             model.list.sidebarSelection = Set(items)
         }
         // The model keeps one row per section: show what it chose.
@@ -202,7 +233,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         guard let entry = item as? SidebarEntry else { return false }
-        return entry.item != nil || entry.pane != nil
+        return entry.item != nil || entry.pane != nil || entry.feed != nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
@@ -210,6 +241,11 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         if let pane = entry.paneRow {
             let cell = SidebarRow.make(in: outlineView)
             cell.configure(pane)
+            return cell
+        }
+        if let feed = entry.feedRow {
+            let cell = SidebarRow.make(in: outlineView)
+            cell.configure(feed)
             return cell
         }
         guard let row = entry.row else {
@@ -268,6 +304,8 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         case .tracker:
             gui.trackerSectionExpanded = expanded
             if !expanded { list.trackerFilter = .all }
+        case .rss:
+            gui.rssSectionExpanded = expanded
         }
     }
 

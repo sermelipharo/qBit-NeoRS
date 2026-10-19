@@ -106,6 +106,7 @@ final class GUIPreferences {
     var tagSectionExpanded: Bool { didSet { set(tagSectionExpanded, .tagSectionExpanded) } }
     var trackerStatusSectionExpanded: Bool { didSet { set(trackerStatusSectionExpanded, .trackerStatusSectionExpanded) } }
     var trackerSectionExpanded: Bool { didSet { set(trackerSectionExpanded, .trackerSectionExpanded) } }
+    var rssSectionExpanded: Bool { didSet { set(rssSectionExpanded, .rssSectionExpanded) } }
     var hiddenSidebarSections: Set<SidebarItem.Section> {
         didSet { set(hiddenSidebarSections.map(\.rawValue).sorted(), .hiddenSidebarSections) }
     }
@@ -204,6 +205,7 @@ final class GUIPreferences {
         tagSectionExpanded = read.bool(.tagSectionExpanded, true)
         trackerStatusSectionExpanded = read.bool(.trackerStatusSectionExpanded, true)
         trackerSectionExpanded = read.bool(.trackerSectionExpanded, true)
+        rssSectionExpanded = read.bool(.rssSectionExpanded, true)
         hiddenSidebarSections = Set(read.strings(.hiddenSidebarSections).compactMap(SidebarItem.Section.init(rawValue:)))
         lastOpenDirectory = read.string(.lastOpenDirectory, NSHomeDirectory())
 

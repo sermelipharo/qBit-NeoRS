@@ -96,6 +96,7 @@ final class TransferListModel {
         case .tag: tagFilter = .all
         case .trackerStatus: trackerStatusFilter = .all
         case .tracker: trackerFilter = .all
+        case .rss: break
         }
     }
 

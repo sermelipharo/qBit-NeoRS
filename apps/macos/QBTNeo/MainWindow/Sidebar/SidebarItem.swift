@@ -11,6 +11,8 @@ enum SidebarItem: Hashable, Sendable {
 
     enum Section: String, CaseIterable, Hashable, Sendable {
         case status, category, tag, trackerStatus, tracker
+        /// The RSS feeds and folders (not a transfer filter).
+        case rss
 
         var title: String {
             switch self {
@@ -19,6 +21,7 @@ enum SidebarItem: Hashable, Sendable {
             case .tag: String(localized: "Tags")
             case .trackerStatus: String(localized: "Tracker Status")
             case .tracker: String(localized: "Trackers")
+            case .rss: String(localized: "RSS")
             }
         }
     }

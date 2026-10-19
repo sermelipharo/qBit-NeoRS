@@ -30,21 +30,20 @@ enum NameChipStyle {
     nonisolated static let symbolGap: CGFloat = 3
 
     static func tint(_ category: NameRuleCategory) -> NSColor {
-        switch category {
-        case .seasonEpisode, .volume: .systemRed
-        case .resolution: .systemBlue
-        case .hdr: .systemOrange
-        case .source: .systemPurple
-        case .videoCodec: .systemTeal
-        case .audio: .systemIndigo
-        case .audioLanguage: .systemGreen
-        case .subtitles: .systemYellow
-        case .edition: .systemBrown
-        case .platform, .version: .systemCyan
-        case .region: .systemGreen
-        case .format: .systemPink
-        case .year, .releaseGroup, .hidden: .systemGray
-        case .other: .systemMint
+        switch category.chipTint {
+        case .red: .systemRed
+        case .orange: .systemOrange
+        case .yellow: .systemYellow
+        case .green: .systemGreen
+        case .mint: .systemMint
+        case .teal: .systemTeal
+        case .cyan: .systemCyan
+        case .blue: .systemBlue
+        case .indigo: .systemIndigo
+        case .purple: .systemPurple
+        case .pink: .systemPink
+        case .brown: .systemBrown
+        case .gray: .systemGray
         }
     }
 

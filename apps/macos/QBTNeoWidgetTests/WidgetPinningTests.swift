@@ -52,6 +52,30 @@ struct WidgetPinningTests {
         #expect(detail.history.last?.time == 199)
     }
 
+    @Test func nameTitleAndChipsAreBoundedAndOptional() throws {
+        let torrent = WidgetTorrent(id: hash, name: "Big.Buck.Bunny.2008.1080p", state: .seeding, progress: 1, downloadRate: 0,
+                                    uploadRate: 0, eta: -1, size: 1, category: "", addedOn: 0, completedOn: 0)
+        func detail(title: String?, chips: [WidgetNameChip]) -> WidgetTorrentDetail {
+            WidgetTorrentDetail(torrent: torrent, downloaded: 1, ratio: 1, seeds: 0, seedsInSwarm: -1, peers: 0, peersInSwarm: -1,
+                                availability: -1, tags: [], savePath: "", errorMessage: "", history: [], title: title, chips: chips)
+        }
+        let chip = WidgetNameChip(text: String(repeating: "c", count: 99), tint: .blue, isOutlined: false)
+        let split = detail(title: "Big Buck Bunny", chips: Array(repeating: chip, count: 20))
+        #expect(split.displayTitle == "Big Buck Bunny")
+        #expect(split.chips?.count == WidgetTorrentDetail.maxChips)
+        #expect(chip.text.count == WidgetNameChip.maxLength)
+        let whole = detail(title: "", chips: [])
+        #expect(whole.displayTitle == torrent.name)
+        #expect(whole.chips == nil)
+        // A snapshot written before titles and chips existed still decodes.
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(split)) as? [String: Any])
+        json["n"] = nil
+        json["c"] = nil
+        let old = try JSONDecoder().decode(WidgetTorrentDetail.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(old.displayTitle == torrent.name)
+        #expect(old.chips == nil)
+    }
+
     @Test func textHelpers() {
         #expect(WidgetText.pathTail("/a/b/c/") == "b/c")
         #expect(WidgetText.pathTail("") == "")

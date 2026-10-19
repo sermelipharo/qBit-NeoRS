@@ -5,7 +5,7 @@ import Foundation
 /// given scopes are copied (`WidgetTorrentSelector.publishedSubset`).
 @MainActor
 enum WidgetSnapshotBuilder {
-    static func build(transfers: TransferStore, status: SessionStatus, history: [WidgetSpeedSample], scopes: [WidgetScope],
+    static func build(transfers: TransferStore, names: TorrentNamesModel?, status: SessionStatus, history: [WidgetSpeedSample], scopes: [WidgetScope],
                       pinned: [String], pinnedHistory: [String: [WidgetSpeedSample]], appStatus: WidgetAppStatus,
                       now: Date = .now) -> WidgetSnapshot {
         var snapshot = WidgetSnapshot(generatedAt: now, status: appStatus)
@@ -41,7 +41,7 @@ enum WidgetSnapshotBuilder {
                 snapshot.removed.append(id)
                 continue
             }
-            snapshot.pinned.append(detail(item, history: pinnedHistory[id] ?? []))
+            snapshot.pinned.append(detail(item, names: names, history: pinnedHistory[id] ?? []))
         }
         snapshot.torrents = published.map { torrent(items[$0]) }
         return snapshot
@@ -55,11 +55,17 @@ enum WidgetSnapshotBuilder {
         )
     }
 
-    private static func detail(_ item: TorrentItem, history: [WidgetSpeedSample]) -> WidgetTorrentDetail {
-        WidgetTorrentDetail(
+    /// A pinned torrent; its name is split into title and tags as on the cards.
+    private static func detail(_ item: TorrentItem, names: TorrentNamesModel?, history: [WidgetSpeedSample]) -> WidgetTorrentDetail {
+        let parsed = names?.parsed(item.name)
+        let chips = names?.showsCardTags == true ? parsed?.chips ?? [] : []
+        return WidgetTorrentDetail(
             torrent: torrent(item), downloaded: item.completed, ratio: item.ratio, seeds: item.numSeeds, seedsInSwarm: item.numComplete,
             peers: item.numLeechs, peersInSwarm: item.numIncomplete, availability: item.availability, tags: item.tags,
-            savePath: item.savePath, errorMessage: item.errorMessage, history: history
+            savePath: item.savePath, errorMessage: item.errorMessage, history: history, title: parsed?.title,
+            chips: chips.prefix(WidgetTorrentDetail.maxChips).map {
+                WidgetNameChip(text: $0.text, tint: $0.category.chipTint, isOutlined: NameChipStyle.isOutlined($0.category))
+            }
         )
     }
 }

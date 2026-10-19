@@ -68,6 +68,8 @@ struct WidgetSnapshot: Codable, Hashable, Sendable {
             structural.combine(detail.torrent.name)
             structural.combine(detail.torrent.state)
             structural.combine(detail.errorMessage)
+            structural.combine(detail.title)
+            structural.combine(detail.chips)
             volatile.combine(Int(detail.torrent.progress * 1_000))
             volatile.combine(WidgetFingerprint.bucket(detail.torrent.downloadRate))
             volatile.combine(WidgetFingerprint.bucket(detail.torrent.uploadRate))

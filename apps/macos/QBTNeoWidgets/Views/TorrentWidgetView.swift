@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 /// The Torrent widget: one chosen torrent. Small shows the ring, state and
-/// name; medium adds speeds, size, swarm and its own speed graph; large adds
+/// name (its title, with the technical tags that fit below, as on the cards); medium adds speeds, size, swarm and its own speed graph; large adds
 /// every detail and a Start/Stop button with a title.
 struct TorrentWidgetView: View {
     let entry: SnapshotEntry
@@ -46,9 +46,10 @@ struct TorrentWidgetView: View {
                 TorrentRunButton(torrent: detail.torrent, isEnabled: entry.acceptsCommands)
             }
             Spacer(minLength: 0)
-            Text(detail.torrent.name)
+            Text(detail.displayTitle)
                 .font(.system(size: 12, weight: .semibold))
-                .lineLimit(2)
+                .lineLimit(chips(detail).isEmpty ? 2 : 1)
+            chipRow(detail)
             compactStatus(detail)
         }
     }
@@ -58,12 +59,13 @@ struct TorrentWidgetView: View {
             TorrentRing(detail: detail, diameter: 92)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .top, spacing: 6) {
-                    Text(detail.torrent.name)
+                    Text(detail.displayTitle)
                         .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(2)
+                        .lineLimit(chips(detail).isEmpty ? 2 : 1)
                     Spacer(minLength: 0)
                     TorrentRunButton(torrent: detail.torrent, isEnabled: entry.acceptsCommands)
                 }
+                chipRow(detail)
                 statusLine(detail)
                 Spacer(minLength: 2)
                 secondary(TorrentDetailText.size(detail))
@@ -79,10 +81,11 @@ struct TorrentWidgetView: View {
             HStack(alignment: .top, spacing: 14) {
                 TorrentRing(detail: detail, diameter: 96)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(detail.torrent.name)
+                    Text(detail.displayTitle)
                         .font(.system(size: 15, weight: .semibold))
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
+                    chipRow(detail)
                     statusLine(detail)
                     let labels = TorrentDetailText.labels(detail)
                     if !labels.isEmpty { secondary(labels) }
@@ -115,6 +118,20 @@ struct TorrentWidgetView: View {
     }
 
     // MARK: Parts
+
+    private func chips(_ detail: WidgetTorrentDetail) -> [WidgetNameChip] {
+        detail.chips ?? []
+    }
+
+    /// The name's technical tags that fit on one line, as on the cards.
+    @ViewBuilder
+    private func chipRow(_ detail: WidgetTorrentDetail) -> some View {
+        let chips = chips(detail)
+        if !chips.isEmpty {
+            NameChipRow(chips: chips)
+                .padding(.vertical, 1)
+        }
+    }
 
     /// The state in its color, then what it is doing (or when it finished).
     private func statusLine(_ detail: WidgetTorrentDetail) -> some View {

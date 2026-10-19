@@ -47,7 +47,7 @@ enum WidgetSampleData {
         var snapshot = snapshot(now: now)
         snapshot.pinned = [pinnedDetail(state, now: now)]
         snapshot.candidates = snapshot.torrents.map { WidgetTorrentRef(id: $0.id, name: $0.name) }
-        return SnapshotEntry(date: now, snapshot: snapshot, pinnedID: pinnedID, pinnedName: "ubuntu-24.04.1-desktop-amd64.iso")
+        return SnapshotEntry(date: now, snapshot: snapshot, pinnedID: pinnedID, pinnedName: "Big.Buck.Bunny.2008.1080p.BluRay.x264.AAC-BLENDER")
     }
 
     static func pinnedDetail(_ state: WidgetTorrentState, now: Date = .now) -> WidgetTorrentDetail {
@@ -58,8 +58,8 @@ enum WidgetSampleData {
         let up: Int64 = state == .seeding ? 2_340_000 : (state == .downloading ? 310_000 : 0)
         let size: Int64 = 6_203_355_136
         let torrent = WidgetTorrent(
-            id: pinnedID, name: "ubuntu-24.04.1-desktop-amd64.iso", state: state, progress: progress, downloadRate: down, uploadRate: up,
-            eta: state == .downloading ? 252 : -1, size: size, category: "Linux ISOs", addedOn: time - 900,
+            id: pinnedID, name: "Big.Buck.Bunny.2008.1080p.BluRay.x264.AAC-BLENDER", state: state, progress: progress, downloadRate: down, uploadRate: up,
+            eta: state == .downloading ? 252 : -1, size: size, category: "Movies", addedOn: time - 900,
             completedOn: complete ? time - 3_600 : 0
         )
         let history = (0..<WidgetSpeedHistory.capacity).map { index in
@@ -71,8 +71,16 @@ enum WidgetSampleData {
         }
         return WidgetTorrentDetail(
             torrent: torrent, downloaded: Int64(Double(size) * progress), ratio: complete ? 1.84 : 0.07, seeds: 38, seedsInSwarm: 412,
-            peers: 6, peersInSwarm: 57, availability: 38.91, tags: ["lts", "desktop"], savePath: "/Users/me/Downloads/Linux ISOs",
-            errorMessage: state.isProblem ? String(localized: "The files were moved or deleted.") : "", history: history
+            peers: 6, peersInSwarm: 57, availability: 38.91, tags: ["open movies"], savePath: "/Users/me/Movies/Blender",
+            errorMessage: state.isProblem ? String(localized: "The files were moved or deleted.") : "", history: history,
+            title: "Big Buck Bunny", chips: [
+                WidgetNameChip(text: "1080p", tint: .blue, isOutlined: false),
+                WidgetNameChip(text: "BluRay", tint: .purple, isOutlined: false),
+                WidgetNameChip(text: "x264", tint: .teal, isOutlined: false),
+                WidgetNameChip(text: "AAC", tint: .indigo, isOutlined: false),
+                WidgetNameChip(text: "2008", tint: .gray, isOutlined: false),
+                WidgetNameChip(text: "BLENDER", tint: .gray, isOutlined: true)
+            ]
         )
     }
 

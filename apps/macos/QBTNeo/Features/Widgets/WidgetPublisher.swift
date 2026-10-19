@@ -96,7 +96,7 @@ final class WidgetPublisher {
         let urgent = now < urgentUntil
         guard policy.shouldEvaluate(now: now, forced: urgent) else { return }
         let snapshot = WidgetSnapshotBuilder.build(
-            transfers: app.transfers, status: app.status, history: history.samples, scopes: scopes, pinned: pinnedIDs,
+            transfers: app.transfers, names: app.names, status: app.status, history: history.samples, scopes: scopes, pinned: pinnedIDs,
             pinnedHistory: pinnedHistory.mapValues(\.samples), appStatus: app.lock.isLocked ? .locked : .running
         )
         switch policy.decide(snapshot.fingerprint, now: now, forced: urgent) {

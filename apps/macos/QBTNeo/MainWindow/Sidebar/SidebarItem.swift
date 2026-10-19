@@ -9,8 +9,18 @@ enum SidebarItem: Hashable, Sendable {
     case trackerStatus(TrackerStatusFilter)
     case tracker(TrackerFilter)
 
-    enum Section: Hashable, Sendable {
+    enum Section: String, CaseIterable, Hashable, Sendable {
         case status, category, tag, trackerStatus, tracker
+
+        var title: String {
+            switch self {
+            case .status: String(localized: "Status")
+            case .category: String(localized: "Categories")
+            case .tag: String(localized: "Tags")
+            case .trackerStatus: String(localized: "Tracker Status")
+            case .tracker: String(localized: "Trackers")
+            }
+        }
     }
 
     var section: Section {

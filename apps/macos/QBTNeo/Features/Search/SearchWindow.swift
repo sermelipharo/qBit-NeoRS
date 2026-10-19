@@ -1,19 +1,40 @@
 import SwiftUI
 
-/// The Search window: query row, result tabs and the "Search plugins…" button.
+/// The Search window, kept for snapshots: the main window shows `SearchPane`.
 struct SearchWindow: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.openWindow) private var openWindow
     @State private var model = SearchModel()
-    @AppStorage(FeatureDefaults.storeSearchTabs, store: AppDefaults.store) private var storesTabs = false
-    @AppStorage(FeatureDefaults.storeSearchResults, store: AppDefaults.store) private var storesResults = false
     /// Snapshots: run this search on open.
     var initialPattern: String?
 
     var body: some View {
-        @Bindable var model = model
+        SearchPane(model: model)
+            .frame(minWidth: FeatureDesign.Window.searchMin.width, minHeight: FeatureDesign.Window.searchMin.height)
+            .navigationTitle(AppWindowID.search.title)
+            .task(id: app.phase) {
+                await model.attach(app.client, profileRoot: app.launch.isSnapshot ? nil : app.launch.profileDirectory)
+                if let initialPattern, model.tabs.isEmpty {
+                    model.pattern = initialPattern
+                    model.search()
+                }
+            }
+    }
+}
+
+/// Search with the installed plugins: category and plugin pickers, result
+/// tabs and the "Search plugins…" button. In the main window the phrase is
+/// typed in the toolbar's search field (`showsPatternField` off).
+struct SearchPane: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
+    @Bindable var model: SearchModel
+    var showsPatternField = true
+    @AppStorage(FeatureDefaults.storeSearchTabs, store: AppDefaults.store) private var storesTabs = false
+    @AppStorage(FeatureDefaults.storeSearchResults, store: AppDefaults.store) private var storesResults = false
+
+    var body: some View {
         VStack(spacing: 0) {
-            SearchQueryBar(model: model)
+            SearchQueryBar(model: model, showsPatternField: showsPatternField)
             Divider()
             content
             Divider()
@@ -26,19 +47,10 @@ struct SearchWindow: View {
             .padding(Design.Spacing.medium)
             .background(.bar)
         }
-        .frame(minWidth: FeatureDesign.Window.searchMin.width, minHeight: FeatureDesign.Window.searchMin.height)
-        .navigationTitle(AppWindowID.search.title)
         .alert(model.alert?.title ?? "", item: $model.alert) { _ in
             Button("OK") {}
         } message: { alert in
             Text(alert.message)
-        }
-        .task(id: app.phase) {
-            await model.attach(app.client, profileRoot: app.launch.isSnapshot ? nil : app.launch.profileDirectory)
-            if let initialPattern, model.tabs.isEmpty {
-                model.pattern = initialPattern
-                model.search()
-            }
         }
         .task {
             for await event in app.events() {
@@ -47,7 +59,6 @@ struct SearchWindow: View {
         }
         .onChange(of: storesTabs) { model.storageSettingsChanged() }
         .onChange(of: storesResults) { model.storageSettingsChanged() }
-        .onAppear { if app.openWindow == nil { app.openWindow = openWindow } }
     }
 
     @ViewBuilder private var content: some View {

@@ -37,8 +37,10 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         outline.setAccessibilityLabel(String(localized: "Filters"))
         outline.registerForDraggedTypes([.string])
         outline.menuProvider = { [weak self] row in
-            guard let self, let item = (outline.item(atRow: row) as? SidebarEntry)?.item else { return nil }
-            return SidebarMenu.make(for: item, model: model)
+            guard let self, let entry = outline.item(atRow: row) as? SidebarEntry else { return nil }
+            if let item = entry.item { return SidebarMenu.make(for: item, model: model) }
+            if let section = entry.section { return SidebarMenu.make(forSection: section, model: model) }
+            return nil
         }
         scrollView.documentView = outline
         scrollView.hasVerticalScroller = true
@@ -54,7 +56,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         let model = model
         let list = model.list
         observations.observe({ SidebarSnapshot(model: model) }, apply: { [weak self] in self?.apply($0) })
-        observations.observe({ list.sidebarSelection }, apply: { [weak self] in self?.applySelection($0) })
+        observations.observe({ (list.sidebarSelection, model.mainPane) }, apply: { [weak self] in self?.applySelection($0.0) })
     }
 
     func stop() {
@@ -85,7 +87,14 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
         guard next != snapshot else { return }
         let structureChanged = snapshot?.structure != next.structure
         var used = Set<SidebarEntry.Key>()
-        roots = next.sections.map { section in
+        let paneEntries = next.panes.map { pane in
+            let entry = entry(.pane(pane.pane))
+            entry.title = pane.pane.title
+            entry.paneRow = pane
+            used.insert(entry.key)
+            return entry
+        }
+        roots = paneEntries + next.sections.map { section in
             let entry = entry(.section(section.id))
             entry.title = section.title
             entry.children = entries(for: section.rows, used: &used)
@@ -116,8 +125,9 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     private func refreshRows() {
         outline.enumerateAvailableRowViews { rowView, row in
-            guard let entry = outline.item(atRow: row) as? SidebarEntry, let content = entry.row,
-                  let cell = rowView.view(atColumn: 0) as? SidebarRow else { return }
+            guard let entry = outline.item(atRow: row) as? SidebarEntry, let cell = rowView.view(atColumn: 0) as? SidebarRow else { return }
+            if let pane = entry.paneRow { cell.configure(pane); return }
+            guard let content = entry.row else { return }
             cell.configure(content, favicon: favicon(content))
         }
     }
@@ -128,9 +138,15 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     // MARK: Selection
 
+    /// Off the Transfers tab only its row is selected; on it, the Transfers
+    /// row and the filter rows (the filters keep applying either way).
     private func applySelection(_ selection: Set<SidebarItem>) {
         var rows = IndexSet()
-        for item in selection {
+        if let entry = entries[.pane(model.mainPane == .log ? .transfers : model.mainPane)] {
+            let row = outline.row(forItem: entry)
+            if row >= 0 { rows.insert(row) }
+        }
+        for item in model.mainPane == .search || model.mainPane == .rss ? [] : selection {
             if let entry = entries[.row(item)] {
                 let row = outline.row(forItem: entry)
                 if row >= 0 { rows.insert(row) }
@@ -144,8 +160,19 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         guard !isApplying else { return }
-        let items = outline.selectedRowIndexes.compactMap { (outline.item(atRow: $0) as? SidebarEntry)?.item }
-        model.list.sidebarSelection = Set(items)
+        let selected = outline.selectedRowIndexes.compactMap { outline.item(atRow: $0) as? SidebarEntry }
+        let items = selected.compactMap(\.item)
+        let current: MainPane = model.mainPane == .log ? .transfers : model.mainPane
+        if let pane = selected.compactMap(\.pane).first(where: { $0 != current }) {
+            model.mainPane = pane
+        } else if model.mainPane == .log, selected.contains(where: { $0.pane == .transfers }) {
+            // The Transfers row leaves the full-size log.
+            model.mainPane = .transfers
+        } else if !items.isEmpty {
+            // A filter row shows the transfers it filters.
+            if model.mainPane == .search || model.mainPane == .rss { model.mainPane = .transfers }
+            model.list.sidebarSelection = Set(items)
+        }
         // The model keeps one row per section: show what it chose.
         applySelection(model.list.sidebarSelection)
     }
@@ -174,11 +201,17 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
-        (item as? SidebarEntry)?.item != nil
+        guard let entry = item as? SidebarEntry else { return false }
+        return entry.item != nil || entry.pane != nil
     }
 
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let entry = item as? SidebarEntry else { return nil }
+        if let pane = entry.paneRow {
+            let cell = SidebarRow.make(in: outlineView)
+            cell.configure(pane)
+            return cell
+        }
         guard let row = entry.row else {
             let header = outlineView.makeView(withIdentifier: Self.headerID, owner: nil) as? NSTableCellView ?? Self.makeHeader()
             header.textField?.stringValue = entry.title

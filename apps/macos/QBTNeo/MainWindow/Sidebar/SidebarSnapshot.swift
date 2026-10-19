@@ -41,6 +41,13 @@ struct SidebarSnapshot: Equatable, Sendable {
         var rows: [Row]
     }
 
+    /// The rows above the filters that switch the main window's tab (Transfers, Search, RSS).
+    struct PaneRow: Equatable, Sendable {
+        let pane: MainPane
+        var count: Int
+    }
+
+    var panes: [PaneRow]
     var sections: [Section]
 
     // MARK: Building
@@ -49,6 +56,10 @@ struct SidebarSnapshot: Equatable, Sendable {
     init(model: AppModel) {
         let gui = model.gui
         let counts = model.list.counts
+        var panes = [PaneRow(pane: .transfers, count: counts.count(for: .all))]
+        if gui.searchEnabled { panes.append(PaneRow(pane: .search, count: 0)) }
+        if gui.rssEnabled { panes.append(PaneRow(pane: .rss, count: model.rssUnread)) }
+        self.panes = panes
         var sections = [
             Section(id: .status, title: String(localized: "Status"), isExpanded: gui.statusSectionExpanded, rows: Self.statusRows(model, counts)),
             Section(id: .category, title: String(localized: "Categories"), isExpanded: gui.categorySectionExpanded,
@@ -61,7 +72,7 @@ struct SidebarSnapshot: Equatable, Sendable {
         }
         sections.append(Section(id: .tracker, title: String(localized: "Trackers"), isExpanded: gui.trackerSectionExpanded,
                                 rows: Self.trackerRows(model, counts)))
-        self.sections = sections
+        self.sections = sections.filter { !gui.hiddenSidebarSections.contains($0.id) }
     }
 
     @MainActor
@@ -141,6 +152,7 @@ struct SidebarSnapshot: Equatable, Sendable {
     }
 
     enum Node: Equatable {
+        case pane(MainPane)
         case section(SidebarItem.Section)
         case row(SidebarItem, depth: Int)
     }
@@ -150,7 +162,7 @@ struct SidebarSnapshot: Equatable, Sendable {
         func flatten(_ rows: [Row], depth: Int) -> [Node] {
             rows.flatMap { [Node.row($0.item, depth: depth)] + flatten($0.children, depth: depth + 1) }
         }
-        return sections.flatMap { [Node.section($0.id)] + flatten($0.rows, depth: 0) }
+        return panes.map { Node.pane($0.pane) } + sections.flatMap { [Node.section($0.id)] + flatten($0.rows, depth: 0) }
     }
 }
 

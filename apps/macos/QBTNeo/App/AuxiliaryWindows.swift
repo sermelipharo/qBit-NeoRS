@@ -1,31 +1,11 @@
 import SwiftUI
 
-/// Windows owned by other features (RSS, Search, Log, Creator, Statistics,
-/// Cookies, About). Each currently shows `PlaceholderWindowView`; replace the
-/// content view when the feature lands, keeping the scene identifiers.
+/// Windows owned by other features (Creator, Statistics, Cookies, About).
+/// Search, RSS and the log are tabs of the main window.
 struct AuxiliaryWindows: Scene {
     let model: AppModel
 
     var body: some Scene {
-        Window(AppWindowID.rss.title, id: AppWindowID.rss.rawValue) {
-            RSSWindow().lockGated().environment(model).environment(model.gui)
-        }
-        .restorationBehavior(.disabled)
-        .defaultSize(width: 980, height: 640)
-
-        Window(AppWindowID.search.title, id: AppWindowID.search.rawValue) {
-            SearchWindow().lockGated().environment(model).environment(model.gui)
-        }
-        .restorationBehavior(.disabled)
-        .defaultSize(width: 980, height: 640)
-
-        Window(AppWindowID.log.title, id: AppWindowID.log.rawValue) {
-            ExecutionLogWindow().lockGated().environment(model).environment(model.gui).releasedWhileHidden()
-        }
-        .restorationBehavior(.disabled)
-        .defaultSize(width: 860, height: 520)
-        .keyboardShortcut("l", modifiers: [.command, .option])
-
         Window(AppWindowID.creator.title, id: AppWindowID.creator.rawValue) {
             TorrentCreatorWindow().lockGated().environment(model)
         }

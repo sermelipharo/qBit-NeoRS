@@ -10,7 +10,7 @@ extension UIScenarios {
     }
 
     static func openSearchWindow(_ d: UIDriver) async throws -> NSWindow {
-        d.model.openWindow?(id: AppWindowID.search.rawValue)
+        d.model.show(pane: .search)
         _ = await d.wait(timeout: 15) { searchWindow(d) != nil }
         guard let window = searchWindow(d) else { throw UIDriver.Failure(description: "Search window did not open") }
         d.log("Search window open: '\(window.title)'")

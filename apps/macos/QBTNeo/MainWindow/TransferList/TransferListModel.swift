@@ -197,7 +197,11 @@ final class TransferListModel {
               matchesTrackerStatus(item)
         else { return false }
         guard let matcher else { return true }
-        return matcher.matches(searchScope == .name ? item.name : item.savePath)
+        switch searchScope {
+        case .name: return matcher.matches(item.name)
+        case .savePath: return matcher.matches(item.savePath)
+        case .tracker: return trackers.hostTorrents.contains { matcher.matches($0.key) && $0.value.contains(item.id) }
+        }
     }
 
     private func matchesTracker(_ item: TorrentItem) -> Bool {

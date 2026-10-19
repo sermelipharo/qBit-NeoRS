@@ -29,6 +29,10 @@ final class AppModel {
     let lock = UILockModel()
     let favicons = TrackerFaviconStore()
     let palette: CommandPaletteModel
+    /// The Search, RSS and log tabs of the main window keep their state while another tab shows.
+    let searchTab = SearchModel()
+    let rssTab = RSSModel()
+    let logTab = ExecutionLogModel()
 
     private(set) var phase: Phase = .starting
     @ObservationIgnored private(set) var client: (any CoreClient)?
@@ -36,6 +40,10 @@ final class AppModel {
     var corePreferences = Preferences.qbtDefaults
 
     // MARK: Main window presentation state
+    /// The main window's detail area: transfers, search, RSS or the full-size log.
+    var mainPane: MainPane = .transfers
+    /// A plugin search asked for from the transfers filter field, run by the Search pane.
+    var pendingPluginSearch: String?
     var sheet: MainSheet?
     var alert: AppAlert?
     var confirmation: PendingConfirmation?

@@ -9,6 +9,8 @@ struct PropertiesPage: View {
         Group {
             if tab == .speed {
                 SpeedTab()
+            } else if tab == .log {
+                LogPane(model: model.logTab, resize: LogFilterBar.Resize(isFull: false) { model.mainPane = .log })
             } else if let item = model.list.currentItem {
                 switch tab {
                 case .general: GeneralTab(item: item)
@@ -16,7 +18,7 @@ struct PropertiesPage: View {
                 case .peers: PeersTab(item: item)
                 case .httpSources: HTTPSourcesTab(item: item)
                 case .content: ContentTab(item: item)
-                case .speed: EmptyView()
+                case .speed, .log: EmptyView()
                 }
             } else {
                 ContentUnavailableView("No Torrent Selected", systemImage: Symbol.cursorarrowClick2,

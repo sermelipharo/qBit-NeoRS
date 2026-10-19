@@ -3,10 +3,20 @@ import SwiftUI
 /// Pattern field (with history), category and plugin pickers, Search/Stop.
 struct SearchQueryBar: View {
     @Bindable var model: SearchModel
+    /// Off in the main window, where the toolbar's search field types the phrase.
+    var showsPatternField = true
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: Design.Spacing.regular) {
+            if showsPatternField { patternField } else { Spacer() }
+            pickers
+        }
+        .padding(Design.Spacing.medium)
+        .disabled(model.engineStatus?.pythonFound == false)
+    }
+
+    private var patternField: some View {
             TextField("Search", text: $model.pattern, prompt: Text("A phrase to search for"))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(model.search)
@@ -23,6 +33,9 @@ struct SearchQueryBar: View {
                         Text(entry).textInputCompletion(entry)
                     }
                 }
+    }
+
+    @ViewBuilder private var pickers: some View {
             Picker("Category", selection: $model.category) {
                 Text("All categories").tag("all")
                 Divider()
@@ -49,8 +62,5 @@ struct SearchQueryBar: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.plugins.isEmpty)
             }
-        }
-        .padding(Design.Spacing.medium)
-        .disabled(model.engineStatus?.pythonFound == false)
     }
 }

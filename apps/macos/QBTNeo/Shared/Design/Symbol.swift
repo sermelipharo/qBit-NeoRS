@@ -23,7 +23,9 @@ enum Symbol {
     static let arrowTrianglehead2ClockwiseRotate90 = "arrow.trianglehead.2.clockwise.rotate.90"
     static let arrowTrianglehead2ClockwiseRotate90CircleFill = "arrow.trianglehead.2.clockwise.rotate.90.circle.fill"
     static let arrowUp = "arrow.up"
+    static let arrowDownRightAndArrowUpLeft = "arrow.down.right.and.arrow.up.left"
     static let arrowUpArrowDown = "arrow.up.arrow.down"
+    static let arrowUpLeftAndArrowDownRight = "arrow.up.left.and.arrow.down.right"
     static let arrowUpArrowDownCircle = "arrow.up.arrow.down.circle"
     static let arrowUpCircle = "arrow.up.circle"
     static let arrowUpCircleFill = "arrow.up.circle.fill"
@@ -176,8 +178,10 @@ enum Symbol {
         arrowTriangle2Circlepath,
         arrowTrianglehead2ClockwiseRotate90,
         arrowTrianglehead2ClockwiseRotate90CircleFill,
+        arrowDownRightAndArrowUpLeft,
         arrowUp,
         arrowUpArrowDown,
+        arrowUpLeftAndArrowDownRight,
         arrowUpArrowDownCircle,
         arrowUpCircle,
         arrowUpCircleFill,

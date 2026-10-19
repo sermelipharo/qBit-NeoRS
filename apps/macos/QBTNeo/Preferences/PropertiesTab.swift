@@ -8,6 +8,8 @@ enum PropertiesTab: Int, CaseIterable, Identifiable, Sendable {
     case httpSources = 3
     case content = 4
     case speed = 5
+    /// The execution log (a qBit NeoRS extension; qBittorrent shows it in a tab of its own).
+    case log = 6
 
     var id: Int { rawValue }
 
@@ -19,6 +21,7 @@ enum PropertiesTab: Int, CaseIterable, Identifiable, Sendable {
         case .httpSources: String(localized: "HTTP Sources")
         case .content: String(localized: "Content")
         case .speed: String(localized: "Speed")
+        case .log: String(localized: "Log")
         }
     }
 
@@ -30,6 +33,7 @@ enum PropertiesTab: Int, CaseIterable, Identifiable, Sendable {
         case .httpSources: Symbol.globe
         case .content: Symbol.folder
         case .speed: Symbol.chartXyaxisLine
+        case .log: Symbol.textAlignleft
         }
     }
 
@@ -42,6 +46,7 @@ enum PropertiesTab: Int, CaseIterable, Identifiable, Sendable {
         case .httpSources: "b"
         case .content: "z"
         case .speed: "d"
+        case .log: "l"
         }
     }
 }

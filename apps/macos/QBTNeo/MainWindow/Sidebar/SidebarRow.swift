@@ -39,12 +39,20 @@ final class SidebarRow: NSTableCellView {
     }
 
     func configure(_ row: SidebarSnapshot.Row, favicon: NSImage?) {
-        if title.stringValue != row.title {
-            title.stringValue = row.title
-            title.toolTip = row.title
+        configure(title: row.title, symbol: row.symbol, tint: row.tint, count: row.count, favicon: favicon)
+    }
+
+    func configure(_ pane: SidebarSnapshot.PaneRow) {
+        configure(title: pane.pane.title, symbol: pane.pane.symbol, tint: .accent, count: pane.count, favicon: nil)
+    }
+
+    private func configure(title text: String, symbol: String, tint rowTint: SidebarSnapshot.Tint, count rowCount: Int, favicon: NSImage?) {
+        if title.stringValue != text {
+            title.stringValue = text
+            title.toolTip = text
         }
         // Like a SwiftUI badge, a zero count shows nothing.
-        let torrents = row.count
+        let torrents = rowCount
         let text = torrents > 0 ? torrents.formatted() : ""
         if count.stringValue != text {
             count.stringValue = text
@@ -54,10 +62,10 @@ final class SidebarRow: NSTableCellView {
             usesFavicon = favicon != nil
             needsLayout = true
         }
-        let image = favicon ?? SymbolImageCache.image(row.symbol)
+        let image = favicon ?? SymbolImageCache.image(symbol)
         if icon.image !== image { icon.image = image }
-        tint = row.tint.color
-        setAccessibilityLabel("\(row.title), \(row.count.formatted())")
+        tint = rowTint.color
+        setAccessibilityLabel(rowCount > 0 ? "\(text), \(rowCount.formatted())" : text)
         applyColors()
     }
 

@@ -13,6 +13,16 @@ extension MainMenuController {
         menu.addItem(standardItem(SystemMenuTitle.text("Delete"), #selector(NSText.delete(_:))))
         menu.addItem(standardItem(SystemMenuTitle.text("Select All"), #selector(NSText.selectAll(_:)), "a"))
         menu.addItem(.separator())
+        // ⌘F: the main window's toolbar search field (filter, plugin search, RSS or log filter by tab).
+        let find = MenuItemAction(
+            isEnabled: { [model] in !model.lock.isLocked && model.mainWindow?.isKeyWindow == true },
+            perform: { [model] in model.focusSearchField() }
+        )
+        let findItem = find.makeItem(SystemMenuTitle.text("Find…"))
+        findItem.keyEquivalent = "f"
+        findItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(findItem)
+        menu.addItem(.separator())
         for id in [CommandID.start, .stop, .forceStart, .remove, .forceRecheck] {
             menu.addItem(commandItem(id))
         }
@@ -62,6 +72,7 @@ extension MainMenuController {
         menu.addItem(toggleItem(String(localized: "Status Bar"), isOn: { gui.statusBarDisplayed }, toggle: { gui.statusBarDisplayed.toggle() }))
         menu.addItem(toggleItem(String(localized: "Filters Sidebar"), isOn: { gui.filtersSidebarVisible }, toggle: { gui.filtersSidebarVisible.toggle() }))
         menu.addItem(toggleItem(String(localized: "Speed in Title Bar"), isOn: { gui.speedInTitleBar }, toggle: { gui.speedInTitleBar.toggle() }))
+        menu.addItem(sidebarSectionsItem())
         menu.addItem(.separator())
         menu.addItem(commandItem(.searchEngine))
         menu.addItem(commandItem(.rssReader))
@@ -150,6 +161,31 @@ extension MainMenuController {
     }
 
     /// An on/off item (a SwiftUI `Toggle` in a menu): a check mark, no symbol.
+    /// View › Sidebar Sections: brings back sections hidden from the sidebar's context menu.
+    private func sidebarSectionsItem() -> NSMenuItem {
+        let item = NSMenuItem(title: String(localized: "Sidebar Sections"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: item.title)
+        let model = model
+        for section in SidebarItem.Section.allCases {
+            if section == .trackerStatus {
+                // Only exists as a section when Tracker Status is shown separately.
+                let gui = model.gui
+                let action = MenuItemAction(
+                    isEnabled: { [model] in !model.lock.isLocked && gui.separateTrackerStatusFilter },
+                    isOn: { !gui.hiddenSidebarSections.contains(section) },
+                    perform: { model.setSidebarSection(section, hidden: !gui.hiddenSidebarSections.contains(section)) }
+                )
+                submenu.addItem(action.makeItem(section.title))
+                continue
+            }
+            submenu.addItem(toggleItem(section.title, isOn: { !model.gui.hiddenSidebarSections.contains(section) }, toggle: {
+                model.setSidebarSection(section, hidden: !model.gui.hiddenSidebarSections.contains(section))
+            }))
+        }
+        item.submenu = submenu
+        return item
+    }
+
     private func toggleItem(_ title: String, isOn: @escaping @MainActor () -> Bool, toggle: @escaping @MainActor () -> Void) -> NSMenuItem {
         MenuItemAction(isEnabled: unlocked, isOn: isOn, perform: toggle).makeItem(title)
     }

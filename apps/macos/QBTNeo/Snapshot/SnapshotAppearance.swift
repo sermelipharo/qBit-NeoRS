@@ -22,6 +22,7 @@ extension PropertiesTab {
         case .httpSources: "http"
         case .content: "content"
         case .speed: "speed"
+        case .log: "log"
         }
     }
 }

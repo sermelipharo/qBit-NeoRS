@@ -15,7 +15,7 @@ enum DebugVerification {
         if environment["QBT_VERIFY_SEARCH"] == "1" {
             Task {
                 try? await Task.sleep(for: .seconds(6))
-                model.openWindow?(id: AppWindowID.search.rawValue)
+                model.show(pane: .search)
             }
         }
         if let scenario = environment["QBT_UI_SCRIPT"] {

@@ -55,9 +55,6 @@ extension MainMenuController {
         // One item per single-window scene, as SwiftUI lists them.
         let scenes: [(String, String)] = [
             (AppWindowID.main.title, AppWindowID.main.rawValue),
-            (AppWindowID.rss.title, AppWindowID.rss.rawValue),
-            (AppWindowID.search.title, AppWindowID.search.rawValue),
-            (AppWindowID.log.title, AppWindowID.log.rawValue),
             (AppWindowID.creator.title, AppWindowID.creator.rawValue),
             (AppWindowID.statistics.title, AppWindowID.statistics.rawValue),
             (AppWindowID.cookies.title, AppWindowID.cookies.rawValue),
@@ -67,8 +64,7 @@ extension MainMenuController {
         ]
         for (title, id) in scenes {
             let open = MenuItemAction { [model] in model.openWindow?(id: id) }
-            let shortcut = id == AppWindowID.log.rawValue ? CommandShortcut("l", [.command, .option]) : nil
-            menu.addItem(open.makeItem(title, shortcut: shortcut))
+            menu.addItem(open.makeItem(title))
         }
         menu.addItem(.separator())
         menu.addItem(standardItem(SystemMenuTitle.text("Bring All to Front"), #selector(NSApplication.arrangeInFront(_:))))

@@ -36,6 +36,21 @@ enum SidebarMenu {
         menu.addAction(String(localized: "Start Torrents"), symbol: Symbol.playFill) { model.start(model.visibleIDs) }
         menu.addAction(String(localized: "Stop Torrents"), symbol: Symbol.pauseFill) { model.stop(model.visibleIDs) }
         menu.addAction(String(localized: "Remove Torrents"), symbol: Symbol.trash) { model.requestRemove(model.visibleIDs) }
+        menu.addDivider()
+        addHide(item.section, to: menu, model: model)
         return menu
+    }
+
+    /// A section header: hide the whole section (View › Sidebar brings it back).
+    static func make(forSection section: SidebarItem.Section, model: AppModel) -> NSMenu {
+        let menu = NSMenu.manual()
+        addHide(section, to: menu, model: model)
+        return menu
+    }
+
+    private static func addHide(_ section: SidebarItem.Section, to menu: NSMenu, model: AppModel) {
+        let title = String(localized: "sidebar.hideSection", defaultValue: "Hide \(section.title)",
+                           comment: "Sidebar context menu: hides a whole section, e.g. Hide Trackers")
+        menu.addAction(title, symbol: Symbol.eyeSlash) { model.setSidebarSection(section, hidden: true) }
     }
 }

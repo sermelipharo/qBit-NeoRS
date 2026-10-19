@@ -4,7 +4,32 @@ import AppKit
 /// Settings, jumping to a torrent and applying a sidebar filter.
 extension AppModel {
     func show(_ window: AppWindowID) {
-        openWindow?(id: window.rawValue)
+        switch window {
+        case .search: show(pane: .search)
+        case .rss: show(pane: .rss)
+        case .log: show(pane: .log)
+        default: openWindow?(id: window.rawValue)
+        }
+    }
+
+    /// Brings the main window forward on a pane, enabling Search or RSS if needed.
+    func show(pane: MainPane) {
+        switch pane {
+        case .search: gui.searchEnabled = true
+        case .rss: gui.rssEnabled = true
+        case .transfers, .log: break
+        }
+        mainPane = pane
+        if !isMainWindowVisible { openWindow?(id: AppWindowID.main.rawValue) }
+        mainWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Searches the installed plugins for a phrase typed in the transfers filter field.
+    func searchPlugins(for pattern: String) {
+        let trimmed = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        pendingPluginSearch = trimmed
+        show(pane: .search)
     }
 
     func showSettings() {

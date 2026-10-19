@@ -6,6 +6,7 @@ import AppKit
 @MainActor
 final class SidebarEntry: NSObject {
     enum Key: Hashable {
+        case pane(MainPane)
         case section(SidebarItem.Section)
         case row(SidebarItem)
     }
@@ -24,6 +25,14 @@ final class SidebarEntry: NSObject {
         if case .row(let item) = key { return item }
         return nil
     }
+
+    var pane: MainPane? {
+        if case .pane(let pane) = key { return pane }
+        return nil
+    }
+
+    /// Set for pane rows.
+    var paneRow: SidebarSnapshot.PaneRow?
 
     var section: SidebarItem.Section? {
         if case .section(let section) = key { return section }

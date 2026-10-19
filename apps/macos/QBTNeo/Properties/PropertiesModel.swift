@@ -67,6 +67,8 @@ final class PropertiesModel {
 
     /// Fetches the data of `tab` for the current torrent.
     func refresh(tab: PropertiesTab, client: any CoreClient, item: TorrentItem?, period: SpeedGraphPeriod) async {
+        // The log follows the log store on its own.
+        if tab == .log { return }
         if tab == .speed {
             let seconds = period.seconds
             let resolution = UInt32(period.resolution)
@@ -121,7 +123,7 @@ final class PropertiesModel {
                 let list = try await CoreCall.run { try client.files(hash: hash, indexes: []) }
                 guard hash == self.hash else { return }
                 files.load(list.map(FileEntry.init))
-            case .speed:
+            case .speed, .log:
                 break
             }
             if failures[tab] != nil { failures[tab] = nil }

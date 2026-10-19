@@ -101,7 +101,10 @@ struct CommandPaletteView: View {
         HStack(spacing: Design.Spacing.large) {
             hint("↑↓", String(localized: "palette.hint.move", defaultValue: "Move", comment: "Command Palette footer: arrow keys"))
             hint("↩", String(localized: "palette.hint.run", defaultValue: "Run", comment: "Command Palette footer: Return key"))
-            hint("⇥", String(localized: "palette.hint.more", defaultValue: "More Actions", comment: "Command Palette footer: Tab key"))
+            // Only when the selected row has actions of its own (a torrent, Set Category, Edit Tags).
+            if model.selectedItem?.hasDetail == true {
+                hint("⇥", String(localized: "palette.hint.more", defaultValue: "More Actions", comment: "Command Palette footer: Tab key"))
+            }
             hint("⌘1–9", String(localized: "palette.hint.quick", defaultValue: "Quick Run", comment: "Command Palette footer: Command-digit keys"))
             Spacer(minLength: 0)
             hint("esc", model.isNested ? String(localized: "Back") : String(localized: "Close"))

@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 
 /// Shows the palette panel centered over the main window (upper half, like
-/// Spotlight and Xcode's Open Quickly) on a behind-window material, and
-/// closes it when it loses key status (a click outside, another window).
+/// Spotlight and Xcode's Open Quickly) on clear Liquid Glass, the most
+/// transparent material, and closes it when it loses key status (a click
+/// outside, another window).
 @MainActor
 final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     static let size = CGSize(width: 640, height: 440)
@@ -16,15 +17,13 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     init(model: CommandPaletteModel) {
         self.model = model
         super.init()
-        let background = NSVisualEffectView(frame: CGRect(origin: .zero, size: Self.size))
-        background.material = .popover
-        background.blendingMode = .behindWindow
-        background.state = .active
-        background.maskImage = Self.roundedMask(radius: Self.cornerRadius)
+        let background = NSGlassEffectView(frame: CGRect(origin: .zero, size: Self.size))
+        background.style = .clear
+        background.cornerRadius = Self.cornerRadius
         let hosting = NSHostingView(rootView: CommandPaletteView(model: model))
         hosting.frame = background.bounds
         hosting.autoresizingMask = [.width, .height]
-        background.addSubview(hosting)
+        background.contentView = hosting
         panel.contentView = background
         panel.delegate = self
         panel.onCancel = { [weak model] in model?.cancel() }
@@ -66,19 +65,5 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) {
         // Clicking outside, switching windows or apps closes the palette.
         model?.close()
-    }
-
-    // MARK: Shape
-
-    private static func roundedMask(radius: Double) -> NSImage {
-        let edge = radius * 2 + 1
-        let image = NSImage(size: CGSize(width: edge, height: edge), flipped: false) { rect in
-            NSColor.black.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
-            return true
-        }
-        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
-        image.resizingMode = .stretch
-        return image
     }
 }

@@ -119,7 +119,7 @@ final class SidebarController: NSObject, NSOutlineViewDataSource, NSOutlineViewD
             entry.title = SidebarItem.Section.rss.title
             entry.children = entries(for: feeds.rows, used: &used)
             used.insert(entry.key)
-            roots.append(entry)
+            roots.insert(entry, at: paneEntries.count + next.feedsIndex)
         }
         entries = entries.filter { used.contains($0.key) }
         snapshot = next

@@ -198,7 +198,14 @@ struct SidebarSnapshot: Equatable, Sendable {
             rows.flatMap { [Node.feed($0.id, depth: depth)] + flatten($0.children, depth: depth + 1) }
         }
         let feedNodes = feeds.map { [Node.section(.rss)] + flatten($0.rows, depth: 0) } ?? []
-        return panes.map { Node.pane($0.pane) } + sections.flatMap { [Node.section($0.id)] + flatten($0.rows, depth: 0) } + feedNodes
+        var sectionNodes = sections.map { [Node.section($0.id)] + flatten($0.rows, depth: 0) }
+        sectionNodes.insert(feedNodes, at: feedsIndex)
+        return panes.map { Node.pane($0.pane) } + sectionNodes.flatMap(\.self)
+    }
+
+    /// RSS comes right after Status, above the sections that can grow long (trackers).
+    var feedsIndex: Int {
+        sections.first?.id == .status ? 1 : 0
     }
 }
 

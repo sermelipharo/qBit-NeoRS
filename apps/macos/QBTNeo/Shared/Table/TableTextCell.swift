@@ -182,7 +182,7 @@ final class TableTextCell: NSTableCellView {
             if index > 0 { result.append(NSAttributedString(string: "   ", attributes: attributes)) }
             let color = emphasized ? NSColor.alternateSelectedControlTextColor : item.color
             if let image = SymbolImageCache.image(item.symbol)?
-                .withSymbolConfiguration(configuration.applying(NSImage.SymbolConfiguration(paletteColors: [color]))) {
+                .withSymbolConfiguration(configuration.applying(NSImage.SymbolConfiguration(paletteColors: [color])).applying(.preferringMonochrome())) {
                 let attachment = NSTextAttachment()
                 attachment.image = image
                 let height = image.size.height

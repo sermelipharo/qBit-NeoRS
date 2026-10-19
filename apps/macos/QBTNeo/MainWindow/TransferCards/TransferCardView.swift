@@ -151,6 +151,7 @@ final class TransferCardView: NSView {
     private func drawKind(lineMidY: CGFloat) {
         let configuration = NSImage.SymbolConfiguration(pointSize: TransferCardMetrics.kindSymbolSize, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: [.secondaryLabelColor]))
+            .applying(.preferringMonochrome())
         guard let image = SymbolImageCache.image(content.kind.symbol)?.withSymbolConfiguration(configuration) else { return }
         let box = TransferCardMetrics.titleIndent - 4
         let size = image.size
@@ -261,6 +262,7 @@ final class TransferCardView: NSView {
         guard !name.isEmpty else { return nil }
         let configuration = NSImage.SymbolConfiguration(pointSize: TransferCardMetrics.stateSymbolBox - 2, weight: .regular)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+            .applying(.preferringMonochrome())
         return SymbolImageCache.image(name)?.withSymbolConfiguration(configuration)
     }
 

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="same-origin">
+<meta name="robots" content="noindex,nofollow">
+<title>qBit NeoRS</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css?v=__CSS__">
+<script src="login.js?v=__LOGIN__" defer></script>
+</head>
+<body class="login-page">
+<main class="login-card">
+<img src="icon.svg" alt="" width="76" height="76">
+<h1>qBit NeoRS</h1>
+<p class="muted">Sign in to manage your transfers</p>
+<form id="login" method="post" action="api/v2/auth/login">
+<div class="login-fields">
+<input name="username" autocomplete="username" placeholder="Username" required autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="Username" autofocus>
+<input name="password" type="password" autocomplete="current-password" placeholder="Password" required aria-label="Password">
+</div>
+<button type="submit" class="btn primary large">Sign In</button>
+<p id="error" class="error" role="alert"></p>
+</form>
+</main>
+</body>
+</html>

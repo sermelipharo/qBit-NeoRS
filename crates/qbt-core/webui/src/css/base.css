@@ -1,0 +1,101 @@
+/* Design tokens, light and dark (light-dark() follows color-scheme). */
+:root {
+  color-scheme: light dark;
+  --font: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --accent: light-dark(#007aff, #0a84ff);
+  --on-accent: #fff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+
+  --bg: light-dark(#fff, #1e1e20);
+  --bg-window: light-dark(#f2f2f7, #161618);
+  --bg-elev: light-dark(#fff, #2a2a2d);
+  --bg-group: light-dark(#fff, #2a2a2d);
+  --bg-sheet: light-dark(#f2f2f7, #1f1f22);
+  --sidebar: light-dark(rgba(236, 236, 242, .78), rgba(38, 38, 41, .74));
+  --glass: light-dark(rgba(255, 255, 255, .72), rgba(32, 32, 35, .7));
+  --menu: light-dark(rgba(246, 246, 248, .88), rgba(44, 44, 47, .88));
+  --glass-btn: light-dark(rgba(255, 255, 255, .78), rgba(68, 68, 72, .55));
+  --glass-line: light-dark(rgba(0, 0, 0, .07), rgba(255, 255, 255, .09));
+  --glass-hi: light-dark(rgba(255, 255, 255, .9), rgba(255, 255, 255, .08));
+
+  --label: light-dark(#1d1d1f, #f5f5f7);
+  --label2: light-dark(rgba(60, 60, 67, .62), rgba(235, 235, 245, .62));
+  --label3: light-dark(rgba(60, 60, 67, .34), rgba(235, 235, 245, .32));
+  --sep: light-dark(rgba(60, 60, 67, .13), rgba(255, 255, 255, .09));
+  --fill: light-dark(rgba(120, 120, 128, .12), rgba(120, 120, 128, .24));
+  --fill2: light-dark(rgba(120, 120, 128, .07), rgba(120, 120, 128, .14));
+  --stripe: light-dark(rgba(0, 0, 0, .022), rgba(255, 255, 255, .025));
+  --hover: light-dark(rgba(0, 0, 0, .045), rgba(255, 255, 255, .06));
+
+  --blue: light-dark(#007aff, #0a84ff);
+  --green: light-dark(#28a745, #30d158);
+  --orange: light-dark(#f08c00, #ff9f0a);
+  --red: light-dark(#ff3b30, #ff453a);
+  --purple: light-dark(#af52de, #bf5af2);
+  --indigo: light-dark(#5856d6, #5e5ce6);
+  --teal: light-dark(#0fa5c0, #40c8e0);
+  --gray: light-dark(#8e8e93, #98989d);
+  --yellow: light-dark(#e0a800, #ffd60a);
+
+  --r-s: 7px;
+  --r-m: 12px;
+  --r-l: 16px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 4px 16px rgba(0, 0, 0, .06);
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, .1), 0 18px 48px rgba(0, 0, 0, .2);
+  --ease: cubic-bezier(.32, .72, 0, 1);
+  --tap: 30px;
+  --sb-w: 244px;
+  --insp-w: 368px;
+  --tb-h: 52px;
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+[data-accent="purple"] { --accent: light-dark(#a550d6, #bf5af2); }
+[data-accent="pink"] { --accent: light-dark(#e6346f, #ff375f); }
+[data-accent="red"] { --accent: light-dark(#e5352b, #ff453a); }
+[data-accent="orange"] { --accent: light-dark(#e57a00, #ff9f0a); }
+[data-accent="yellow"] { --accent: light-dark(#c99400, #ffd60a); --on-accent: light-dark(#fff, #000); }
+[data-accent="green"] { --accent: light-dark(#28a745, #30d158); }
+[data-accent="graphite"] { --accent: light-dark(#7d7d82, #98989d); }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font: 13px/1.38 var(--font);
+  color: var(--label);
+  background: var(--bg-window);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: default; background: none; border: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+:focus { outline: none; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; border-radius: var(--r-s); }
+h1, h2, h3, p { margin: 0; }
+[hidden] { display: none !important; }
+small { font-size: 11px; color: var(--label2); }
+.muted { color: var(--label2); }
+.pad { padding: 12px 16px; }
+
+.i {
+  width: 18px; height: 18px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.i .f { fill: currentColor; stroke: none; }
+
+::selection { background: var(--accent-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

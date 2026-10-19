@@ -17,7 +17,7 @@ The reference implementation is pinned at `reference/qBittorrent`
 
 ```
 ┌──────────────────────────────┐   ┌─────────────────────────────┐
-│ apps/macos  (SwiftUI, Swift 6)│   │ WebUI (qBittorrent's own JS)│
+│ apps/macos  (SwiftUI, Swift 6)│   │ Web UI (TypeScript, webui/) │
 │  AppModel ⇄ generated bindings│   │  served by qbt-core::webui  │
 └──────────────┬───────────────┘   └──────────────┬──────────────┘
                │ UniFFI (static lib)                │ HTTP /api/v2
@@ -188,6 +188,34 @@ Rules:
   the torrent (`AppModel.revealTorrent`). The widget never talks to the core.
   Only the default profile publishes (`--widgets` forces it for tests,
   `--widget-pin <hash>` pins a torrent).
+
+## Web UI
+
+`crates/qbt-core/webui/src` is the bundled Web UI: vanilla TypeScript and
+plain CSS, no framework. `scripts/build-webui.sh` (Node, pinned esbuild;
+`--check` also runs `tsc`) bundles it into one minified script and one
+stylesheet in `webui/www/{public,private}`, adds content-hash cache busters
+to the two HTML pages, and the output is committed, so cargo never needs
+Node. `build.rs` embeds `www` gzip-compressed and the server sends the
+compressed bytes as is (`webui/assets.rs`); `public/` is the login page,
+`private/` (session only) the app. An alternative Web UI folder replaces it
+entirely (qBittorrent's own WebUI still works there: its `QBT_TR` markers
+are translated at serve time).
+
+* State: `store.ts` mirrors `sync/maindata` (rid diffs merged into one
+  long-lived record per torrent, each with a version counter); polling
+  pauses while the tab is hidden.
+* Lists (`vlist.ts`) are virtualized: only visible rows exist, elements are
+  reused, and a row is redrawn only when its record's version changes; the
+  list is re-filtered/re-sorted only when a diff touches the sort key or a
+  filter field.
+* Text from the server (names, tracker messages, RSS, search results) is only
+  ever set through `textContent`; RSS descriptions are parsed in an inert
+  `DOMParser` document and shown as plain text; links are opened only for
+  `http(s)` URLs. The CSP for the built-in UI is `script-src 'self';
+  style-src 'self'` (no inline code; styles set from scripts use the CSSOM).
+* Layout: sidebar · list/cards · inspector on wide screens; below 760 px a
+  drawer, a tab bar, two-line rows and bottom sheets (`css/phone.css`).
 
 ## Build
 

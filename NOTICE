@@ -10,9 +10,10 @@ It contains or is derived from the following third-party work:
 * qBittorrent (https://www.qbittorrent.org), GPLv2-or-later (binary
   distribution GPLv3-or-later). Behaviour, UI texts and the WebAPI are derived
   from the qBittorrent 5.2.4 sources (pinned at reference/qBittorrent). The
-  bundled WebUI (crates/qbt-core/webui/www) and the nova3 search engine helper
-  scripts (crates/qbt-core/resources/nova3) are copied from qBittorrent and keep
-  their original copyright headers. Copyright the qBittorrent project
+  nova3 search engine helper scripts (crates/qbt-core/resources/nova3) are
+  copied from qBittorrent and keep their original copyright headers. The
+  bundled Web UI (crates/qbt-core/webui) is written for qBit NeoRS and uses
+  qBittorrent's WebAPI. Copyright the qBittorrent project
   contributors; see reference/qBittorrent/AUTHORS.
   Original author: Christophe Dumez. Current maintainer: Sledgehammer999.
   Contributors: Vladimir Golovnev, Stefanos Antaris, Mohammad Dib, Mirco

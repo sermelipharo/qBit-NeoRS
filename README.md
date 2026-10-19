@@ -10,7 +10,10 @@ qBittorrent's own C++ engine: [qBittorrent Neo](https://neo.lex.mk)
 * **Feature parity** with qBittorrent 5.2.4 — transfer list with every column,
   filters, categories and tags, queueing, share limits, scheduler, RSS reader
   and auto-downloader, search plugins, torrent creator, execution log,
-  statistics, all preferences, and the WebAPI v2 with qBittorrent's own WebUI.
+  statistics, all preferences, and the WebAPI v2 (qBittorrent clients and
+  alternative Web UIs keep working).
+* **Web UI** — a light, Apple-style Web UI (about 40 KB gzip) for desktop
+  browsers and iPhone: sidebar filters, list or cards, details, Search and RSS.
 * **Small memory footprint** — one process, a compact Rust engine, data
   synchronised to the UI as diffs.
 * **Native UI** — SwiftUI on macOS 27, light/dark mode, Dock and menu bar
@@ -89,8 +92,7 @@ GPL-3.0-or-later. See `LICENSE` and `NOTICE` for third-party components.
 ## Credits
 
 qBit NeoRS is based on [qBittorrent](https://www.qbittorrent.org); its
-behavior, interface texts, WebAPI, WebUI and translations come from that
-project.
+behavior, interface texts, WebAPI and translations come from that project.
 
 * **Original author:** Christophe Dumez.
 * **Current maintainer:** Sledgehammer999.

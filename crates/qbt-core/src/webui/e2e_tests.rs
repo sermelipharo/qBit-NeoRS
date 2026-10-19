@@ -219,7 +219,7 @@ fn every_endpoint_requires_authentication() {
         // Unknown endpoints do not reveal anything either.
         assert_eq!(h.get("/api/v2/app/doesNotExist", None).await.status(), 403);
         // The private UI is not served without a session.
-        let r = h.get("/views/preferences.html", None).await;
+        let r = h.get("/app.js", None).await;
         assert_eq!(r.status(), 404);
     });
 }
@@ -364,14 +364,18 @@ fn static_files() {
         let c = h.login().await;
         let main = h.get("/", Some(&c)).await.text().await.unwrap();
         assert_ne!(main, login_page);
-        let r = h.get("/css/style.css", Some(&c)).await;
+        assert!(main.contains("app.js?v="));
+        let r = h.get("/app.js", Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        assert_eq!(r.headers()["content-type"], "text/javascript; charset=UTF-8");
+        let r = h.get("/app.css", Some(&c)).await;
         assert_eq!(r.status(), 200);
         assert_eq!(r.headers()["content-type"], "text/css; charset=UTF-8");
         assert_eq!(r.headers()["cache-control"], "private, max-age=43200");
         assert_eq!(h.get("/missing.html", Some(&c)).await.status(), 404);
 
         // Gzip is negotiated (and transparently decoded by the client).
-        let r = h.client.get(h.url("/scripts/login.js")).header("Accept-Encoding", "gzip").send().await.unwrap();
+        let r = h.client.get(h.url("/login.js")).header("Accept-Encoding", "gzip").send().await.unwrap();
         assert_eq!(r.status(), 200);
 
         // Traversal attempts, including encoded ones, are rejected.

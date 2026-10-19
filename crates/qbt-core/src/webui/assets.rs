@@ -281,32 +281,30 @@ mod tests {
     #[test]
     fn embedded_table_is_sorted_and_complete() {
         assert!(ASSETS.windows(2).all(|w| w[0].path < w[1].path));
-        assert!(find("public/index.html").is_some());
-        assert!(find("private/index.html").is_some());
-        assert!(find("private/views/preferences.html").is_some());
+        for path in ["public/index.html", "public/login.js", "public/app.css", "public/icon.svg", "private/index.html", "private/app.js"] {
+            assert!(find(path).is_some(), "{path}");
+        }
         assert!(find("nope").is_none());
     }
 
     #[test]
-    fn embedded_files_are_translated() {
+    fn embedded_files_are_served_compressed() {
         let cache = Mutex::new(EmbeddedCache::default());
         let f = serve_embedded("/index.html", true, &subs(), &cache).unwrap();
-        assert!(!f.gzipped);
-        let text = String::from_utf8(f.body.to_vec()).unwrap();
-        assert!(!text.contains("QBT_TR("));
-        assert!(!text.contains("${LANG}"));
-        assert!(!text.contains("${CACHEID}"));
-        assert!(text.contains("abc123"));
-        let prefs = serve_embedded("/views/preferences.html", true, &subs(), &cache).unwrap();
-        let text = String::from_utf8(prefs.body.to_vec()).unwrap();
-        assert!(!text.contains("${LANGUAGE_OPTIONS}"));
-        assert!(!text.contains("QBT_TR("));
-        // Every embedded text asset is free of translation markers.
+        assert!(f.gzipped);
+        assert_eq!(f.mime, "text/html; charset=UTF-8");
+        let text = String::from_utf8(crate::webui::http::gunzip(&f.body, MAX_FILE_SIZE as usize).unwrap()).unwrap();
+        assert!(text.contains("app.js?v="));
         for a in ASSETS {
+            assert!(!a.dynamic, "{}", a.path);
             if translate::is_translatable(a.path) {
                 let raw = crate::webui::http::gunzip(a.gz, a.len).unwrap();
                 let t = String::from_utf8_lossy(&raw);
                 assert!(!t.contains(")QBT_TR[CONTEXT="), "{}", a.path);
+                // No inline scripts or styles (the CSP forbids them).
+                if a.path.ends_with(".html") {
+                    assert!(!t.contains("<script>") && !t.contains("<style") && !t.contains(" style="), "{}", a.path);
+                }
             }
         }
     }
@@ -317,15 +315,24 @@ mod tests {
         let public = serve_embedded("/index.html", false, &subs(), &cache).unwrap();
         let private = serve_embedded("/index.html", true, &subs(), &cache).unwrap();
         assert_ne!(public.body, private.body);
-        assert!(serve_embedded("/views/preferences.html", false, &subs(), &cache).is_err());
+        assert!(serve_embedded("/app.js", false, &subs(), &cache).is_err());
+        assert!(serve_embedded("/app.js", true, &subs(), &cache).is_ok());
         // Session falls back to public files.
-        assert!(serve_embedded("/scripts/login.js", true, &subs(), &cache).is_ok());
+        assert!(serve_embedded("/login.js", true, &subs(), &cache).is_ok());
+        assert!(serve_embedded("/app.css", true, &subs(), &cache).is_ok());
+    }
+
+    #[test]
+    fn dynamic_placeholders_are_substituted() {
+        let text = "<html lang=\"${LANG}\"><script src=\"a.js?${CACHEID}\"></script>${LANGUAGE_OPTIONS}";
+        assert_eq!(substitute(text, "public/index.html", &subs()), "<html lang=\"en\"><script src=\"a.js?abc123\"></script>${LANGUAGE_OPTIONS}");
+        assert!(substitute(text, "private/views/preferences.html", &subs()).ends_with("<option value=\"en\">English</option>"));
     }
 
     #[test]
     fn request_path_validation() {
         assert_eq!(normalize_request_path("/").unwrap(), "/index.html");
-        assert_eq!(normalize_request_path("/css/style.css").unwrap(), "/css/style.css");
+        assert_eq!(normalize_request_path("/app.css").unwrap(), "/app.css");
         for bad in ["/../etc/passwd", "/a/./b", "/a\\b", "/a/..", "relative", "/a\0b", "/.."] {
             assert_eq!(normalize_request_path(bad).unwrap_err().status, http::StatusCode::BAD_REQUEST, "{bad}");
         }

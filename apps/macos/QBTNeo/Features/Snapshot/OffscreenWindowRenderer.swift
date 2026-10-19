@@ -18,6 +18,7 @@ struct OffscreenWindowRenderer {
         @ViewBuilder content: () -> some View
     ) async {
         let view = content()
+        let active = active || LaunchOptions.current.snapshotActive
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             let controller = NSHostingController(
                 rootView: view.frame(width: size.width, height: size.height).modifier(SnapshotKeyAppearance(isActive: active))
@@ -42,8 +43,7 @@ struct OffscreenWindowRenderer {
     private func write(_ window: NSWindow, to url: URL) {
         guard let frameView = window.contentView?.superview else { return }
         frameView.layoutSubtreeIfNeeded()
-        guard let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) else { return }
-        frameView.cacheDisplay(in: frameView.bounds, to: rep)
+        guard let rep = SnapshotBitmap.capture(frameView) else { return }
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: url)
     }

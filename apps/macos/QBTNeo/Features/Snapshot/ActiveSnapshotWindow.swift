@@ -4,7 +4,7 @@ import AppKit
 /// window controls and the accent-tinted default button, although a
 /// snapshot run never activates the app (it must not take focus from the
 /// user's frontmost application). Snapshot mode only.
-final class ActiveSnapshotWindow: NSWindow {
+final class ActiveSnapshotWindow: SnapshotWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
     override var isKeyWindow: Bool { true }

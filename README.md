@@ -1,8 +1,11 @@
 # qBit NeoRS
 
-A native macOS BitTorrent client: a from-scratch rewrite of
-[qBittorrent](https://www.qbittorrent.org) 5.2.4 with a pure-Rust core and a
-SwiftUI interface.
+A native macOS BitTorrent client:
+[qBittorrent](https://www.qbittorrent.org) 5.2.4 ported to a Rust core built
+around the rqbit engine (librqbit), with a SwiftUI interface.
+
+**Website:** [neors.lex.mk](https://neors.lex.mk) · Sibling project with
+qBittorrent's own C++ engine: [qBittorrent Neo](https://neo.lex.mk)
 
 * **Feature parity** with qBittorrent 5.2.4 — transfer list with every column,
   filters, categories and tags, queueing, share limits, scheduler, RSS reader

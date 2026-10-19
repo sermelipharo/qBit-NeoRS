@@ -13,7 +13,9 @@ extension EnvironmentValues {
 struct SettingsPaneView<Header: View, Content: View>: View {
     let pane: SettingsPane
     let model: PreferencesModel
-    /// Fixed height of a grouped pane (nil = column form that fits its content).
+    /// A grouped list instead of the column form.
+    var grouped: Bool
+    /// Fixed height of a grouped pane; nil fits its content (measured, like the column form).
     var groupedHeight: Double?
     @ViewBuilder let header: Header
     @ViewBuilder let content: Content
@@ -23,11 +25,12 @@ struct SettingsPaneView<Header: View, Content: View>: View {
     @State private var highlighted: String?
 
     init(
-        _ pane: SettingsPane, model: PreferencesModel, groupedHeight: Double? = nil,
+        _ pane: SettingsPane, model: PreferencesModel, grouped: Bool = false, groupedHeight: Double? = nil,
         @ViewBuilder header: () -> Header, @ViewBuilder content: () -> Content
     ) {
         self.pane = pane
         self.model = model
+        self.grouped = grouped || groupedHeight != nil
         self.groupedHeight = groupedHeight
         self.header = header()
         self.content = content()
@@ -36,7 +39,7 @@ struct SettingsPaneView<Header: View, Content: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             Group {
-                if let groupedHeight {
+                if grouped {
                     Form {
                         header
                         content
@@ -44,7 +47,13 @@ struct SettingsPaneView<Header: View, Content: View>: View {
                     }
                     .formStyle(.grouped)
                     .environment(\.settingsFormIsGrouped, true)
-                    .frame(width: SettingsLayout.windowWidth, height: min(groupedHeight, SettingsLayout.maxPaneHeight))
+                    .onScrollGeometryChange(for: Double.self) { geometry in
+                        geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
+                    } action: { _, height in
+                        contentHeight = height
+                    }
+                    .frame(width: SettingsLayout.windowWidth,
+                           height: min(groupedHeight ?? max(contentHeight, SettingsLayout.minPaneHeight), SettingsLayout.maxPaneHeight))
                 } else {
                     columns
                 }

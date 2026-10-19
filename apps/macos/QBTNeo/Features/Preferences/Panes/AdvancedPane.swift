@@ -8,7 +8,8 @@ struct AdvancedPane: View {
 
     var body: some View {
         @Bindable var navigator = navigator
-        SettingsPaneView(.advanced, model: model, groupedHeight: navigator.showsAdvanced ? SettingsLayout.maxPaneHeight : 112) {
+        SettingsPaneView(.advanced, model: model, grouped: true,
+                         groupedHeight: navigator.showsAdvanced ? SettingsLayout.maxPaneHeight : nil) {
             Section {
                 Toggle(isOn: $navigator.showsAdvanced) {
                     Text(SettingsCatalog.title(SettingsNavigator.showAdvancedKey))

@@ -103,6 +103,9 @@ export class VList<T> {
         this.free.push(el);
       }
     }
+    // Rows are absolutely positioned and reused, so DOM order is not list
+    // order; assistive technologies get positions from aria-posinset/setsize.
+    const size = String(this.items.length);
     for (const [k, i] of want) {
       const item = this.items[i];
       let el = this.live.get(k);
@@ -111,6 +114,7 @@ export class VList<T> {
         this.live.set(k, el);
         this.canvas.appendChild(el);
       }
+      if (el.getAttribute("aria-setsize") !== size) el.setAttribute("aria-setsize", size);
       let s = this.slots.get(el);
       if (!s) this.slots.set(el, (s = { key: "", v: -1, epoch: -1, index: -1 }));
       const v = this.o.version(item);
@@ -121,6 +125,7 @@ export class VList<T> {
           el.style.transform = `translate(${x}px,${r * this.rowH}px)`;
           el.style.width = this.colW ? this.colW + "px" : "";
         }
+        if (s.index !== i) el.setAttribute("aria-posinset", String(i + 1));
         s.key = k;
         s.v = v;
         s.epoch = this.epoch;

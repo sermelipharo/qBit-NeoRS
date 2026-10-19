@@ -256,11 +256,16 @@ pub fn host_allows_bypass(host_header: &str, domains: &[String]) -> bool {
 }
 
 /// Built-in UI Content-Security-Policy (+ clickjacking / HTTPS parts).
+///
+/// The bundled UI has no inline scripts or styles (styles set from scripts go
+/// through the CSSOM, which `style-src` does not restrict), loads nothing
+/// from other origins and embeds no frames, so the policy allows only its own
+/// files. An alternative UI gets no policy, like upstream.
 pub fn content_security_policy(alt_ui: bool, clickjacking: bool, https: bool) -> String {
     let mut csp = String::new();
     if !alt_ui {
         csp.push_str(
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; object-src 'none'; form-action 'self'; frame-src 'self' blob:;",
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-src 'none'; object-src 'none';",
         );
     }
     if clickjacking {
@@ -504,7 +509,8 @@ mod tests {
     #[test]
     fn headers() {
         let csp = content_security_policy(false, true, true);
-        assert!(csp.starts_with("default-src 'self';"));
+        assert!(csp.starts_with("default-src 'none'; script-src 'self'; style-src 'self';"));
+        assert!(!csp.contains("unsafe"));
         assert!(csp.ends_with(" frame-ancestors 'self'; upgrade-insecure-requests;"));
         assert_eq!(content_security_policy(true, false, false), "");
         assert_eq!(content_security_policy(true, true, false), " frame-ancestors 'self';");

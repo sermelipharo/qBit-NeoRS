@@ -357,6 +357,9 @@ fn static_files() {
         assert_eq!(r.headers()["content-type"], "text/html; charset=UTF-8");
         assert_eq!(r.headers()["cache-control"], "no-store");
         assert_eq!(r.headers()["x-frame-options"], "SAMEORIGIN");
+        let csp = r.headers()["content-security-policy"].to_str().unwrap().to_owned();
+        assert!(csp.contains("script-src 'self';") && !csp.contains("unsafe-inline"), "{csp}");
+        assert!(csp.contains("frame-ancestors 'self'"), "{csp}");
         let login_page = r.text().await.unwrap();
         assert!(!login_page.contains("QBT_TR("));
         assert!(!login_page.contains("${LANG}"));

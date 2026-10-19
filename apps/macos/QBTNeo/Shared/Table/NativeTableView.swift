@@ -29,6 +29,7 @@ final class NativeTableView: NSTableView {
         super.init(frame: frameRect)
         target = self
         doubleAction = #selector(doubleClicked)
+        headerView = AutosizingTableHeaderView(frame: headerView?.frame ?? .zero)
     }
 
     @available(*, unavailable)
@@ -81,6 +82,33 @@ final class NativeTableView: NSTableView {
             return true
         }
         return super.validateProposedFirstResponder(responder, for: event)
+    }
+
+    // MARK: Column autosizing
+
+    /// Sizes a column to its header and the widest cell (double-click on its
+    /// right divider). Large lists measure the visible rows and the first rows.
+    func sizeColumnToFit(_ column: NSTableColumn) {
+        guard column.resizingMask.contains(.userResizingMask), let index = tableColumns.firstIndex(of: column) else { return }
+        var width = column.headerCell.cellSize.width + 8
+        var rows = IndexSet(integersIn: 0..<min(numberOfRows, 300))
+        let visible = self.rows(in: visibleRect)
+        if visible.length > 0 { rows.insert(integersIn: visible.location..<(visible.location + visible.length)) }
+        for row in rows {
+            guard let cell = view(atColumn: index, row: row, makeIfNecessary: true) else { continue }
+            if let text = cell as? TableTextCell {
+                width = max(width, text.fittingWidth)
+            } else {
+                width = max(width, cell.fittingSize.width)
+            }
+        }
+        width = min(max(ceil(width + intercellSpacing.width), column.minWidth), column.maxWidth)
+        if abs(column.width - width) > 0.5 { column.width = width }
+    }
+
+    /// ⌥-click on a divider: every column fits its content.
+    func sizeAllColumnsToFit() {
+        for column in tableColumns where !column.isHidden { sizeColumnToFit(column) }
     }
 
     // MARK: Actions

@@ -218,4 +218,11 @@ final class TableTextCell: NSTableCellView {
         label.frame = NSRect(x: x, y: ((bounds.height - height) / 2).rounded(), width: max(bounds.width - x - Self.padding, 0),
                              height: height)
     }
+
+    /// The width that shows the whole label (column autosizing).
+    var fittingWidth: CGFloat {
+        var width = Self.padding * 2 + (content?.indent ?? 0) + ceil(label.intrinsicContentSize.width)
+        if let iconView, !iconView.isHidden { width += Self.iconSize + Self.iconGap }
+        return width
+    }
 }

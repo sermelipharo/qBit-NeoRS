@@ -576,9 +576,10 @@ impl Engine {
         self.session.port_mapping_status()
     }
 
-    /// Our public IPv4 / IPv6 address as reported by trackers.
-    pub fn tracker_external_ips(&self) -> (Option<std::net::IpAddr>, Option<std::net::IpAddr>) {
-        self.session.tracker_external_ips()
+    /// Our public IPv4 / IPv6 address, voted on by the port mapping gateway,
+    /// trackers and peers (non-public addresses are never reported).
+    pub fn external_ips(&self) -> (Option<std::net::IpAddr>, Option<std::net::IpAddr>) {
+        self.session.external_ips()
     }
 
     /// "Apply to trackers": the IP filter also blocks tracker addresses.

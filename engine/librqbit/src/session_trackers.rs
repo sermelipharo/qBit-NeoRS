@@ -15,6 +15,8 @@ use tracker_comms::{
     UdpTrackerClient,
 };
 
+use crate::net::external_ip::{ExternalIpVoter, IpVoteSource};
+
 /// Port reported to trackers when nothing is listening (trackers reject 0).
 const FALLBACK_ANNOUNCE_PORT: u16 = 4240;
 
@@ -126,8 +128,8 @@ pub(crate) struct SessionTrackers {
     pub disabled: bool,
     pub active: ActiveAnnouncers,
     pub cancel: CancellationToken,
-    /// Our public addresses as reported by trackers (BEP 24): IPv4, IPv6.
-    observed_ips: RwLock<(Option<IpAddr>, Option<IpAddr>)>,
+    /// Trackers report our public address (BEP 24) to the session voter.
+    external_ip: Arc<ExternalIpVoter>,
 }
 
 pub(crate) struct SessionTrackersArgs {
@@ -141,6 +143,7 @@ pub(crate) struct SessionTrackersArgs {
     pub client_name: String,
     pub disabled: bool,
     pub cancel: CancellationToken,
+    pub external_ip: Arc<ExternalIpVoter>,
 }
 
 fn http_options(s: &TrackerSettings, ipv4_only: bool, proxied: bool) -> HttpClientOptions {
@@ -172,27 +175,15 @@ impl SessionTrackers {
             disabled: args.disabled,
             active: Default::default(),
             cancel: args.cancel,
-            observed_ips: Default::default(),
+            external_ip: args.external_ip,
         })
     }
 
-    /// Remember the address a tracker saw us at. Addresses that cannot be
-    /// ours on the internet (private, loopback, ...) are ignored, so a
-    /// tracker cannot make us show nonsense.
-    pub fn record_observed_ip(&self, ip: IpAddr) {
-        if !is_public_ip(&ip) {
-            return;
-        }
-        let mut g = self.observed_ips.write();
-        match ip {
-            IpAddr::V4(_) => g.0 = Some(ip),
-            IpAddr::V6(_) => g.1 = Some(ip),
-        }
-    }
-
-    /// The last public addresses trackers reported for us (IPv4, IPv6).
-    pub fn observed_ips(&self) -> (Option<IpAddr>, Option<IpAddr>) {
-        *self.observed_ips.read()
+    /// The tracker at `url` saw us at `ip` (its `external ip` key).
+    pub fn record_observed_ip(&self, url: &str, ip: IpAddr) {
+        let parsed = url::Url::parse(url).ok();
+        let host = parsed.as_ref().and_then(|u| u.host_str()).unwrap_or(url);
+        self.external_ip.cast_vote(ip, IpVoteSource::Tracker(host));
     }
 
     pub fn settings(&self) -> TrackerSettings {
@@ -300,50 +291,5 @@ mod tests {
         a.wait_idle(Instant::now() + Duration::from_millis(50))
             .await;
         assert!(start.elapsed() < Duration::from_secs(1));
-    }
-}
-
-/// Whether `ip` could be a public internet address.
-fn is_public_ip(ip: &IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(a) => {
-            let o = a.octets();
-            !(a.is_private()
-                || a.is_loopback()
-                || a.is_link_local()
-                || a.is_unspecified()
-                || a.is_broadcast()
-                || a.is_multicast()
-                || a.is_documentation()
-                || (o[0] == 100 && (o[1] & 0xc0) == 64)
-                || o[0] >= 240)
-        }
-        IpAddr::V6(a) => {
-            let s = a.segments();
-            !(a.is_loopback()
-                || a.is_unspecified()
-                || a.is_multicast()
-                || (s[0] & 0xfe00) == 0xfc00
-                || (s[0] & 0xffc0) == 0xfe80
-                || a.to_ipv4_mapped().is_some())
-        }
-    }
-}
-
-#[cfg(test)]
-mod observed_ip_tests {
-    use super::is_public_ip;
-
-    #[test]
-    fn only_public_addresses_are_kept() {
-        for ok in ["8.8.8.8", "93.184.216.34", "2606:4700::1111"] {
-            assert!(is_public_ip(&ok.parse().unwrap()), "{ok}");
-        }
-        for bad in [
-            "10.0.0.1", "192.168.1.5", "127.0.0.1", "169.254.1.1", "0.0.0.0", "100.64.0.1",
-            "224.0.0.1", "::1", "::", "fe80::1", "fd00::1", "::ffff:1.2.3.4",
-        ] {
-            assert!(!is_public_ip(&bad.parse().unwrap()), "{bad}");
-        }
     }
 }

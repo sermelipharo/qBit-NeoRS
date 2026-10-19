@@ -98,6 +98,7 @@ use crate::{
     chunk_tracker::{ChunkMarkingResult, ChunkTracker, HaveNeededSelected},
     conn_limiter::{ConnLimiter, ConnPermit},
     file_ops::FileOps,
+    net::external_ip::IpVoteSource,
     peer_connection::{
         PeerConnection, PeerConnectionHandler, PeerConnectionOptions, WriterRequest,
     },
@@ -1791,6 +1792,17 @@ impl PeerConnectionHandler for &'_ PeerHandler {
                 .with_peer_mut(self.addr, "update outgoing addr", |peer| {
                     peer.outgoing_address = Some(outgoing_addr)
                 });
+        }
+
+        // The address the peer sees us at (BEP 10 `yourip`) is a vote for
+        // our external address.
+        if let Some(yourip) = hs.yourip
+            && !crate::i2p::is_i2p_addr(self.addr)
+            && let Some(session) = self.state.shared.session.upgrade()
+        {
+            session
+                .external_ip
+                .cast_vote(yourip.0, IpVoteSource::Peer(self.addr.ip()));
         }
 
         Ok(())

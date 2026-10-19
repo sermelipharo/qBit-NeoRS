@@ -869,6 +869,8 @@ async fn test_e2e_net_natpmp_port_mapping() {
         st.external_ip,
         Some(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 9)))
     );
+    // A documentation address is no vote for our public address.
+    assert_eq!(s.external_ips(), (None, None));
     assert!(st.requested.contains(&(MappingProtocol::Tcp, port)));
 
     // Extra ports (e.g. the WebUI).

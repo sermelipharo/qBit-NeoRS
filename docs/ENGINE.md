@@ -669,9 +669,29 @@ pub fn port_mapping_status(&self) -> PortMappingStatus;
   mappers: NAT-PMP deletes its old mappings (lifetime 0) before exiting, UPnP
   leases simply expire. NAT-PMP renews at half the lease and reports the
   gateway's external address; UPnP reports each successful
-  `AddPortMapping`. `ListenerOptions::enable_upnp_port_forwarding` maps to
+  `AddPortMapping` and, at the same interval, the gateway's
+  `GetExternalIPAddress` answer. `ListenerOptions::enable_upnp_port_forwarding` maps to
   both UPnP and NAT-PMP (qBittorrent has one switch); `set_listen_options` with
   a different value switches both.
+
+### External address
+
+```rust
+pub fn external_ips(&self) -> (Option<IpAddr>, Option<IpAddr>);   // voted IPv4, IPv6
+```
+
+* Like libtorrent's `ip_voter`: the NAT-PMP / UPnP gateway, trackers (BEP 24
+  `external ip`) and peers (BEP 10 `yourip`) vote (`net/external_ip.rs`).
+  Each source (tracker host, peer IP) holds one vote per family, so repeating
+  itself does not help; the last 32 votes per family are kept. Weights:
+  gateway 4 (one slot, cleared when the mappers restart), tracker 2, peer 1;
+  an address needs 2 to be elected and ties keep the current one, then
+  prefer the gateway's.
+* Non-public addresses never vote (private, loopback, link-local, CGNAT
+  100.64/10, unique-local fc00::/7, documentation, reserved ...), from any
+  source; nor do peers on our own network. `PortMappingStatus::external_ip`
+  still shows the gateway's raw answer.
+* Changing the network interface forgets all votes.
 
 ### I2P
 

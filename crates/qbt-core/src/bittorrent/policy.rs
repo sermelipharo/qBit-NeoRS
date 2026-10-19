@@ -928,8 +928,9 @@ impl Session {
         }
     }
 
-    /// Reports the external address (learned through UPnP / NAT-PMP, else from
-    /// trackers) and mapping failures.
+    /// Reports the external address (voted on by the UPnP / NAT-PMP gateway,
+    /// trackers and peers, like libtorrent's `external_ip_alert`) and mapping
+    /// failures.
     fn poll_port_mapping(&self, engine: &Engine, prefs: &Preferences) {
         let st = engine.port_mapping_status();
         let error = st.natpmp_error.clone().or_else(|| st.upnp_error.clone());
@@ -937,12 +938,7 @@ impl Session {
         let mut new_error = None;
         {
             let mut m = self.misc.lock();
-            // The port mapping gateway knows the address best; otherwise use
-            // what trackers saw (`external ip`, BEP 24).
-            let (tracker_v4, tracker_v6) = engine.tracker_external_ips();
-            let mapped = st.external_ip;
-            let v4 = mapped.filter(|ip| ip.is_ipv4()).or(tracker_v4);
-            let v6 = mapped.filter(|ip| ip.is_ipv6()).or(tracker_v6);
+            let (v4, v6) = engine.external_ips();
             for ip in [v4, v6].into_iter().flatten() {
                 let text = ip.to_string();
                 let slot = if ip.is_ipv4() { &mut m.external_v4 } else { &mut m.external_v6 };

@@ -22,6 +22,8 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, debug_span, info};
 
+use super::external_ip::{ExternalIpVoter, IpVoteSource};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum MappingProtocol {
     Tcp,
@@ -54,7 +56,9 @@ pub struct PortMappingStatus {
     pub requested: Vec<(MappingProtocol, u16)>,
     /// Confirmed mappings (UPnP: last successful request per port).
     pub mappings: Vec<PortMapping>,
-    /// External address reported by the NAT-PMP gateway.
+    /// External address reported by the gateway (NAT-PMP, or UPnP
+    /// `GetExternalIPAddress`), as is: it can be a private address behind
+    /// another NAT. [`crate::Session::external_ips`] has the voted address.
     pub external_ip: Option<IpAddr>,
     /// Last NAT-PMP error (no gateway, timeout, refused ...).
     pub natpmp_error: Option<String>,
@@ -97,6 +101,8 @@ pub(crate) struct PortMapper {
     status: Arc<RwLock<PortMappingStatus>>,
     parent: CancellationToken,
     bind_device: RwLock<Option<BindDevice>>,
+    /// Gateway-reported addresses are votes for our external address.
+    voter: Arc<ExternalIpVoter>,
 }
 
 async fn run_upnp(forwarder: UpnpPortForwarder) -> anyhow::Result<()> {
@@ -118,7 +124,11 @@ fn to_natpmp(p: MappingProtocol) -> NatPmpProtocol {
 }
 
 impl PortMapper {
-    pub fn new(parent: CancellationToken, config: PortMappingConfig) -> Self {
+    pub fn new(
+        parent: CancellationToken,
+        config: PortMappingConfig,
+        voter: Arc<ExternalIpVoter>,
+    ) -> Self {
         Self {
             inner: Mutex::new(Inner {
                 config,
@@ -131,6 +141,7 @@ impl PortMapper {
             generation: Default::default(),
             parent,
             bind_device: RwLock::new(None),
+            voter,
         }
     }
 
@@ -216,6 +227,7 @@ impl PortMapper {
                 ..Default::default()
             };
         }
+        self.voter.clear_router();
         if !g.config.enabled() || ports.is_empty() {
             return;
         }
@@ -248,6 +260,7 @@ impl PortMapper {
         }
         let status = self.status.clone();
         let current = self.generation.clone();
+        let (ip_status, ip_current, voter) = (status.clone(), current.clone(), self.voter.clone());
         let cb = Arc::new(move |ev: librqbit_upnp::UpnpMappingEvent| {
             if current.load(Ordering::Relaxed) != generation {
                 return;
@@ -285,7 +298,18 @@ impl PortMapper {
             Some(opts),
             self.bind_device.read().clone(),
         ) {
-            Ok(f) => f.with_status_callback(cb),
+            Ok(f) => f
+                .with_status_callback(cb)
+                .with_external_ip_callback(Arc::new(move |r: Result<IpAddr, String>| {
+                    // Failures are only logged (by the forwarder): the
+                    // mapping errors are what the user needs to see.
+                    if let Ok(ip) = r
+                        && ip_current.load(Ordering::Relaxed) == generation
+                    {
+                        ip_status.write().external_ip = Some(ip);
+                        voter.cast_vote(ip, IpVoteSource::Router);
+                    }
+                })),
             Err(e) => {
                 self.status.write().upnp_error = Some(format!("{e:#}"));
                 return;
@@ -312,6 +336,7 @@ impl PortMapper {
         let status = self.status.clone();
         let current = self.generation.clone();
         let parent = self.parent.clone();
+        let voter = self.voter.clone();
         info!(?ports, "starting NAT-PMP port mapping");
         spawn_with_cancel(debug_span!("natpmp"), "natpmp", parent, async move {
             let is_current = || current.load(Ordering::Relaxed) == generation;
@@ -358,6 +383,7 @@ impl PortMapper {
                     match v {
                         Some((ext, maps)) => {
                             st.external_ip = Some(IpAddr::V4(ext));
+                            voter.cast_vote(IpAddr::V4(ext), IpVoteSource::Router);
                             st.natpmp_error = None;
                             for m in maps {
                                 st.mappings.push(PortMapping {

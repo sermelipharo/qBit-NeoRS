@@ -544,7 +544,7 @@ impl Runner {
                     match &ep.result {
                         Ok(r) => {
                             if let Some(ip) = r.external_ip {
-                                self.ctx.record_observed_ip(ip);
+                                self.ctx.record_observed_ip(&url, ip);
                             }
                             debug!(tracker = %url, family = ?ep.family, ?event, peers = r.peers.len(), "announce ok")
                         }

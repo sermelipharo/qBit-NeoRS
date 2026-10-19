@@ -345,6 +345,8 @@ impl Session {
         self.tracker_ctx.client.rebuild_http()?;
         self.rebuild_webseed_client()?;
         self.port_mapper.set_bind_device(bd);
+        // Another interface may reach the internet through another address.
+        self.external_ip.reset();
         let opts = self.listen_options();
         if opts.is_some() {
             self.set_listen_options(opts).await?;
@@ -670,10 +672,11 @@ impl Session {
         self.port_mapper.remove_port(protocol, port)
     }
 
-    /// Our public IPv4 and IPv6 address as last reported by trackers
-    /// (the `external ip` response key, BEP 24).
-    pub fn tracker_external_ips(&self) -> (Option<IpAddr>, Option<IpAddr>) {
-        self.tracker_ctx.observed_ips()
+    /// Our public IPv4 and IPv6 address, voted on by the port mapping
+    /// gateway (NAT-PMP / UPnP), trackers (`external ip`, BEP 24) and peers
+    /// (`yourip`, BEP 10). Non-public addresses are never reported.
+    pub fn external_ips(&self) -> (Option<IpAddr>, Option<IpAddr>) {
+        self.external_ip.external_ips()
     }
 
     /// Requested ports, confirmed mappings and the external address.

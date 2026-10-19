@@ -6,6 +6,7 @@
 //! `docs/ENGINE.md` ("engine-net").
 
 pub(crate) mod encryption;
+pub(crate) mod external_ip;
 pub(crate) mod filter;
 pub(crate) mod port_mapping;
 pub(crate) mod rate;

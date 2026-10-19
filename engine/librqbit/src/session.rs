@@ -39,6 +39,7 @@ use crate::{
     net::{
         NetSettings, PortMappingConfig,
         encryption::{Duplex, Req2Index, split_mse},
+        external_ip::ExternalIpVoter,
         filter::PeerFilter,
         port_mapping::PortMapper,
         proxy_from_url,
@@ -163,6 +164,8 @@ pub struct Session {
     pub(crate) req2_index: Req2Index,
     pub(crate) connect_limiter: Arc<ConnectRateLimiter>,
     port_mapper: PortMapper,
+    /// Our public address, voted on by the gateway, trackers and peers.
+    pub(crate) external_ip: Arc<ExternalIpVoter>,
     pub(crate) i2p: crate::i2p::I2pSessionCtl,
 
     // Lifecycle management
@@ -1043,6 +1046,7 @@ impl Session {
             if net.anonymous_mode {
                 tracker_settings.anonymous_mode = true;
             }
+            let external_ip = Arc::new(ExternalIpVoter::default());
             let tracker_ctx = Arc::new(
                 SessionTrackers::new(SessionTrackersArgs {
                     settings: tracker_settings,
@@ -1059,6 +1063,7 @@ impl Session {
                     client_name: client_name_and_version.clone(),
                     disabled: opts.disable_trackers,
                     cancel: token.clone(),
+                    external_ip: external_ip.clone(),
                 })
                 .context("error creating tracker client")?,
             );
@@ -1114,7 +1119,12 @@ impl Session {
                 peer_filter: PeerFilter::default(),
                 req2_index: Req2Index::default(),
                 connect_limiter: Arc::new(ConnectRateLimiter::new(net.connection_speed)),
-                port_mapper: PortMapper::new(token.child_token(), port_mapping),
+                port_mapper: PortMapper::new(
+                    token.child_token(),
+                    port_mapping,
+                    external_ip.clone(),
+                ),
+                external_ip,
                 i2p: Default::default(),
                 peer_opts,
                 spawner: spawner.clone(),

@@ -186,6 +186,130 @@ async fn forward_port_proto(
     Ok(())
 }
 
+/// A `GetExternalIPAddress` answer is a few hundred bytes.
+const MAX_SOAP_RESPONSE_SIZE: usize = 16 * 1024;
+
+/// Receives the gateway's external address after each
+/// `GetExternalIPAddress` request (`Err` holds a short description).
+pub type UpnpExternalIpCallback = std::sync::Arc<dyn Fn(Result<IpAddr, String>) + Send + Sync>;
+
+/// Asks the gateway for its external (WAN) address.
+async fn get_external_ip(control_url: Url, service_type: &str) -> anyhow::Result<IpAddr> {
+    let request_body = format!(
+        r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body><u:GetExternalIPAddress xmlns:u="{service_type}"></u:GetExternalIPAddress></s:Body>
+</s:Envelope>"#
+    );
+    let client = reqwest::Client::builder()
+        .timeout(DESCRIPTION_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .build()
+        .context("failed to build HTTP client")?;
+    let mut response = client
+        .post(control_url)
+        .header("Content-Type", "text/xml; charset=\"utf-8\"")
+        .header(
+            "SOAPAction",
+            format!("\"{service_type}#GetExternalIPAddress\""),
+        )
+        .body(request_body)
+        .send()
+        .await
+        .context("error sending")?;
+    let status = response.status();
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .context("failed to read response body")?
+    {
+        if body.len() + chunk.len() > MAX_SOAP_RESPONSE_SIZE {
+            bail!("GetExternalIPAddress response too large");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    // SOAP faults come with status 500; the parser reports their message.
+    match parse_external_ip_response(&String::from_utf8_lossy(&body)) {
+        Err(e) if !status.is_success() => Err(e.context(format!("status {status}"))),
+        r => r,
+    }
+}
+
+/// Reads `NewExternalIPAddress` from a `GetExternalIPAddressResponse`
+/// (any namespace prefixes), or the error of a SOAP fault.
+pub fn parse_external_ip_response(xml: &str) -> anyhow::Result<IpAddr> {
+    use quick_xml::events::Event;
+
+    #[derive(PartialEq)]
+    enum Field {
+        None,
+        Address,
+        Fault,
+    }
+    let mut reader = quick_xml::Reader::from_str(xml);
+    let mut field = Field::None;
+    let mut address: Option<String> = None;
+    let mut fault: Option<String> = None;
+    let mut depth = 0usize;
+    loop {
+        let text = match reader.read_event().context("bad XML")? {
+            Event::Start(e) => {
+                depth += 1;
+                if depth > MAX_DESCRIPTION_DEPTH {
+                    bail!("XML nested too deeply");
+                }
+                field = match e.local_name().as_ref() {
+                    b"NewExternalIPAddress" => {
+                        address.get_or_insert_with(String::new);
+                        Field::Address
+                    }
+                    b"faultstring" | b"errorDescription" => Field::Fault,
+                    _ => Field::None,
+                };
+                continue;
+            }
+            Event::End(_) => {
+                depth = depth.saturating_sub(1);
+                field = Field::None;
+                continue;
+            }
+            Event::Empty(e) if e.local_name().as_ref() == b"NewExternalIPAddress" => {
+                address = Some(String::new());
+                continue;
+            }
+            Event::Text(t) if field != Field::None => t.decode().context("bad text")?.into_owned(),
+            Event::CData(t) if field != Field::None => t.decode().context("bad text")?.into_owned(),
+            Event::Eof => break,
+            _ => continue,
+        };
+        let slot = if field == Field::Address {
+            &mut address
+        } else {
+            &mut fault
+        };
+        let s = slot.get_or_insert_with(String::new);
+        if s.len() + text.len() <= 256 {
+            s.push_str(&text);
+        }
+    }
+    match address {
+        Some(a) => {
+            let a = a.trim();
+            if a.is_empty() {
+                bail!("the gateway has no external address");
+            }
+            a.parse()
+                .with_context(|| format!("bad external address {a:?}"))
+        }
+        None => match fault {
+            Some(f) => bail!("GetExternalIPAddress failed: {}", f.trim()),
+            None => bail!("no NewExternalIPAddress in the response"),
+        },
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RootDesc {
     #[serde(rename = "device")]
@@ -549,6 +673,7 @@ pub struct UpnpPortForwarder {
     opts: UpnpPortForwarderOptions,
     bind_device: Option<BindDevice>,
     status: Option<UpnpStatusCallback>,
+    external_ip: Option<UpnpExternalIpCallback>,
 }
 
 impl UpnpPortForwarder {
@@ -578,6 +703,7 @@ impl UpnpPortForwarder {
             opts: opts.unwrap_or_default(),
             bind_device,
             status: None,
+            external_ip: None,
         })
     }
 
@@ -585,6 +711,30 @@ impl UpnpPortForwarder {
     pub fn with_status_callback(mut self, cb: UpnpStatusCallback) -> Self {
         self.status = Some(cb);
         self
+    }
+
+    /// Also ask each gateway for its external address (when mappings are
+    /// renewed) and report it.
+    pub fn with_external_ip_callback(mut self, cb: UpnpExternalIpCallback) -> Self {
+        self.external_ip = Some(cb);
+        self
+    }
+
+    /// Queries the gateway's external address at the mapping renewal
+    /// interval, while there is someone to tell.
+    async fn manage_external_ip(&self, control_url: Url, service_type: &'static str) {
+        let Some(cb) = &self.external_ip else { return };
+        let mut interval = tokio::time::interval(self.opts.lease_duration / 2);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            let result = get_external_ip(control_url.clone(), service_type).await;
+            match &result {
+                Ok(ip) => debug!(%ip, "gateway external address"),
+                Err(e) => debug!("GetExternalIPAddress failed: {e:#}"),
+            }
+            cb(result.map_err(|e| format!("{e:#}")));
+        }
     }
 
     async fn parse_endpoint(
@@ -674,11 +824,15 @@ impl UpnpPortForwarder {
         service_type: &'static str,
         local_ip: IpAddr,
     ) -> anyhow::Result<()> {
-        futures::future::join_all(self.ports.iter().cloned().map(|(protocol, port)| {
-            self.manage_port(control_url.clone(), service_type, local_ip, protocol, port)
-                .instrument(debug_span!("manage_port", port = port, ?protocol))
-        }))
-        .await;
+        let ports =
+            futures::future::join_all(self.ports.iter().cloned().map(|(protocol, port)| {
+                self.manage_port(control_url.clone(), service_type, local_ip, protocol, port)
+                    .instrument(debug_span!("manage_port", port = port, ?protocol))
+            }));
+        let external_ip = self
+            .manage_external_ip(control_url.clone(), service_type)
+            .instrument(debug_span!("external_ip"));
+        tokio::join!(ports, external_ip);
         Ok(())
     }
 
@@ -824,6 +978,65 @@ mod tests {
         assert!(!crate::is_wan_ip_connection_service(
             "urn:schemas-upnp-org:service:WANPPPConnection:1"
         ));
+    }
+
+    #[test]
+    fn external_ip_responses_are_parsed() {
+        use crate::parse_external_ip_response as parse;
+        let ok = r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body><u:GetExternalIPAddressResponse xmlns:u="urn:schemas-upnp-org:service:WANIPConnection:1">
+<NewExternalIPAddress>81.2.3.4</NewExternalIPAddress>
+</u:GetExternalIPAddressResponse></s:Body></s:Envelope>"#;
+        assert_eq!(parse(ok).unwrap(), "81.2.3.4".parse::<std::net::IpAddr>().unwrap());
+
+        // Other prefixes, a prefixed element, whitespace, CDATA and IPv6.
+        let odd = r#"<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
+  <SOAP-ENV:Body>
+    <m:GetExternalIPAddressResponse xmlns:m="urn:schemas-upnp-org:service:WANIPConnection:2">
+      <m:NewExternalIPAddress>
+        2a01:4f9::1
+      </m:NewExternalIPAddress>
+    </m:GetExternalIPAddressResponse>
+  </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>"#;
+        assert_eq!(parse(odd).unwrap(), "2a01:4f9::1".parse::<std::net::IpAddr>().unwrap());
+        let cdata = "<r><NewExternalIPAddress><![CDATA[5.6.7.8]]></NewExternalIPAddress></r>";
+        assert_eq!(parse(cdata).unwrap(), "5.6.7.8".parse::<std::net::IpAddr>().unwrap());
+
+        // No address yet (WAN down): empty or self-closing element.
+        for empty in [
+            "<r><NewExternalIPAddress></NewExternalIPAddress></r>",
+            "<r><NewExternalIPAddress/></r>",
+            "<r><NewExternalIPAddress>  </NewExternalIPAddress></r>",
+        ] {
+            let e = parse(empty).unwrap_err().to_string();
+            assert!(e.contains("no external address"), "{e}");
+        }
+
+        // SOAP fault: the UPnP error description is reported.
+        let fault = r#"<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>
+<faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring>
+<detail><UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>501</errorCode>
+<errorDescription>Action Failed</errorDescription></UPnPError></detail>
+</s:Fault></s:Body></s:Envelope>"#;
+        let e = parse(fault).unwrap_err().to_string();
+        assert!(e.contains("Action Failed"), "{e}");
+
+        for bad in [
+            "",
+            "not xml at all",
+            "<r><NewExternalIPAddress>not-an-ip</NewExternalIPAddress></r>",
+            "<r><NewExternalIPAddress>1.2.3.4.5</NewExternalIPAddress></r>",
+            "<r><Other>1.2.3.4</Other></r>",
+        ] {
+            assert!(parse(bad).is_err(), "{bad}");
+        }
+        let deep = format!("{}{}", "<a>".repeat(1000), "</a>".repeat(1000));
+        assert!(parse(&deep).is_err());
+        // An endless address is not collected without bound.
+        let long = format!("<r><NewExternalIPAddress>{}</NewExternalIPAddress></r>", "1".repeat(100_000));
+        assert!(parse(&long).is_err());
     }
 
     #[test]

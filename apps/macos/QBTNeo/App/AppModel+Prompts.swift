@@ -76,9 +76,33 @@ extension AppModel {
             perform { try $0.createTags(tags: [value]) }
             labels.setTag(value, appearance)
         case .edit(let tag):
-            labels.setTag(tag, appearance)
+            let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, value != tag else {
+                labels.setTag(tag, appearance)
+                return nil
+            }
+            guard TagStore.isValid(value) else { return String(localized: "Tag name '\(value)' is invalid") }
+            guard !tags.contains(value) else { return String(localized: "Tag name already exists.") }
+            renameTag(tag, to: value, appearance: appearance)
         }
         return nil
+    }
+
+    /// qBittorrent has no tag rename: create the new tag, move the torrents
+    /// over, delete the old one; its icon, color and sidebar filter follow.
+    private func renameTag(_ old: String, to new: String, appearance: LabelAppearance) {
+        let ids = transfers.items.filter { $0.tags.contains(old) }.map(\.id)
+        perform { client in
+            try client.createTags(tags: [new])
+            if !ids.isEmpty {
+                try client.addTags(hashes: ids, tags: [new])
+                try client.removeTags(hashes: ids, tags: [old])
+            }
+            try client.deleteTags(tags: [old])
+        }
+        labels.removeTags([old])
+        labels.setTag(new, appearance)
+        if list.tagFilter == .tag(old) { list.tagFilter = .tag(new) }
     }
 
     /// Creates or edits a category. Returns an error message, or nil on success.

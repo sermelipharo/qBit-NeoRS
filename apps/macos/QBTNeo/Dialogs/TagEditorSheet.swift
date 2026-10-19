@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Add Tag" / "Edit Tag": the tag name (new tags only), its icon and color.
+/// "Add Tag" / "Edit Tag": the tag name (renaming an existing tag moves its torrents), its icon and color.
 struct TagEditorSheet: View {
     let request: TagEditorRequest
     @Environment(AppModel.self) private var model
@@ -16,7 +16,6 @@ struct TagEditorSheet: View {
                         width: Design.Window.wideDialogWidth, onConfirm: save) {
             Form {
                 TextField("Tag:", text: $name)
-                    .disabled(isEditing)
                     .focused($nameFocused)
                     .onSubmit(save)
                 LabelAppearanceFields(kind: .tag, appearance: $appearance)

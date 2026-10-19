@@ -41,7 +41,7 @@
   .view.transfers { --tb-h: 100px; --thead-h: 0px; }
   .thead { display: none; }
 
-  .scroller { padding-bottom: calc(64px + env(safe-area-inset-bottom)); --row-h: 72px; --card-h: 196px; --art-h: 70px; }
+  .scroller { padding-bottom: calc(64px + env(safe-area-inset-bottom)); --row-h: 72px; --card-h: 178px; --art-h: 70px; }
   .row { left: 0; right: 0; border-radius: 0; padding: 8px 16px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; row-gap: 5px; align-content: center; border-bottom: .5px solid var(--sep); }
   .row.odd { background: none; }
   .row .c { display: none; padding: 0; }

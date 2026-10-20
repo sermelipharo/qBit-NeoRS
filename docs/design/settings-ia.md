@@ -380,7 +380,17 @@ same way, with toolbar panes and a search field at the trailing edge.
   * "port forwarding" finds the UPnP options.
 
   Power users can also type the WebAPI key (`max_connec`, `anonymous_mode`)
-  or the ini key.
+  or the ini key: ours (`Appearance/ColorScheme`) or the qBittorrent one the
+  migration imports (`BitTorrent/Session/QueueingSystemEnabled`). Keys match
+  as typed, with spaces for `_` and `/`, split at capitals ("queueing system
+  enabled") or in part; a query that is exactly a key ranks its setting first.
+  qBittorrent's own Options-dialog label and group also match where they
+  differ from ours ("Torrent Queueing" finds Queue › *Limit the number of
+  active torrents*). These aliases live in `SettingsSearchAliases`, generated
+  from `docs/spec/preferences.md`, `optionsdialog.ui` and the migration map.
+  In another UI language, labels and titles match both translated and in
+  English, and qBittorrent's wording matches in its translation where the
+  string catalog has one.
 
 ---
 

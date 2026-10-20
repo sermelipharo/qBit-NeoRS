@@ -381,6 +381,8 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                 let mut iteration = 0;
                 let mut empty_rounds = 0u32;
                 let mut wake_rx = pacer.subscribe();
+                let mut forced_seen = *wake_rx.borrow();
+                let mut forced = false;
                 // Announcing ourselves follows libtorrent's cadence even when
                 // the pacer asks for peers more often. The margin keeps a
                 // jittered 15 min round from skipping its announce.
@@ -401,7 +403,8 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                         &this.dht.lookup_slots
                     };
                     let permit = slots.acquire().await.ok();
-                    let announce = last_announce.is_none_or(|t| t.elapsed() >= announce_gap);
+                    let announce =
+                        forced || last_announce.is_none_or(|t| t.elapsed() >= announce_gap);
                     this.callbacks.announce_now.store(announce, Ordering::Relaxed);
                     // `Err`: a fixed retry delay; `Ok`: paced, with an
                     // optional cap.
@@ -449,13 +452,18 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                     futs = FuturesUnordered::new();
                     *this.useful_nodes.write() = Vec::new();
                     this.queued_requests.store(0, Ordering::Relaxed);
-                    match next {
-                        Err(d) => tokio::time::sleep(d).await,
+                    forced = match next {
+                        Err(d) => {
+                            tokio::time::sleep(d).await;
+                            false
+                        }
                         Ok(cap) => {
                             let round_end = tokio::time::Instant::now();
-                            pacer.wait_next_round(&mut wake_rx, round_end, cap).await
+                            pacer
+                                .wait_next_round(&mut wake_rx, &mut forced_seen, round_end, cap)
+                                .await
                         }
-                    }
+                    };
                     iteration += 1;
                 }
             },

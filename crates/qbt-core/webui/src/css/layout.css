@@ -139,7 +139,7 @@
 .card-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .card-line > span { overflow: hidden; text-overflow: ellipsis; }
 .card-line.dim { color: var(--label2); font-size: 11px; }
-.card .state { color: var(--k, var(--label2)); font-weight: 600; }
+.card .state { display: inline; color: var(--k, var(--label2)); font-weight: 600; } /* not hidden with the list's narrow state column */
 .card .pct { width: auto; }
 .speeds { display: inline-flex; align-items: center; gap: 3px; color: var(--label2); }
 .speeds .i { width: 12px; height: 12px; }

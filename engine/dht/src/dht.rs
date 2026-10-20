@@ -4,14 +4,15 @@ use std::{
     str::FromStr,
     sync::{
         Arc,
-        atomic::{AtomicU16, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering},
     },
     task::Poll,
     time::{Duration, Instant},
 };
 
 use crate::{
-    Error, INACTIVITY_TIMEOUT, REQUERY_INTERVAL, RESPONSE_TIMEOUT,
+    DHT_ANNOUNCE_INTERVAL, Error, INACTIVITY_TIMEOUT, LookupPacer, REQUERY_INTERVAL,
+    RESPONSE_TIMEOUT,
     bprotocol::{
         self, AnnouncePeer, CompactNodeInfo, CompactNodeInfoOwned, ErrorDescription,
         FindNodeRequest, GetPeersRequest, Message, MessageKind, Node, PingRequest, Response, Want,
@@ -125,6 +126,8 @@ struct RecursiveRequestCallbacksGetPeers {
     // Id20::from_str("00000fffffffffffffffffffffffffffffffffff").unwrap()
     min_distance_to_announce: Id20,
     announce_port: Option<u16>,
+    // Announce in the current round (see `DHT_ANNOUNCE_INTERVAL`).
+    announce_now: AtomicBool,
 }
 
 impl RecursiveRequestCallbacks for RecursiveRequestCallbacksGetPeers {
@@ -138,8 +141,8 @@ impl RecursiveRequestCallbacks for RecursiveRequestCallbacksGetPeers {
         resp: &crate::Result<ResponseOrError>,
     ) {
         let announce_port = match self.announce_port {
-            Some(a) => a,
-            None => return,
+            Some(a) if self.announce_now.load(Ordering::Relaxed) => a,
+            _ => return,
         };
         let resp = match resp {
             Ok(ResponseOrError::Response(resp)) => resp,
@@ -222,7 +225,12 @@ pub struct RequestPeersStream {
 }
 
 impl RequestPeersStream {
-    fn new(dht: Arc<DhtState>, info_hash: Id20, announce_port: Option<u16>) -> Self {
+    fn new(
+        dht: Arc<DhtState>,
+        info_hash: Id20,
+        announce_port: Option<u16>,
+        pacer: Arc<LookupPacer>,
+    ) -> Self {
         let (peer_tx, peer_rx) = unbounded_channel();
         let make = |is_v4: bool, dht: Arc<DhtState>, peer_tx: UnboundedSender<SocketAddr>| {
             let (node_tx, node_rx) = unbounded_channel();
@@ -242,9 +250,10 @@ impl RequestPeersStream {
                     )
                     .unwrap(),
                     announce_port,
+                    announce_now: AtomicBool::new(false),
                 },
             });
-            rp.request_peers_forever(node_rx, is_v4)
+            rp.request_peers_forever(node_rx, is_v4, pacer.clone())
         };
 
         let v4 = make(true, dht.clone(), peer_tx.clone());
@@ -360,6 +369,7 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
         self: &Arc<Self>,
         mut node_rx: tokio::sync::mpsc::UnboundedReceiver<(Option<Id20>, SocketAddr, usize)>,
         is_v4: bool,
+        pacer: Arc<LookupPacer>,
     ) -> tokio::task::JoinHandle<()> {
         let this = self.clone();
         spawn(
@@ -370,6 +380,12 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                 let mut futs = FuturesUnordered::new();
                 let mut iteration = 0;
                 let mut empty_rounds = 0u32;
+                let mut wake_rx = pacer.subscribe();
+                // Announcing ourselves follows libtorrent's cadence even when
+                // the pacer asks for peers more often. The margin keeps a
+                // jittered 15 min round from skipping its announce.
+                let announce_gap = DHT_ANNOUNCE_INTERVAL * 9 / 10;
+                let mut last_announce: Option<tokio::time::Instant> = None;
                 // A lookup only occupies memory while one of its rounds is
                 // running; rounds of all torrents share `lookup_slots`, so a
                 // client with thousands of torrents does not run thousands of
@@ -385,12 +401,16 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                         &this.dht.lookup_slots
                     };
                     let permit = slots.acquire().await.ok();
-                    let sleep = match this.get_peers_root(is_v4) {
+                    let announce = last_announce.is_none_or(|t| t.elapsed() >= announce_gap);
+                    this.callbacks.announce_now.store(announce, Ordering::Relaxed);
+                    // `Err`: a fixed retry delay; `Ok`: paced, with an
+                    // optional cap.
+                    let next: Result<Option<Duration>, Duration> = match this.get_peers_root(is_v4) {
                         // Nothing to ask yet (routing table still empty, or no
                         // IPv6 nodes at all): retry soon, then back off.
                         Ok(0) => {
                             empty_rounds = empty_rounds.saturating_add(1);
-                            Duration::from_secs(1 << (empty_rounds / 3).min(3))
+                            Err(Duration::from_secs(1 << (empty_rounds / 3).min(3)))
                         }
                         Ok(n) => {
                             empty_rounds = 0;
@@ -412,11 +432,12 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                                 }
                                 futs.next().await;
                             }
-                            if n < 8 {
-                                REQUERY_INTERVAL / 8 * (n as u32)
-                            } else {
-                                REQUERY_INTERVAL
+                            if announce && this.callbacks.announce_port.is_some() {
+                                last_announce = Some(tokio::time::Instant::now());
                             }
+                            // Few nodes near the hash: the routing table is
+                            // still thin, look again sooner.
+                            Ok((n < 8).then(|| REQUERY_INTERVAL / 8 * (n as u32)))
                         }
                         Err(e) => {
                             error!("dht: error in get_peers_root(): {e:#}");
@@ -428,7 +449,13 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                     futs = FuturesUnordered::new();
                     *this.useful_nodes.write() = Vec::new();
                     this.queued_requests.store(0, Ordering::Relaxed);
-                    tokio::time::sleep(sleep).await;
+                    match next {
+                        Err(d) => tokio::time::sleep(d).await,
+                        Ok(cap) => {
+                            let round_end = tokio::time::Instant::now();
+                            pacer.wait_next_round(&mut wake_rx, round_end, cap).await
+                        }
+                    }
                     iteration += 1;
                 }
             },
@@ -1516,7 +1543,19 @@ impl DhtState {
         info_hash: Id20,
         announce_port: Option<u16>,
     ) -> RequestPeersStream {
-        RequestPeersStream::new(self.clone(), info_hash, announce_port)
+        self.get_peers_paced(info_hash, announce_port, LookupPacer::fixed(REQUERY_INTERVAL))
+    }
+
+    /// Like [`Self::get_peers`], with the time between lookup rounds chosen
+    /// by `pacer`. `announce_port` is announced at most every
+    /// [`crate::DHT_ANNOUNCE_INTERVAL`] (and on the first round).
+    pub fn get_peers_paced(
+        self: &Arc<Self>,
+        info_hash: Id20,
+        announce_port: Option<u16>,
+        pacer: Arc<LookupPacer>,
+    ) -> RequestPeersStream {
+        RequestPeersStream::new(self.clone(), info_hash, announce_port, pacer)
     }
 
     pub fn listen_addr(&self) -> SocketAddr {

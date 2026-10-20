@@ -35,3 +35,4 @@ thiserror.workspace = true
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+tokio = { workspace = true, features = ["test-util"] }

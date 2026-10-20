@@ -1,6 +1,7 @@
 mod bprotocol;
 mod dht;
 mod error;
+mod pacer;
 mod peer_store;
 mod persistence;
 mod query_limit;
@@ -14,6 +15,7 @@ pub use error::{Error, Result};
 
 pub use crate::dht::DhtStats;
 pub use crate::dht::{DhtConfig, DhtState, RequestPeersStream};
+pub use crate::pacer::LookupPacer;
 pub use librqbit_core::hash_id::Id20;
 pub use persistence::{DhtPersistenceConfig, PersistentDht, dht_listen_addr};
 
@@ -21,8 +23,12 @@ pub type Dht = Arc<DhtState>;
 
 // How long do we wait for a response from a DHT node.
 pub(crate) const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
-// TODO: Not sure if we should re-query tbh.
+// Interval between lookup rounds of `DhtState::get_peers` (no pacer).
 pub(crate) const REQUERY_INTERVAL: Duration = Duration::from_secs(60);
+/// How often we announce ourselves (`announce_peer`) for a torrent, like
+/// libtorrent's `dht_announce_interval`. Lookup rounds closer together than
+/// this only ask for peers.
+pub const DHT_ANNOUNCE_INTERVAL: Duration = Duration::from_secs(15 * 60);
 // After how long we consider a routing table node questionable.
 pub(crate) const INACTIVITY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 

@@ -1479,10 +1479,16 @@ impl Session {
             .values()
             .cloned()
             .collect::<Vec<_>>();
+        let mut paused = Vec::new();
         for torrent in torrents {
-            if let Err(e) = torrent.pause() {
-                debug!("error pausing torrent: {e:#}");
+            match torrent.pause() {
+                Ok(()) => paused.push(torrent),
+                Err(e) => debug!("error pausing torrent: {e:#}"),
             }
+        }
+        // Torrents paused before were recorded then.
+        for torrent in paused {
+            torrent.save_resume_stats().await;
         }
         // Give trackers their `stopped` announces.
         let stop_timeout = self.tracker_ctx.settings().stop_tracker_timeout;
@@ -2303,6 +2309,7 @@ impl Session {
 
     pub async fn pause(&self, handle: &ManagedTorrentHandle) -> anyhow::Result<()> {
         handle.pause()?;
+        handle.save_resume_stats().await;
         self.try_update_persistence_metadata(handle).await;
         Ok(())
     }

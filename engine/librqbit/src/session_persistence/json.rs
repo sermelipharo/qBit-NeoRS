@@ -135,6 +135,22 @@ impl JsonSessionPersistenceStore {
         self.output_folder.join(format!("{info_hash:?}.bitv"))
     }
 
+    /// File sizes and mtimes recorded with the bitfield (a separate file, so
+    /// versions that don't know it just ignore it).
+    fn resume_stats_filename(&self, info_hash: &Id20) -> PathBuf {
+        self.output_folder.join(format!("{info_hash:?}.fstat"))
+    }
+
+    async fn remove_resume_stats(&self, info_hash: &Id20) -> anyhow::Result<()> {
+        let filename = self.resume_stats_filename(info_hash);
+        match tokio::fs::remove_file(&filename).await {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                Err(e).with_context(|| format!("error removing {filename:?}"))
+            }
+            _ => Ok(()),
+        }
+    }
+
     async fn update_db(
         &self,
         id: TorrentId,
@@ -229,6 +245,7 @@ impl BitVFactory for JsonSessionPersistenceStore {
 
     async fn clear(&self, id: TorrentIdOrHash) -> anyhow::Result<()> {
         let h = self.to_hash(id).await?;
+        self.remove_resume_stats(&h).await?;
         let filename = self.bitv_filename(&h);
         tokio::fs::remove_file(&filename)
             .await
@@ -262,6 +279,35 @@ impl BitVFactory for JsonSessionPersistenceStore {
             .with_context(|| format!("error constructing MmapBitV from file {filename:?}"))?
             .into_dyn())
     }
+
+    async fn load_resume_stats(&self, id: TorrentIdOrHash) -> anyhow::Result<Option<Vec<u8>>> {
+        let h = self.to_hash(id).await?;
+        let filename = self.resume_stats_filename(&h);
+        match tokio::fs::read(&filename).await {
+            Ok(b) => Ok(Some(b)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e).with_context(|| format!("error reading {filename:?}")),
+        }
+    }
+
+    async fn store_resume_stats(
+        &self,
+        id: TorrentIdOrHash,
+        data: Option<Vec<u8>>,
+    ) -> anyhow::Result<()> {
+        let h = self.to_hash(id).await?;
+        let Some(data) = data else {
+            return self.remove_resume_stats(&h).await;
+        };
+        let filename = self.resume_stats_filename(&h);
+        let tmp_filename = format!("{}.tmp", filename.to_str().context("bug")?);
+        tokio::fs::write(&tmp_filename, &data)
+            .await
+            .with_context(|| format!("error writing {tmp_filename:?}"))?;
+        tokio::fs::rename(&tmp_filename, &filename)
+            .await
+            .with_context(|| format!("error renaming {tmp_filename:?} to {filename:?}"))
+    }
 }
 
 #[async_trait]
@@ -287,6 +333,9 @@ impl SessionPersistenceStore for JsonSessionPersistenceStore {
         if let Some(t) = removed {
             debug!(?id, "deleted from in-memory db, flushing");
             self.flush().await?;
+            if let Err(e) = self.remove_resume_stats(&t.info_hash).await {
+                warn!(error=?e, "error removing file stats");
+            }
             for tf in [
                 self.torrent_bytes_filename(&t.info_hash),
                 self.bitv_filename(&t.info_hash),

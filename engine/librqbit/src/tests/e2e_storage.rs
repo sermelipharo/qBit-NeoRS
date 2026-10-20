@@ -738,9 +738,91 @@ async fn test_fastresume_sampling_detects_corrupted_piece() {
     let persistence = root.path().join("session");
     let id = add_checked_and_stop(&t, root.path(), &persistence).await;
 
-    // The first piece of every file is always among the sampled ones: corrupting
-    // it must invalidate the fastresume data (full recheck finds the bad piece).
+    // Without recorded file stats (older data), a few pieces are sampled. The
+    // first piece of every file is always among them: corrupting it must
+    // invalidate the fastresume data (full recheck finds the bad piece).
+    remove_file_stats(&persistence);
     flip_byte(&t.dir.path().join(t.name(0)), 100);
+    let have = restart_have_bytes(root.path(), &persistence, id).await;
+    assert_eq!(have, total - PIECE_LENGTH as u64);
+}
+
+fn remove_file_stats(persistence: &Path) {
+    let mut removed = 0;
+    for e in std::fs::read_dir(persistence).unwrap().flatten() {
+        if e.path().extension().is_some_and(|x| x == "fstat") {
+            std::fs::remove_file(e.path()).unwrap();
+            removed += 1;
+        }
+    }
+    assert_eq!(removed, 1);
+}
+
+/// Moves the files' mtimes into the past: files modified within a couple of
+/// seconds of being recorded are not trusted (coarse timestamps).
+fn age_files(t: &TestTorrent) -> std::time::SystemTime {
+    let past = std::time::SystemTime::now() - Duration::from_secs(3600);
+    for n in &t.names {
+        std::fs::File::options()
+            .write(true)
+            .open(t.dir.path().join(n))
+            .unwrap()
+            .set_modified(past)
+            .unwrap();
+    }
+    past
+}
+
+/// Corrupts a byte but keeps the file's size and mtime: undetectable without
+/// reading the data.
+fn flip_byte_keep_mtime(path: &Path, offset: u64, mtime: std::time::SystemTime) {
+    flip_byte(path, offset);
+    std::fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(mtime)
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fastresume_file_stats_skip_reading_unchanged_files() {
+    setup_test_logging();
+    let t = TestTorrent::new("storage_e2e_fstat_same", 2).await;
+    let mtime = age_files(&t);
+    let total = (FILE_SIZE * 2) as u64;
+    let root = TempDir::with_prefix("storage_e2e_fstat_same_client").unwrap();
+    let persistence = root.path().join("session");
+    let id = add_checked_and_stop(&t, root.path(), &persistence).await;
+
+    // Same size and mtime: trusted without reading, so a silent corruption goes
+    // unnoticed (this is what proves no piece was read).
+    flip_byte_keep_mtime(&t.dir.path().join(t.name(0)), 100, mtime);
+    flip_byte_keep_mtime(&t.dir.path().join(t.name(1)), 1000, mtime);
+    assert_eq!(restart_have_bytes(root.path(), &persistence, id).await, total);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fastresume_file_stats_recheck_touched_file_only() {
+    setup_test_logging();
+    let t = TestTorrent::new("storage_e2e_fstat_touched", 2).await;
+    let mtime = age_files(&t);
+    let total = (FILE_SIZE * 2) as u64;
+    let root = TempDir::with_prefix("storage_e2e_fstat_touched_client").unwrap();
+    let persistence = root.path().join("session");
+    let id = add_checked_and_stop(&t, root.path(), &persistence).await;
+
+    // File 0 is silently corrupted (not read: the bad piece stays), file 1 is
+    // modified (its pieces are hashed: the bad one is dropped). The piece shared
+    // by both files is hashed and is fine.
+    flip_byte_keep_mtime(&t.dir.path().join(t.name(0)), 100, mtime);
+    flip_byte(&t.dir.path().join(t.name(1)), 20_000);
+    let have = restart_have_bytes(root.path(), &persistence, id).await;
+    assert_eq!(have, total - PIECE_LENGTH as u64);
+
+    // The corrected bitfield and a fresh record were stored: the next start
+    // trusts both files again (file 1's mtime is recent, so it's hashed once more
+    // and still misses its bad piece).
     let have = restart_have_bytes(root.path(), &persistence, id).await;
     assert_eq!(have, total - PIECE_LENGTH as u64);
 }

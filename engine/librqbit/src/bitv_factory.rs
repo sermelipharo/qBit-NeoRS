@@ -9,6 +9,23 @@ pub trait BitVFactory: Send + Sync {
         id: TorrentIdOrHash,
         b: BF,
     ) -> anyhow::Result<Box<dyn BitV>>;
+
+    /// File sizes and mtimes recorded with the bitfield (opaque bytes, see
+    /// `torrent_state::resume_stats`). Stores that don't keep them return `None`,
+    /// and the bitfield is then validated by sampling pieces.
+    async fn load_resume_stats(&self, _id: TorrentIdOrHash) -> anyhow::Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    /// Replaces the recorded file stats; `None` removes them. `clear` removes
+    /// them too.
+    async fn store_resume_stats(
+        &self,
+        _id: TorrentIdOrHash,
+        _data: Option<Vec<u8>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 pub struct NonPersistentBitVFactory {}

@@ -558,6 +558,22 @@ unstealable together), the peer and stream maps use 4 and 2 shards instead of
 dashmap's 4 per CPU, and the speed estimator samples idle torrents once a
 second instead of ten times.
 
+Fast-resume validation by file size and mtime (`torrent_state/resume_stats.rs`):
+next to `<hash>.bitv` the JSON store keeps `<hash>.fstat` (own versioned
+binary format: per file length + mtime, plus the have-bitfield snapshot taken
+right after the files were stat'ed). It is written after each initial check
+(unless nothing changed), on `Session::pause` and for torrents paused by
+`Session::stop`, and removed by `clear` (force recheck, errors) and delete. On
+start, pieces of files whose size and mtime are unchanged are kept without
+reading (if both the loaded bitfield and the snapshot have them); pieces
+touching a changed file are hashed, those touching a missing file dropped,
+and a corrected bitfield is stored. Files modified less than 2 s before being
+recorded are stored as uncertain (coarse timestamps). Without a `.fstat`
+(older data, imported bitfields, skip hash check, non-disk storages, the
+Postgres store) the old sampling check runs; a sampled piece with a wrong hash
+now invalidates the fast-resume data (it used to pass). The module docs
+explain why stat-then-snapshot is safe while pieces are being written.
+
 ### Idle wakeups
 
 An idle session (torrents seeding, no peers) arms no periodic timers in the

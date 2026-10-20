@@ -2,6 +2,7 @@ mod control;
 pub mod initializing;
 pub mod live;
 pub(crate) mod missing_layers;
+pub(crate) mod resume_stats;
 pub mod paused;
 pub(crate) mod runtime;
 pub mod stats;
@@ -667,6 +668,41 @@ impl ManagedTorrent {
 
     pub fn is_paused(&self) -> bool {
         self.locked.read().paused
+    }
+
+    /// Records the files' sizes and mtimes with the fastresume bitfield (paused
+    /// or live torrents), so that the next start trusts unchanged files without
+    /// reading them. See `resume_stats` for why this is safe while writing.
+    pub(crate) async fn save_resume_stats(&self) {
+        let Some(session) = self.shared.session.upgrade() else {
+            return;
+        };
+        let Some(metadata) = self.metadata.load_full() else {
+            return;
+        };
+        let has_bits = self.with_state(|s| {
+            matches!(s, ManagedTorrentState::Paused(_) | ManagedTorrentState::Live(_))
+        });
+        if !has_bits {
+            return;
+        }
+        let stats = self
+            .shared
+            .spawner
+            .block_in_place_with_semaphore(|| {
+                resume_stats::record_for(&self.shared.layout, &metadata.file_infos, || {
+                    self.with_chunk_tracker(|ct| resume_stats::copy_bits(ct.get_have_pieces()))
+                        .ok()
+                })
+            })
+            .await;
+        if let Err(e) = session
+            .bitv_factory
+            .store_resume_stats(self.shared.info_hash.into(), stats.map(|s| s.encode()))
+            .await
+        {
+            warn!(id = self.shared.id, "error storing file stats: {e:#}");
+        }
     }
 
     /// Pause the torrent if it's live.

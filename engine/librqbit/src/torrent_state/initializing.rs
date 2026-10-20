@@ -10,7 +10,7 @@ use anyhow::Context;
 
 use rand::{RngExt, seq::IteratorRandom};
 use size_format::SizeFormatterBinary as SF;
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::{
     api::TorrentIdOrHash,
@@ -25,7 +25,9 @@ use crate::{
 const MAX_FASTRESUME_CHECKS: usize = 64;
 
 use super::{
-    ManagedTorrentShared, TorrentMetadata, missing_layers, paused::TorrentStatePaused,
+    ManagedTorrentShared, TorrentMetadata, missing_layers,
+    paused::TorrentStatePaused,
+    resume_stats::{self, ResumeStats},
 };
 
 pub struct TorrentStateInitializing {
@@ -216,6 +218,118 @@ impl TorrentStateInitializing {
         Some(hp)
     }
 
+    /// The file sizes and mtimes recorded with the loaded bitfield, if there are
+    /// usable ones.
+    async fn load_resume_stats(
+        &self,
+        bitv_factory: &dyn BitVFactory,
+        have_pieces: Option<&dyn BitV>,
+    ) -> Option<ResumeStats> {
+        let hp = have_pieces?;
+        if hp.as_bytes().len() != self.metadata.lengths().piece_bitfield_bytes()
+            || !self.shared.layout.is_disk_backed()
+        {
+            return None;
+        }
+        let data = match bitv_factory
+            .load_resume_stats(self.shared.info_hash.into())
+            .await
+        {
+            Ok(d) => d?,
+            Err(e) => {
+                warn!(id = ?self.shared.id, "error loading file stats: {e:#}");
+                return None;
+            }
+        };
+        match ResumeStats::decode(&data) {
+            Some(s) if s.fits(self.metadata.lengths(), &self.metadata.file_infos) => Some(s),
+            _ => {
+                warn!(id = ?self.shared.id, "ignoring invalid file stats");
+                None
+            }
+        }
+    }
+
+    /// Validates the loaded bitfield with the recorded file sizes and mtimes:
+    /// pieces of unchanged files are kept without reading, pieces touching a
+    /// changed file are hashed, pieces touching a missing file are dropped. A
+    /// corrected bitfield is stored. Also returns whether nothing changed since
+    /// the record (so it needn't be written again).
+    async fn validate_with_resume_stats(
+        &self,
+        bitv_factory: &dyn BitVFactory,
+        hp: Box<dyn BitV>,
+        saved: ResumeStats,
+    ) -> anyhow::Result<(Box<dyn BitV>, bool)> {
+        let layout = &self.shared.layout;
+        let file_infos = &self.metadata.file_infos;
+        let (have, files_unchanged, reads) = self
+            .shared
+            .spawner
+            .block_in_place_with_semaphore(|| {
+                let current =
+                    resume_stats::current_stats(file_infos, |idx| layout.full_actual_path(idx));
+                let plan = resume_stats::plan(file_infos, hp.as_slice(), &saved, &current);
+                let reads = plan.verify.count_ones();
+                let fo = FileOps::new(&self.metadata.info, &self.files, file_infos);
+                let have = resume_stats::run_plan(
+                    plan,
+                    self.metadata.lengths(),
+                    &self.checked_bytes,
+                    &self.pause_requested,
+                    |piece| match fo.check_piece(piece) {
+                        Ok(ok) => ok,
+                        Err(e) => {
+                            debug!(?piece, "error checking piece: {e:#}");
+                            false
+                        }
+                    },
+                )?;
+                anyhow::Ok((have, current == saved.files, reads))
+            })
+            .await?;
+        if have.as_raw_slice() == hp.as_bytes() {
+            debug!(id = ?self.shared.id, reads, "fastresume data validated with file stats");
+            return Ok((hp, files_unchanged));
+        }
+        let dropped = hp.as_slice().count_ones() - have.count_ones();
+        info!(
+            id = ?self.shared.id,
+            reads,
+            dropped,
+            "fastresume: checked pieces of changed files"
+        );
+        let hp = bitv_factory
+            .store_initial_check(self.shared.info_hash.into(), have)
+            .await
+            .context("error storing checked bitfield")?;
+        Ok((hp, false))
+    }
+
+    /// Records the files' sizes and mtimes with the bitfield (see
+    /// `resume_stats`), or removes the record when it can't be kept.
+    async fn save_resume_stats(
+        &self,
+        bitv_factory: &dyn BitVFactory,
+        chunk_tracker: &ChunkTracker,
+    ) {
+        let stats = self
+            .shared
+            .spawner
+            .block_in_place_with_semaphore(|| {
+                resume_stats::record_for(&self.shared.layout, &self.metadata.file_infos, || {
+                    Some(resume_stats::copy_bits(chunk_tracker.get_have_pieces()))
+                })
+            })
+            .await;
+        if let Err(e) = bitv_factory
+            .store_resume_stats(self.shared.info_hash.into(), stats.map(|s| s.encode()))
+            .await
+        {
+            warn!(id = ?self.shared.id, "error storing file stats: {e:#}");
+        }
+    }
+
     pub async fn check(&self) -> anyhow::Result<TorrentStatePaused> {
         // The check may run again after being paused.
         self.checked_bytes.store(0, Ordering::Relaxed);
@@ -276,6 +390,7 @@ impl TorrentStateInitializing {
         let mut unverified_v2 = None;
         let mut layers_found = false;
         let mut have_pieces = have_pieces;
+        let mut resume_stats_current = false;
         if let (Some(unknown), Some(hp)) = (unknown.as_ref(), have_pieces.as_mut())
             && hp.as_bytes().len() == expected_bitfield_len
         {
@@ -320,7 +435,21 @@ impl TorrentStateInitializing {
                     .context("error storing initial check bitfield")?,
             )
         } else {
-            self.validate_fastresume(&*bitv_factory, have_pieces).await
+            match self
+                .load_resume_stats(&*bitv_factory, have_pieces.as_deref())
+                .await
+            {
+                Some(saved) => {
+                    let hp = have_pieces.context("bug: file stats without a bitfield")?;
+                    let (hp, unchanged) = self
+                        .validate_with_resume_stats(&*bitv_factory, hp, saved)
+                        .await?;
+                    resume_stats_current = unchanged;
+                    Some(hp)
+                }
+                // No record (older data, or data imported from elsewhere): sample.
+                None => self.validate_fastresume(&*bitv_factory, have_pieces).await,
+            }
         };
 
         let have_pieces = match have_pieces {
@@ -429,6 +558,11 @@ impl TorrentStateInitializing {
                 Ok::<_, anyhow::Error>(())
             })
             .await?;
+
+        // After the lengths are settled, so the record sees the final sizes.
+        if !resume_stats_current {
+            self.save_resume_stats(&*bitv_factory, &chunk_tracker).await;
+        }
 
         let paused = TorrentStatePaused {
             shared: self.shared.clone(),

@@ -239,6 +239,12 @@ impl Writer {
         if self.dry_run {
             return Ok(());
         }
+        // The engine's file size/mtime record (`<hash>.fstat`) belongs to the
+        // bitfield it was saved with: a replaced bitfield drops it, so the new
+        // one is validated by sampling pieces.
+        if let Some(stem) = rel.strip_suffix(".bitv") {
+            let _ = std::fs::remove_file(self.root.join(format!("{stem}.fstat")));
+        }
         resume::write_private_atomic(&self.root.join(rel), data).map_err(|e| format!("{rel}: {e}"))
     }
 

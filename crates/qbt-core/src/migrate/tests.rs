@@ -270,3 +270,17 @@ fn refuses_profile_inside_source() {
     opts.profile = opts.source_data.join("neo");
     assert!(run(&opts).unwrap_err().contains("separate"));
 }
+
+#[test]
+fn writing_a_bitfield_drops_the_engine_file_stats() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("data/engine/fastresume");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("ab.fstat"), b"old").unwrap();
+    std::fs::write(dir.join("cd.fstat"), b"other").unwrap();
+    let mut w = Writer { root: tmp.path().to_owned(), dry_run: false, merge: false, written: Vec::new() };
+    w.write("data/engine/fastresume/ab.bitv", &[0xff]).unwrap();
+    assert!(!dir.join("ab.fstat").exists());
+    assert!(dir.join("cd.fstat").exists());
+    assert_eq!(std::fs::read(dir.join("ab.bitv")).unwrap(), vec![0xff]);
+}

@@ -9,6 +9,7 @@
 
 mod creator;
 mod log;
+mod names;
 mod rss;
 mod search;
 mod torrent;
@@ -16,6 +17,7 @@ mod transfer;
 
 pub use creator::*;
 pub use log::*;
+pub use names::*;
 pub use rss::*;
 pub use search::*;
 pub use torrent::*;

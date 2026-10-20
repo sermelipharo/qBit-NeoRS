@@ -4,6 +4,7 @@
 
 mod app;
 mod creator;
+mod neors;
 mod rss;
 mod search;
 mod sync;
@@ -148,7 +149,8 @@ use Methods::{GetPost as GP, PostOnly as P};
 
 /// Every WebAPI 2.15.1 endpoint with its method filter (features.md 6.7),
 /// plus `app/getFreeSpaceAtPath`, which qBittorrent 5.2.4's own WebUI calls
-/// (add-torrent dialog) although its backend does not implement it.
+/// (add-torrent dialog) although its backend does not implement it, and the
+/// qBit NeoRS extensions of the bundled Web UI (`neors/*`).
 pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("auth", "login", P),
     ("auth", "logout", P),
@@ -274,11 +276,12 @@ pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("torrentcreator", "status", GP),
     ("torrentcreator", "torrentFile", GP),
     ("torrentcreator", "deleteTask", P),
+    ("neors", "nameRules", GP),
 ];
 
 /// Scopes served by per-session controllers (`auth` is shared).
 pub const SESSION_SCOPES: &[&str] =
-    &["app", "clientdata", "log", "torrentcreator", "rss", "search", "torrents", "transfer", "sync"];
+    &["app", "clientdata", "log", "torrentcreator", "rss", "search", "torrents", "transfer", "sync", "neors"];
 
 pub fn method_filter(scope: &str, action: &str) -> Option<Methods> {
     ENDPOINTS.iter().find(|(s, a, _)| *s == scope && *a == action).map(|(_, _, m)| *m)
@@ -369,6 +372,7 @@ pub async fn dispatch(c: &mut Call<'_>, scope: &str, action: &str) -> ApiResult 
         "rss" => rss::dispatch(c, action),
         "search" => search::dispatch(c, action).await,
         "torrentcreator" => creator::dispatch(c, action),
+        "neors" => neors::dispatch(c, action),
         _ => Err(ApiError::endpoint_not_found()),
     }
 }
@@ -493,11 +497,11 @@ mod tests {
 
     #[test]
     fn endpoint_table() {
-        assert_eq!(ENDPOINTS.len(), 124);
+        assert_eq!(ENDPOINTS.len(), 125);
         let post = ENDPOINTS.iter().filter(|e| e.2 == Methods::PostOnly).count();
         let get = ENDPOINTS.len() - post;
         assert_eq!(post, 80);
-        assert_eq!(get, 44);
+        assert_eq!(get, 45);
         assert_eq!(method_filter("torrents", "SSLParameters"), Some(Methods::GetPost));
         assert_eq!(method_filter("torrents", "ssLParameters"), None);
         assert_eq!(method_filter("rss", "setFeedRefreshInterval"), Some(Methods::PostOnly));

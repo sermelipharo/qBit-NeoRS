@@ -14,6 +14,7 @@ mod api_app;
 mod api_creator;
 mod api_gui;
 mod api_log;
+mod api_names;
 mod api_rss;
 mod api_search;
 mod api_torrents;
@@ -23,6 +24,7 @@ mod config;
 use std::sync::Arc;
 
 pub use config::{AppConfig, Profile};
+pub(crate) use api_names::NameRulesSnapshot;
 
 use crate::context::CoreContext;
 use crate::error::{QbtError, QbtResult};
@@ -45,6 +47,8 @@ pub struct App {
     #[allow(dead_code)]
     pub(crate) dyndns: Arc<crate::net::dyndns::DynDnsUpdater>,
     pub(crate) gui_sync: parking_lot::Mutex<bittorrent::sync::GuiSyncState>,
+    /// Torrent name rules pushed by the macOS app (memory only).
+    pub(crate) name_rules: parking_lot::RwLock<Option<Arc<NameRulesSnapshot>>>,
 }
 
 #[cfg_attr(feature = "ffi", uniffi::export)]
@@ -109,6 +113,7 @@ impl App {
             creator,
             webui,
             gui_sync: Default::default(),
+            name_rules: Default::default(),
         });
         app.webui.attach(&app);
         Ok(app)

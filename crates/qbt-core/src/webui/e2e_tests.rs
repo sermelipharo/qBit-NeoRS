@@ -614,6 +614,55 @@ fn basic_auth_and_local_bypass() {
 }
 
 #[test]
+fn neors_name_rules() {
+    use crate::model::{TorrentNameRule, TorrentNameRules};
+    let h = Harness::new(|_| {});
+    h.block(async {
+        assert_eq!(h.get("/api/v2/neors/nameRules", None).await.status(), 403);
+        let c = h.login().await;
+        // Nothing pushed yet (the daemon): no rules.
+        let v: Value = h.get("/api/v2/neors/nameRules", Some(&c)).await.json().await.unwrap();
+        assert_eq!(v["available"], false);
+        assert_eq!(v["rules"], json!([]));
+
+        h.app.set_torrent_name_rules(TorrentNameRules {
+            rules: vec![TorrentNameRule {
+                pattern: r"\d{3,4}p".into(),
+                category: "resolution".into(),
+                template: String::new(),
+                case_sensitive: false,
+            }],
+            enabled: true,
+            semibold_titles: false,
+            card_tags: true,
+            year_as_tag: false,
+        });
+        let r = h.get("/api/v2/neors/nameRules", Some(&c)).await;
+        assert_eq!(r.headers()["content-type"], "application/json");
+        let v: Value = r.json().await.unwrap();
+        let version = v["version"].as_str().unwrap().to_owned();
+        assert_eq!(version.len(), 16);
+        assert_eq!(
+            v,
+            json!({
+                "version": version,
+                "available": true,
+                "options": {"enabled": true, "semiboldTitles": false, "cardTags": true, "yearAsTag": false},
+                "rules": [{"pattern": r"\d{3,4}p", "category": "resolution", "template": "", "caseSensitive": false}],
+            })
+        );
+        // Unchanged since the version the client has: only the version.
+        let v: Value = h.get(&format!("/api/v2/neors/nameRules?since={version}"), Some(&c)).await.json().await.unwrap();
+        assert_eq!(v, json!({"version": version, "unchanged": true}));
+        let v: Value = h.get("/api/v2/neors/nameRules?since=0", Some(&c)).await.json().await.unwrap();
+        assert_eq!(v["rules"].as_array().unwrap().len(), 1);
+        // POST works too (like every GET endpoint); other actions do not exist.
+        assert_eq!(h.post("/api/v2/neors/nameRules", &[], Some(&c)).await.status(), 200);
+        assert_eq!(h.get("/api/v2/neors/other", Some(&c)).await.status(), 404);
+    });
+}
+
+#[test]
 fn clientdata_persistence() {
     let h = Harness::new(|_| {});
     h.block(async {

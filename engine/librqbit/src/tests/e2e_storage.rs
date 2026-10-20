@@ -683,3 +683,64 @@ async fn test_max_active_checking_torrents_runtime() {
     assert!(finished);
     session.stop().await;
 }
+
+/// Adds `t` (paused) from its own folder with fastresume persistence in
+/// `persistence`, waits for the initial check and stops the session.
+async fn add_checked_and_stop(t: &TestTorrent, root: &Path, persistence: &Path) -> usize {
+    let session = client_session(root, Default::default(), Some(persistence.to_owned())).await;
+    let h = session
+        .add_torrent(
+            AddTorrent::from_bytes(t.bytes.clone()),
+            Some(AddTorrentOptions {
+                paused: true,
+                overwrite: true,
+                output_folder: Some(t.dir.path().to_str().unwrap().to_owned()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .unwrap()
+        .into_handle()
+        .unwrap();
+    wait_paused(&h).await;
+    assert!(paused_have_bytes(&h) > 0);
+    let id = h.id();
+    drop(h);
+    session.stop().await;
+    id
+}
+
+/// Restarts a session on `persistence` and returns the torrent's have bytes once
+/// its fastresume data was validated.
+async fn restart_have_bytes(root: &Path, persistence: &Path, id: usize) -> u64 {
+    let session = client_session(root, Default::default(), Some(persistence.to_owned())).await;
+    let h = session.get(id.into()).unwrap();
+    wait_paused(&h).await;
+    let have = paused_have_bytes(&h);
+    drop(h);
+    session.stop().await;
+    have
+}
+
+fn paused_have_bytes(h: &ManagedTorrentHandle) -> u64 {
+    h.with_state(|s| match s {
+        ManagedTorrentState::Paused(p) => p.chunk_tracker.get_hns().have_bytes,
+        _ => unreachable!(),
+    })
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fastresume_sampling_detects_corrupted_piece() {
+    setup_test_logging();
+    let t = TestTorrent::new("storage_e2e_fastresume_corrupt", 2).await;
+    let total = (FILE_SIZE * 2) as u64;
+    let root = TempDir::with_prefix("storage_e2e_fastresume_corrupt_client").unwrap();
+    let persistence = root.path().join("session");
+    let id = add_checked_and_stop(&t, root.path(), &persistence).await;
+
+    // The first piece of every file is always among the sampled ones: corrupting
+    // it must invalidate the fastresume data (full recheck finds the bad piece).
+    flip_byte(&t.dir.path().join(t.name(0)), 100);
+    let have = restart_have_bytes(root.path(), &persistence, id).await;
+    assert_eq!(have, total - PIECE_LENGTH as u64);
+}

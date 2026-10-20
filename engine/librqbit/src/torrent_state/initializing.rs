@@ -177,8 +177,15 @@ impl TorrentStateInitializing {
                     })
                     .enumerate()
                 {
-                    if fo.check_piece(piece_id).is_err() {
-                        return true;
+                    // `check_piece` reports a hash mismatch as `Ok(false)`; both a
+                    // mismatch and a read error make the fastresume data untrustworthy.
+                    match fo.check_piece(piece_id) {
+                        Ok(true) => {}
+                        Ok(false) => return true,
+                        Err(e) => {
+                            warn!(id = ?self.shared.id, ?piece_id, "error checking piece: {e:#}");
+                            return true;
+                        }
                     }
 
                     #[allow(clippy::cast_possible_truncation)]

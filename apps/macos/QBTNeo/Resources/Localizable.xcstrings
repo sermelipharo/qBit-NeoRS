@@ -343114,6 +343114,24 @@
         }
       }
     },
+    "names.editor.pattern.web": {
+      "comment": "Name rules editor: the pattern uses regular expression syntax that JavaScript lacks",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Web UI can't run “%@” and skips this rule there."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Веб-интерфейс не умеет выполнять «%@» и пропускает там это правило."
+          }
+        }
+      }
+    },
     "names.save.failed": {
       "comment": "Name rules editor: a rule failed validation",
       "extractionState": "extracted_with_value",

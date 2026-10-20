@@ -56,6 +56,12 @@ struct NameRuleDetailForm: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if let note = model.webNote(for: draft.id) {
+                        Label(note, systemImage: Symbol.exclamationmarkTriangle)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             GridRow {

@@ -17,6 +17,9 @@ final class TorrentNamesModel {
     @ObservationIgnored private var cache: NameParseCache?
     @ObservationIgnored private var observedSwitches: Switches?
     @ObservationIgnored private var categoryKinds: [String: ContentKind] = [:]
+    /// The core that serves the rules to the Web UI (set by `AppModel`).
+    @ObservationIgnored var clientProvider: @MainActor () -> (any TorrentNamesClient)? = { nil }
+    @ObservationIgnored private var pushTask: Task<Void, Never>?
 
     private static let rulesKey = GUIPreferenceKey.torrentNameRules.rawValue
 
@@ -88,6 +91,31 @@ final class TorrentNamesModel {
     private func rebuild() {
         cache?.replaceParser(makeParser(rules))
         revision &+= 1
+        pushToCore()
+    }
+
+    // MARK: Web UI
+
+    /// Hands the enabled rules (already validated when they were saved or
+    /// loaded) and the switches to the core for the Web UI: right away when
+    /// the core starts, debounced after edits.
+    func pushToCore(after delay: Duration = .milliseconds(500)) {
+        pushTask?.cancel()
+        pushTask = Task { [weak self] in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard !Task.isCancelled, let self, let client = clientProvider() else { return }
+            client.setTorrentNameRules(rules: webRules())
+        }
+    }
+
+    private func webRules() -> TorrentNameRules {
+        let rules = rules.filter(\.isEnabled).map { rule in
+            TorrentNameRule(pattern: rule.pattern, category: rule.category.rawValue, template: rule.template, caseSensitive: rule.isCaseSensitive)
+        }
+        return TorrentNameRules(rules: rules, enabled: gui.parseTorrentNames, semiboldTitles: gui.torrentNamesSemiboldTitles,
+                                cardTags: gui.torrentNamesCardTags, yearAsTag: gui.torrentNamesYearAsTag)
     }
 
     // MARK: Switches
@@ -126,6 +154,7 @@ final class TorrentNamesModel {
                 rebuild()
             } else {
                 revision &+= 1
+                pushToCore()
             }
         }
         observeSwitches()

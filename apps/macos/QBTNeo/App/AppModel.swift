@@ -92,6 +92,7 @@ final class AppModel {
         palette = CommandPaletteModel(persistent: !launch.isSnapshot)
         lock.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
         favicons.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
+        names.clientProvider = { [weak self] in self?.client as? any TorrentNamesClient }
         palette.app = self
     }
 
@@ -125,6 +126,7 @@ final class AppModel {
         corePreferences = client.preferences()
         status.isPaused = client.isSessionPaused()
         log.append(contentsOf: client.mainLog(lastKnownId: -1, levels: []))
+        names.pushToCore(after: .zero)
         phase = .running
         restartRefreshLoop()
         if gui.notificationsEnabled, !launch.isSnapshot {

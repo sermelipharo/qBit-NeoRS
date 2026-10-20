@@ -146,6 +146,15 @@ final class NameRulesEditorModel {
 
     // MARK: Issues and preview
 
+    /// Why the Web UI skips a valid rule, if it does (shown under its pattern).
+    func webNote(for id: NameRule.ID) -> String? {
+        guard issues[id] == nil, let rule = rules.first(where: { $0.id == id }),
+              let construct = NameRuleWebCompatibility.unsupportedConstruct(in: rule.pattern) else { return nil }
+        return String(localized: "names.editor.pattern.web",
+                      defaultValue: "The Web UI can't run “\(construct)” and skips this rule there.",
+                      comment: "Name rules editor: the pattern uses regular expression syntax that JavaScript lacks")
+    }
+
     /// Re-checks the rules that changed (all of them after adding, removing or importing).
     private func refreshIssues(from old: [NameRule]) {
         if old.count == rules.count, zip(old, rules).allSatisfy({ $0.id == $1.id }) {

@@ -1366,6 +1366,14 @@ fn limited_request_window(down_bps: u64, max_window: usize) -> usize {
         .clamp(MIN_LIMITED_REQUEST_WINDOW.min(max_window), max_window)
 }
 
+/// Free slots a full request window waits for before requesting again:
+/// 8 for the default 128-block window (requests then leave 8 per write, and
+/// the window never drops below 120 outstanding blocks), 1 for small windows
+/// (rate-limited peers, streams).
+fn request_refill(window: usize) -> usize {
+    (window / 16).clamp(1, 8)
+}
+
 struct PeerFlowControl {
     i_am_choked: bool,
     request_window: usize,
@@ -2436,15 +2444,21 @@ impl PeerHandler {
         .await;
     }
 
+    /// Returns when a request may be sent. Once the window was full, it
+    /// waits for a few free slots ([`request_refill`]) rather than one, so
+    /// that the requests sent next leave in one write.
     async fn wait_for_request_slot(&self) {
+        let mut need = 1;
         loop {
             let Some(notify) = self.request_slots_changed() else {
                 return;
             };
             let notified = notify.notified();
-            if self.can_send_request() {
+            let (free, window) = self.free_request_slots();
+            if free >= need {
                 return;
             }
+            need = request_refill(window);
             notified.await;
         }
     }
@@ -2984,27 +2998,27 @@ impl PeerHandler {
         self.lock_flow_control("is_choked").i_am_choked
     }
 
-    fn can_send_request(&self) -> bool {
+    /// Free request slots and the current window (no free slots while choked).
+    fn free_request_slots(&self) -> (usize, usize) {
         let (i_am_choked, request_window) = {
-            let flow = self.lock_flow_control("can_send_request");
+            let flow = self.lock_flow_control("free_request_slots");
             (flow.i_am_choked, flow.request_window)
         };
-
-        if i_am_choked {
-            return false;
-        }
 
         let Some((requested, down_bps)) = self.state.peers.with_live(self.addr, |live| {
             (live.requested_inflight_count(), live.rates.down_bps)
         }) else {
-            return false;
+            return (0, request_window);
         };
         let window = if self.download_limited() {
             limited_request_window(down_bps, request_window)
         } else {
             request_window
         };
-        requested < window
+        if i_am_choked {
+            return (0, window);
+        }
+        (window.saturating_sub(requested), window)
     }
 
     fn lock_flow_control(
@@ -3049,7 +3063,17 @@ fn metadata_piece_range(metadata_size: usize, piece_id: u32) -> Option<std::ops:
 
 #[cfg(test)]
 mod request_window_tests {
-    use super::limited_request_window;
+    use super::{limited_request_window, request_refill};
+
+    #[test]
+    fn refill_in_small_batches() {
+        assert_eq!(request_refill(128), 8);
+        assert_eq!(request_refill(250), 8);
+        assert_eq!(request_refill(64), 4);
+        assert_eq!(request_refill(19), 1);
+        assert_eq!(request_refill(2), 1);
+        assert_eq!(request_refill(1), 1);
+    }
 
     #[test]
     fn three_seconds_of_the_rate_within_bounds() {

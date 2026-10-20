@@ -167,7 +167,9 @@ incoming, utp, encrypted, holepunched, seed, super_seeding }`.
   per message). Order is kept; a `piece` block is read straight into the
   buffer and only into an otherwise empty batch, so queued messages never
   wait for a disk read and two blocks never share a write
-  (`write_batch.rs`).
+  (`write_batch.rs`). A full request window waits for `request_refill`
+  free slots (8 of the default 128) before requesting again, so those
+  requests share a write instead of one write per received block.
 
 ### Choking and upload slots
 

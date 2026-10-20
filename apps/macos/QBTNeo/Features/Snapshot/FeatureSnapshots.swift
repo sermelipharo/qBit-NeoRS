@@ -24,6 +24,7 @@ struct FeatureSnapshots {
                     .environment(model.gui)
             }
         }
+        if isWanted("toolbar-sort") { await ToolbarSortSnapshots(directory: directory).run(model: model) }
         model.stopRefreshing()
         if let appModel = SettingsSnapshot.appModel {
             await SettingsWindowSnapshots(directory: directory, isWanted: isWanted).run(model: appModel)

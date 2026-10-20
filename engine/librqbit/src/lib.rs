@@ -89,6 +89,7 @@ mod type_aliases;
 mod vectored_traits;
 #[cfg(feature = "watch")]
 pub mod watch;
+mod write_batch;
 
 pub use error::{Error, Result};
 

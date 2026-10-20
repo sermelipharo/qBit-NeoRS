@@ -160,6 +160,14 @@ incoming, utp, encrypted, holepunched, seed, super_seeding }`.
   pieces behind the torrent's broadcast; now the writer compares the have
   bitfield with what it advertised and sends the difference, each piece
   once (`advertised_haves.rs`, `peer_connection::tests`).
+* Peer writes are batched: after waiting for one message the writer
+  serializes everything else already queued (our requests, HAVEs, a
+  throttled upload) into the connection's existing ~17 KiB write buffer and
+  sends it with one write, one timeout and one yield (upstream: one of each
+  per message). Order is kept; a `piece` block is read straight into the
+  buffer and only into an otherwise empty batch, so queued messages never
+  wait for a disk read and two blocks never share a write
+  (`write_batch.rs`).
 
 ### Choking and upload slots
 

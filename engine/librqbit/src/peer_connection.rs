@@ -25,7 +25,7 @@ use peer_binary_protocol::{
         ExtendedMessage, PeerExtendedMessageIds, handshake::ExtendedHandshake,
         ut_metadata::UtMetadata, ut_pex::UtPex,
     },
-    serialize_hashes, serialize_piece_preamble,
+    serialize_hashes,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -37,6 +37,7 @@ use crate::{
     spawn_utils::BlockingSpawner,
     stream_connect::StreamConnector,
     type_aliases::{BoxAsyncReadVectored, BoxAsyncWrite},
+    write_batch::WriteBatch,
 };
 
 pub trait PeerConnectionHandler {
@@ -124,6 +125,14 @@ pub enum WriterRequest {
     /// BEP 52 reply: `hashes` with this payload, or `hash reject` if `None`.
     V2Hashes(HashRequest, Option<Bytes>),
     ReadChunkRequest(ChunkInfo),
+    Disconnect(anyhow::Result<()>),
+}
+
+/// What became of a request pushed into a write batch.
+enum Pushed {
+    Done,
+    /// No room left: it goes first into the next batch.
+    Full(WriterRequest),
     Disconnect(anyhow::Result<()>),
 }
 
@@ -372,6 +381,116 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
         .await
     }
 
+    /// A HAVE from the broadcast, unless this peer gets none or was told.
+    fn have_to_send(
+        &self,
+        advertised: &mut AdvertisedHaves,
+        id: ValidPieceIndex,
+    ) -> Option<WriterRequest> {
+        (self.handler.should_transmit_have(id) && advertised.mark(id.get()))
+            .then(|| WriterRequest::Message(Message::Have(id.get())))
+    }
+
+    /// Serializes `req` into `batch` (reading an upload's block straight
+    /// into it).
+    async fn push_request(
+        &self,
+        batch: &mut WriteBatch,
+        req: WriterRequest,
+        ext_msg_ids: &(dyn Fn() -> PeerExtendedMessageIds + Sync),
+        uploaded: &mut u32,
+    ) -> Result<Pushed> {
+        let req = match req {
+            WriterRequest::Disconnect(res) => return Ok(Pushed::Disconnect(res)),
+            req => req,
+        };
+        let fitted = match &req {
+            WriterRequest::Message(msg) => batch.push_message(msg, ext_msg_ids)?,
+            WriterRequest::UtMetadata(utm) => {
+                let msg = Message::Extended(ExtendedMessage::UtMetadata(utm.as_borrowed()));
+                let fitted = batch.push_message(&msg, ext_msg_ids)?;
+                if fitted && matches!(utm, UtMetadata::Data(..)) {
+                    self.handler.on_metadata_piece_dequeued();
+                }
+                fitted
+            }
+            WriterRequest::V2Hashes(hash_req, reply) => {
+                let fitted = match reply {
+                    Some(hashes) => batch.push(|buf| serialize_hashes(hash_req, hashes, buf))?,
+                    None => batch.push_message(&Message::HashReject(*hash_req), ext_msg_ids)?,
+                };
+                if fitted {
+                    self.handler.on_hash_reply_dequeued();
+                }
+                fitted
+            }
+            WriterRequest::UtPex(ut_pex) => {
+                let msg = Message::Extended(ExtendedMessage::UtPex(ut_pex.as_borrowed()));
+                batch.push_message(&msg, ext_msg_ids)?
+            }
+            WriterRequest::ReadChunkRequest(chunk) => {
+                // Messages already in the batch leave before the block is
+                // read from disk, so our requests never wait for a read.
+                if !batch.is_empty() || !batch.fits_piece(chunk) {
+                    return Ok(Pushed::Full(req));
+                }
+                let chunk = *chunk;
+                if !self.handler.take_upload_request(&chunk) {
+                    trace!(?chunk, "upload request was cancelled");
+                    return Ok(Pushed::Done);
+                }
+                #[allow(unused_mut)]
+                let mut skip_reading_for_e2e_tests = false;
+
+                #[cfg(test)]
+                {
+                    use tracing::warn;
+                    // This is poor-mans fault injection for running e2e tests.
+                    use crate::tests::test_util::TestPeerMetadata;
+                    let tpm = TestPeerMetadata::from_peer_id(self.peer_id);
+                    use rand::RngExt;
+                    if rand::rng().random_bool(tpm.disconnect_probability()) {
+                        return Err(Error::TestDisconnect);
+                    }
+
+                    #[allow(clippy::cast_possible_truncation)]
+                    let sleep_ms =
+                        (rand::rng().random::<f64>() * (tpm.max_random_sleep_ms as f64)) as u64;
+                    if sleep_ms > 0 {
+                        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+                    }
+
+                    if rand::rng().random_bool(tpm.bad_data_probability()) {
+                        warn!(
+                            "will NOT actually read the data to simulate a malicious peer that sends garbage"
+                        );
+                        skip_reading_for_e2e_tests = true;
+                    }
+                }
+
+                // The block is read straight into the batch, no extra copy.
+                let block = batch.piece(&chunk)?;
+                if skip_reading_for_e2e_tests {
+                    block.fill(0);
+                } else {
+                    self.spawner
+                        .block_in_place_with_semaphore(|| self.handler.read_chunk(&chunk, block))
+                        .await
+                        .map_err(Error::ReadChunk)?;
+                }
+                *uploaded += chunk.size;
+                true
+            }
+            // Taken out above.
+            WriterRequest::Disconnect(_) => true,
+        };
+        Ok(if fitted {
+            Pushed::Done
+        } else {
+            Pushed::Full(req)
+        })
+    }
+
     async fn manage_peer(&self, args: ManagePeerArgs) -> Result<()> {
         let ManagePeerArgs {
             handshake_supports_extended,
@@ -473,171 +592,178 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
             };
             let mut upload_wait = std::pin::pin!(futures::future::Fuse::terminated());
 
+            let ext_msg_ids = &|| {
+                extended_handshake_ref
+                    .read()
+                    .as_ref()
+                    .map(|e| *e)
+                    .unwrap_or_default()
+            };
+
+            // Messages leave in batches: after waiting for one, everything
+            // else that is ready (our requests, HAVEs, a throttled upload)
+            // is serialized behind it, and the batch goes out in one write.
+            let mut batch = WriteBatch::new(write_buf);
+            // A message that did not fit into the previous batch.
+            let mut carried: Option<WriterRequest> = None;
+
             loop {
-                let req = loop {
-                    if advertised.is_resyncing() {
-                        let mut next = None;
-                        self.handler.resync_haves(&mut advertised, &mut |index| {
-                            next.is_none() && {
-                                next = Some(index);
-                                true
+                let first = if let Some(req) = carried.take() {
+                    Some(req)
+                } else if advertised.is_resyncing() {
+                    None
+                } else {
+                    loop {
+                        if upload_wait.is_terminated()
+                            && let Some(chunk) = pending_uploads.pop_front()
+                        {
+                            upload_wait.set(wait_for_upload(chunk).fuse());
+                        }
+                        break tokio::select! {
+                            chunk = &mut upload_wait, if !upload_wait.is_terminated() => {
+                                Some(WriterRequest::ReadChunkRequest(chunk))
                             }
-                        });
-                        if let Some(index) = next {
-                            break WriterRequest::Message(Message::Have(index));
-                        }
-                    }
-                    if upload_wait.is_terminated()
-                        && let Some(chunk) = pending_uploads.pop_front()
-                    {
-                        upload_wait.set(wait_for_upload(chunk).fuse());
-                    }
-                    break tokio::select! {
-                        chunk = &mut upload_wait, if !upload_wait.is_terminated() => {
-                            WriterRequest::ReadChunkRequest(chunk)
-                        }
-                        r = have_broadcast.recv(), if !broadcast_closed => match r {
-                            Ok(id) => {
-                                if self.handler.should_transmit_have(id)
-                                    && advertised.mark(id.get())
-                                {
-                                    WriterRequest::Message(Message::Have(id.get()))
-                                } else {
+                            r = have_broadcast.recv(), if !broadcast_closed => match r {
+                                Ok(id) => match self.have_to_send(&mut advertised, id) {
+                                    Some(req) => Some(req),
+                                    None => continue,
+                                },
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    broadcast_closed = true;
+                                    debug!("broadcast channel closed, will not poll it anymore");
                                     continue
+                                },
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                    // Never drop a HAVE: find what the peer missed.
+                                    debug!(missed = n, "have broadcast lagged, resyncing");
+                                    advertised.start_resync();
+                                    if advertised.is_resyncing() {
+                                        None
+                                    } else {
+                                        continue
+                                    }
                                 }
                             },
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                broadcast_closed = true;
-                                debug!("broadcast channel closed, will not poll it anymore");
-                                continue
-                            },
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                // Never drop a HAVE: find what the peer missed.
-                                debug!(missed = n, "have broadcast lagged, resyncing");
-                                advertised.start_resync();
-                                continue
+                            r = timeout(keep_alive_interval, outgoing_chan.recv()) => match r {
+                                Ok(Some(WriterRequest::ReadChunkRequest(chunk))) => {
+                                    pending_uploads.push_back(chunk);
+                                    continue
+                                }
+                                Ok(Some(msg)) => Some(msg),
+                                Ok(None) => {
+                                    return Err(Error::TorrentIsNotLive);
+                                }
+                                Err(_) => Some(WriterRequest::Message(Message::KeepAlive)),
                             }
-                        },
-                        r = timeout(keep_alive_interval, outgoing_chan.recv()) => match r {
-                            Ok(Some(WriterRequest::ReadChunkRequest(chunk))) => {
-                                pending_uploads.push_back(chunk);
-                                continue
-                            }
-                            Ok(Some(msg)) => msg,
-                            Ok(None) => {
-                                return Err(Error::TorrentIsNotLive);
-                            }
-                            Err(_) => WriterRequest::Message(Message::KeepAlive),
-                        }
-                    };
+                        };
+                    }
                 };
 
+                // Once per batch, not per message.
                 tokio::task::yield_now().await;
 
-                let mut uploaded_add = None;
-
-                trace!("about to send: {:?}", &req);
-                let ext_msg_ids = &|| {
-                    extended_handshake_ref
-                        .read()
-                        .as_ref()
-                        .map(|e| *e)
-                        .unwrap_or_default()
-                };
-
-                let len = match req {
-                    WriterRequest::Message(msg) => msg.serialize(&mut *write_buf, ext_msg_ids)?,
-                    WriterRequest::UtMetadata(utm) => {
-                        if matches!(utm, UtMetadata::Data(..)) {
-                            self.handler.on_metadata_piece_dequeued();
-                        }
-                        Message::Extended(ExtendedMessage::UtMetadata(utm.as_borrowed()))
-                            .serialize(&mut *write_buf, ext_msg_ids)?
-                    }
-                    WriterRequest::V2Hashes(req, reply) => {
-                        self.handler.on_hash_reply_dequeued();
-                        match reply {
-                            Some(hashes) => serialize_hashes(&req, &hashes, &mut *write_buf)?,
-                            None => {
-                                Message::HashReject(req).serialize(&mut *write_buf, ext_msg_ids)?
+                let mut uploaded: u32 = 0;
+                let mut disconnect = None;
+                let mut next = first;
+                loop {
+                    let req = match next.take() {
+                        Some(req) => req,
+                        None if advertised.is_resyncing() => {
+                            let batch = &mut batch;
+                            self.handler.resync_haves(&mut advertised, &mut |index| {
+                                batch
+                                    .push_message(&Message::Have(index), ext_msg_ids)
+                                    .unwrap_or(false)
+                            });
+                            if advertised.is_resyncing() {
+                                // The batch is full.
+                                break;
                             }
-                        }
-                    }
-                    WriterRequest::UtPex(ut_pex) => {
-                        Message::Extended(ExtendedMessage::UtPex(ut_pex.as_borrowed()))
-                            .serialize(&mut *write_buf, ext_msg_ids)?
-                    }
-                    WriterRequest::ReadChunkRequest(chunk) => {
-                        if !self.handler.take_upload_request(&chunk) {
-                            trace!(?chunk, "upload request was cancelled");
                             continue;
                         }
-                        #[allow(unused_mut)]
-                        let mut skip_reading_for_e2e_tests = false;
-
-                        #[cfg(test)]
-                        {
-                            use tracing::warn;
-                            // This is poor-mans fault injection for running e2e tests.
-                            use crate::tests::test_util::TestPeerMetadata;
-                            let tpm = TestPeerMetadata::from_peer_id(self.peer_id);
-                            use rand::RngExt;
-                            if rand::rng().random_bool(tpm.disconnect_probability()) {
-                                return Err(Error::TestDisconnect);
-                            }
-
-                            #[allow(clippy::cast_possible_truncation)]
-                            let sleep_ms = (rand::rng().random::<f64>()
-                                * (tpm.max_random_sleep_ms as f64))
-                                as u64;
-                            if sleep_ms > 0 {
-                                tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
-                            }
-
-                            if rand::rng().random_bool(tpm.bad_data_probability()) {
-                                warn!(
-                                    "will NOT actually read the data to simulate a malicious peer that sends garbage"
-                                );
-                                write_buf.fill(0);
-                                skip_reading_for_e2e_tests = true;
+                        None => {
+                            // Whatever is ready without waiting: our own
+                            // messages first, then HAVEs, then an upload.
+                            match outgoing_chan.try_recv() {
+                                Ok(WriterRequest::ReadChunkRequest(chunk)) => {
+                                    pending_uploads.push_back(chunk);
+                                    continue;
+                                }
+                                Ok(req) => req,
+                                Err(_) => {
+                                    if !broadcast_closed {
+                                        use tokio::sync::broadcast::error::TryRecvError;
+                                        match have_broadcast.try_recv() {
+                                            Ok(id) => {
+                                                next = self.have_to_send(&mut advertised, id);
+                                                continue;
+                                            }
+                                            Err(TryRecvError::Lagged(n)) => {
+                                                debug!(
+                                                    missed = n,
+                                                    "have broadcast lagged, resyncing"
+                                                );
+                                                advertised.start_resync();
+                                                continue;
+                                            }
+                                            Err(TryRecvError::Closed) => {
+                                                broadcast_closed = true;
+                                                continue;
+                                            }
+                                            Err(TryRecvError::Empty) => {}
+                                        }
+                                    }
+                                    if upload_wait.is_terminated()
+                                        && let Some(chunk) = pending_uploads.pop_front()
+                                    {
+                                        upload_wait.set(wait_for_upload(chunk).fuse());
+                                    }
+                                    match upload_wait.as_mut().now_or_never() {
+                                        Some(chunk) => WriterRequest::ReadChunkRequest(chunk),
+                                        None => break,
+                                    }
+                                }
                             }
                         }
-
-                        // this whole section is an optimization
-                        let preamble_len = serialize_piece_preamble(&chunk, &mut *write_buf);
-                        let full_len = preamble_len + chunk.size as usize;
-                        if !skip_reading_for_e2e_tests {
-                            self.spawner
-                                .block_in_place_with_semaphore(|| {
-                                    self.handler
-                                        .read_chunk(&chunk, &mut write_buf[preamble_len..full_len])
-                                })
-                                .await
-                                .map_err(Error::ReadChunk)?;
+                    };
+                    trace!("about to send: {:?}", &req);
+                    match self
+                        .push_request(&mut batch, req, ext_msg_ids, &mut uploaded)
+                        .await?
+                    {
+                        Pushed::Done => {}
+                        Pushed::Full(req) => {
+                            carried = Some(req);
+                            break;
                         }
-
-                        uploaded_add = Some(chunk.size);
-                        full_len
+                        Pushed::Disconnect(res) => {
+                            disconnect = Some(res);
+                            break;
+                        }
                     }
-                    WriterRequest::Disconnect(res) => {
-                        trace!("disconnect requested, closing writer");
-                        match res {
-                            Ok(()) => return Err(Error::Disconnect),
-                            Err(e) => return Err(Error::DisconnectWithSource(e)),
-                        }
+                }
+
+                if !batch.is_empty() {
+                    let bytes = batch.bytes();
+                    with_timeout(
+                        "writing",
+                        rwtimeout,
+                        write.write_all(bytes).map_err(Error::Write),
+                    )
+                    .await?;
+                    self.handler.on_protocol_bytes_sent(bytes.len() as u64);
+                    if uploaded > 0 {
+                        self.handler.on_uploaded_bytes(uploaded);
                     }
-                };
+                    batch.clear();
+                }
 
-                with_timeout(
-                    "writing",
-                    rwtimeout,
-                    write.write_all(&write_buf[..len]).map_err(Error::Write),
-                )
-                .await?;
-                self.handler.on_protocol_bytes_sent(len as u64);
-
-                if let Some(uploaded_add) = uploaded_add {
-                    self.handler.on_uploaded_bytes(uploaded_add)
+                if let Some(res) = disconnect {
+                    trace!("disconnect requested, closing writer");
+                    match res {
+                        Ok(()) => return Err(Error::Disconnect),
+                        Err(e) => return Err(Error::DisconnectWithSource(e)),
+                    }
                 }
             }
 
@@ -879,7 +1005,6 @@ mod tests {
 
     struct Rig {
         mock: &'static Mock,
-        #[allow(dead_code)]
         writes: Arc<AtomicUsize>,
         out_tx: mpsc::UnboundedSender<WriterRequest>,
         got: mpsc::UnboundedReceiver<Got>,
@@ -977,6 +1102,9 @@ mod tests {
         let mut haves = next_haves(&mut rig.got, 300).await;
         haves.sort_unstable();
         assert_eq!(haves, (100..400).collect::<Vec<_>>());
+        // Handshake, extended handshake, bitfield, then the 300 HAVEs
+        // (2.7 KB) in one batch.
+        assert_eq!(rig.writes.load(Ordering::Relaxed), 4);
 
         for p in 400..410 {
             rig.mock.complete(p);
@@ -990,5 +1118,96 @@ mod tests {
             !rest.iter().any(|g| matches!(g, Got::Have(_))),
             "duplicate HAVEs: {rest:?}"
         );
+    }
+
+    async fn next_items(got: &mut mpsc::UnboundedReceiver<Got>, n: usize) -> Vec<Got> {
+        let mut items = Vec::new();
+        while items.len() < n {
+            let item = tokio::time::timeout(Duration::from_secs(5), got.recv())
+                .await
+                .expect("timed out")
+                .expect("connection closed");
+            if !matches!(&item, Got::Other(s) if s == "extended" || s == "bitfield") {
+                items.push(item);
+            }
+        }
+        items
+    }
+
+    fn request(i: u32) -> WriterRequest {
+        WriterRequest::Message(Message::Request(peer_binary_protocol::Request::new(
+            i, 0, 16384,
+        )))
+    }
+
+    /// Requests queued together leave in one write, in order.
+    #[tokio::test]
+    async fn queued_requests_share_one_write() {
+        let mut rig = start([0], vec![]);
+        rig.out_tx
+            .send(WriterRequest::Message(Message::Interested))
+            .unwrap();
+        for i in 0..100 {
+            rig.out_tx.send(request(i)).unwrap();
+        }
+        let items = next_items(&mut rig.got, 101).await;
+        assert_eq!(items[0], Got::Other("Interested".into()));
+        for (i, item) in items[1..].iter().enumerate() {
+            assert_eq!(
+                *item,
+                Got::Other(format!(
+                    "{:?}",
+                    Message::Request(peer_binary_protocol::Request::new(
+                        u32::try_from(i).unwrap(),
+                        0,
+                        16384
+                    ))
+                ))
+            );
+        }
+        // Handshake, extended handshake, bitfield, one batch.
+        assert_eq!(rig.writes.load(Ordering::Relaxed), 4);
+        assert!(finish(rig).await.is_empty());
+    }
+
+    /// Uploads: each block is read into the batch and two never share one.
+    /// Messages queued before a disconnect are still sent.
+    #[tokio::test]
+    async fn pieces_and_small_messages_batch_in_order() {
+        let mut rig = start(0..10, vec![]);
+        let lengths = rig.mock.lengths;
+        let chunk = |p: u32| {
+            lengths
+                .iter_chunk_infos(lengths.validate_piece_index(p).unwrap())
+                .next()
+                .unwrap()
+        };
+        rig.out_tx
+            .send(WriterRequest::Message(Message::Unchoke))
+            .unwrap();
+        for p in 1..4 {
+            rig.out_tx
+                .send(WriterRequest::ReadChunkRequest(chunk(p)))
+                .unwrap();
+        }
+        let items = next_items(&mut rig.got, 4).await;
+        assert_eq!(
+            items,
+            [
+                Got::Other("Unchoke".into()),
+                Got::Piece(1, 0, 16384),
+                Got::Piece(2, 0, 16384),
+                Got::Piece(3, 0, 16384),
+            ]
+        );
+        // Handshake, extended handshake, bitfield, Unchoke (sent before the
+        // block is read), then one write per piece.
+        assert_eq!(rig.writes.load(Ordering::Relaxed), 7);
+
+        rig.out_tx
+            .send(WriterRequest::Message(Message::NotInterested))
+            .unwrap();
+        let rest = finish(rig).await;
+        assert_eq!(rest, [Got::Other("NotInterested".into())]);
     }
 }

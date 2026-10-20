@@ -22,6 +22,12 @@ struct MainWindow: View {
                         .navigationSplitViewColumnWidth(
                             min: Design.Size.sidebarMinWidth, ideal: Design.Size.sidebarIdealWidth, max: Design.Size.sidebarMaxWidth
                         )
+                        // Our own toggle: SwiftUI's draws a white symbol in Customize Toolbar (see SidebarToggleButton).
+                        // Placed on the sidebar column, it sits where the system one did and stays when the sidebar is hidden.
+                        .toolbar(removing: .sidebarToggle)
+                        .toolbar(id: "main") {
+                            ToolbarItem(id: "sidebarToggle") { SidebarToggleButton(gui: gui) }
+                        }
                 } detail: {
                     detail
                         .frame(maxWidth: .infinity, maxHeight: .infinity)

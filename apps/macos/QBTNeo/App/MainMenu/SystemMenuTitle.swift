@@ -12,8 +12,10 @@ enum SystemMenuTitle {
         return info["CFBundleDisplayName"] as? String ?? info["CFBundleName"] as? String ?? ProcessInfo.processInfo.processName
     }()
 
-    static func text(_ key: String) -> String {
-        bundle?.localizedString(forKey: key, value: nil, table: "MainMenu") ?? key
+    /// - Parameter table: "MainMenu" for menu titles, "Localizable" for
+    ///   SwiftUI's other strings (e.g. its sidebar toggle's "Hide Sidebar").
+    static func text(_ key: String, table: String = "MainMenu") -> String {
+        bundle?.localizedString(forKey: key, value: nil, table: table) ?? key
     }
 
     /// A title with the app name in place of "%@".

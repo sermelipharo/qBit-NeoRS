@@ -103,6 +103,7 @@
 .c.prog { display: flex; align-items: center; gap: 8px; }
 .pct { font-size: 11px; color: var(--label2); width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 .row .c.state { color: var(--k, var(--label2)); font-weight: 500; font-size: 12px; }
+.row.sel .c.state { color: inherit; }
 .c.meta { display: none; }
 
 @container (max-width: 1080px) {

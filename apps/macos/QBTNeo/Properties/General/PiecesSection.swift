@@ -10,7 +10,7 @@ struct PiecesSection: View {
     var body: some View {
         let showsAvailability = PropertiesModel.showsAvailability(item)
         Grid(alignment: .leading, horizontalSpacing: Design.Spacing.regular, verticalSpacing: Design.Spacing.small) {
-            GridRow {
+            GridRow(alignment: .center) {
                 Text("Progress:")
                     .foregroundStyle(.secondary)
                     .gridColumnAlignment(.trailing)
@@ -19,10 +19,12 @@ struct PiecesSection: View {
                     .accessibilityLabel(Text("Downloaded pieces"))
                 Text(item.hasMetadata ? "\((values.progress * 100).formatted(.number.precision(.fractionLength(1)).rounded(rule: .down)))%" : "")
                     .monospacedDigit()
-                    .frame(width: 64, alignment: .trailing)
+                    .modifier(SelectableValue())
+                    .frame(minWidth: 52, alignment: .trailing)
+                    .gridColumnAlignment(.trailing)
             }
             if showsAvailability {
-                GridRow {
+                GridRow(alignment: .center) {
                     Text("Availability:")
                         .foregroundStyle(.secondary)
                     PiecesBar(content: .availability(availability))
@@ -30,7 +32,8 @@ struct PiecesSection: View {
                         .accessibilityLabel(Text("Piece availability"))
                     Text(values.availability.formatted(.number.precision(.fractionLength(3))))
                         .monospacedDigit()
-                        .frame(width: 64, alignment: .trailing)
+                        .modifier(SelectableValue())
+                        .frame(minWidth: 52, alignment: .trailing)
                 }
             }
         }

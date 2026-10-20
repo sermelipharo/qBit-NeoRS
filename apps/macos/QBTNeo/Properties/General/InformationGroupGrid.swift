@@ -1,44 +1,31 @@
 import SwiftUI
 
-/// "Information" group (features.md §2.3.3).
+/// "Information" group (features.md §2.3.3): size, pieces, privacy, save
+/// path (with Show in Finder) and info hashes (with Copy). Long values
+/// truncate in the middle; the comment is `GeneralCommentRow`.
 struct InformationGroupGrid: View {
+    let id: String
     let values: TorrentProperties
 
     var body: some View {
         let v = values
         let metadata = v.hasMetadata
-        Grid(alignment: .leading, horizontalSpacing: Design.Spacing.regular, verticalSpacing: Design.Spacing.tight) {
+        PropertyGroup(title: "Information") {
+            GridRow { PropertyValueRow(label: "Total Size:", value: metadata ? UnitFormatter.size(v.totalSize) : "") }
             GridRow {
-                PropertyValueRow(label: "Total Size:", value: metadata ? UnitFormatter.size(v.totalSize) : "")
                 PropertyValueRow(label: "Pieces:", value: metadata
                     ? String(localized: "\(v.piecesNum) x \(UnitFormatter.size(v.pieceSize)) (have \(v.piecesHave))") : "")
-                PropertyValueRow(label: "Created By:", value: metadata ? v.createdBy : "")
-            }
-            GridRow {
-                PropertyValueRow(label: "Added On:", value: ValueFormatter.date(v.additionDate))
-                PropertyValueRow(label: "Completed On:", value: ValueFormatter.date(v.completionDate))
-                PropertyValueRow(label: "Created On:", value: metadata ? ValueFormatter.date(v.creationDate) : "")
             }
             GridRow {
                 PropertyValueRow(label: "Private:", value: metadata ? ValueFormatter.yesNo(v.private) : String(localized: "N/A"),
-                                 valueColumns: 5)
+                                 isPlaceholder: !metadata)
+            }
+            GridRow { PropertyValueRow(label: "Save Path:", value: v.savePath, action: .reveal(id: id)) }
+            GridRow {
+                PropertyValueRow(label: "Info Hash v1:", value: ValueFormatter.hash(v.infohashV1), isPlaceholder: v.infohashV1.isEmpty, action: .copy)
             }
             GridRow {
-                PropertyValueRow(label: "Info Hash v1:", value: ValueFormatter.hash(v.infohashV1), valueColumns: 5)
-            }
-            GridRow {
-                PropertyValueRow(label: "Info Hash v2:", value: ValueFormatter.hash(v.infohashV2), valueColumns: 5)
-            }
-            GridRow {
-                PropertyValueRow(label: "Save Path:", value: v.savePath, valueColumns: 5)
-            }
-            GridRow(alignment: .top) {
-                Text("Comment:")
-                    .foregroundStyle(.secondary)
-                Text(LinkedText.cachedAttributed(v.comment))
-                    .modifier(SelectableValue())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .gridCellColumns(5)
+                PropertyValueRow(label: "Info Hash v2:", value: ValueFormatter.hash(v.infohashV2), isPlaceholder: v.infohashV2.isEmpty, action: .copy)
             }
         }
     }

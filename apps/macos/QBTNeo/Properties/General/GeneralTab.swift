@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// General tab (features.md §2.3): pieces/availability bars, Transfer and
-/// Information groups.
+/// General tab (features.md §2.3): a summary strip (state, speeds, ETA,
+/// ratio, seeds, peers), the pieces/availability bars, then the Transfer,
+/// Connection, History and Information groups in as many columns as fit,
+/// and the comment.
 struct GeneralTab: View {
     let item: TorrentItem
     @Environment(AppModel.self) private var model
@@ -13,17 +15,21 @@ struct GeneralTab: View {
         let values = properties.general ?? TorrentProperties(item: item)
         ScrollView {
             VStack(alignment: .leading, spacing: Design.Spacing.medium) {
+                GeneralSummaryStrip(item: item, values: values)
                 PiecesSection(item: item, values: values, pieces: properties.pieces, availability: properties.pieceAvailability)
-                GroupBox("Transfer") {
+                Divider()
+                AdaptiveColumnsLayout(horizontalSpacing: Design.Spacing.xLarge, verticalSpacing: Design.Spacing.medium, maxIdealWidth: 300) {
                     TransferGroupGrid(values: values, isFinished: item.isFinished)
-                        .padding(Design.Spacing.small)
+                    ConnectionGroupGrid(values: values)
+                    HistoryGroupGrid(values: values)
+                    InformationGroupGrid(id: item.id, values: values)
                 }
-                GroupBox("Information") {
-                    InformationGroupGrid(values: values)
-                        .padding(Design.Spacing.small)
+                if !values.comment.isEmpty {
+                    GeneralCommentRow(comment: values.comment)
                 }
             }
-            .padding(Design.Spacing.medium)
+            .padding(.horizontal, Design.Spacing.large)
+            .padding(.vertical, Design.Spacing.medium)
         }
         .font(.callout)
         .environment(\.propertiesValuesSelectable, valuesSelectable)

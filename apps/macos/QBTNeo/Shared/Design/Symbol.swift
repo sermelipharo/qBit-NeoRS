@@ -91,6 +91,7 @@ enum Symbol {
     static let infoCircle = "info.circle"
     static let internaldrive = "internaldrive"
     static let key = "key"
+    static let leaf = "leaf"
     static let line3HorizontalDecrease = "line.3.horizontal.decrease"
     static let line3HorizontalDecreaseCircle = "line.3.horizontal.decrease.circle"
     static let linkBadgePlus = "link.badge.plus"
@@ -247,6 +248,7 @@ enum Symbol {
         infoCircle,
         internaldrive,
         key,
+        leaf,
         line3HorizontalDecrease,
         line3HorizontalDecreaseCircle,
         linkBadgePlus,

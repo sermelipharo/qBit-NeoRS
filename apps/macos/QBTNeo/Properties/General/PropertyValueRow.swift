@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// One "Label: value" pair inside a General tab grid row.
+/// One "Label: value" pair inside a General tab grid row. Missing values are
+/// drawn dimmed ("—" when empty) so the rows keep their place.
 struct PropertyValueRow: View {
     let label: LocalizedStringKey
     let value: String
     var help: LocalizedStringKey?
-    /// Grid columns the value spans (1 = its own column).
-    var valueColumns = 1
+    var isPlaceholder = false
+    var action: PropertyValueAction?
 
     var body: some View {
         // Only labels with a help text get a tooltip (each one costs tracking).
@@ -15,20 +16,28 @@ struct PropertyValueRow: View {
         } else {
             labelText
         }
-        Text(value)
-            .monospacedDigit()
-            .modifier(SelectableValue())
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .gridColumnAlignment(.leading)
-            .gridCellColumns(valueColumns)
-            .help(value)
+        let dimmed = isPlaceholder || value.isEmpty
+        HStack(spacing: Design.Spacing.tight) {
+            Text(value.isEmpty ? "—" : value)
+                .monospacedDigit()
+                .foregroundStyle(dimmed ? .tertiary : .primary)
+                .modifier(SelectableValue())
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(value)
+            if let action, !dimmed {
+                PropertyValueActionButton(action: action, value: value)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .gridColumnAlignment(.leading)
     }
 
     private var labelText: some View {
         Text(label)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize()
             .gridColumnAlignment(.trailing)
     }
 }

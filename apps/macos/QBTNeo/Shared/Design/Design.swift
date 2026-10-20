@@ -33,7 +33,7 @@ enum Design {
         /// space, so its hit area never overlaps the tab buttons or the transfer list.
         static let propertiesResizeHandleHeight = 6.0
         static let statusBarHeight = 26.0
-        static let pieceBarHeight = 16.0
+        static let pieceBarHeight = 10.0
         static let tableProgressBarHeight = 14.0
         static let speedFieldWidth = 110.0
         static let formLabelWidth = 150.0

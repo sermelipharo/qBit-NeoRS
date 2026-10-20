@@ -35,10 +35,10 @@ struct PiecesBar: View {
                 }
                 start = end
             }
-            context.stroke(Path(rect.insetBy(dx: 0.5, dy: 0.5)), with: .color(.secondary.opacity(0.35)), lineWidth: 1)
         }
         .frame(height: Design.Size.pieceBarHeight)
-        .clipShape(.rect(cornerRadius: Design.Radius.small))
+        .clipShape(.capsule)
+        .overlay { Capsule().strokeBorder(.secondary.opacity(0.3), lineWidth: 0.5) }
     }
 
     /// Per pixel column: the fraction (in sixteenths) of covered pieces that

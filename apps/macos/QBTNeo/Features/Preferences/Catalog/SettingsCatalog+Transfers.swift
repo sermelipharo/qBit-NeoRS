@@ -37,7 +37,7 @@ extension SettingsCatalog {
                         String(localized: "Ask to merge trackers for manually added torrent"), check: .gui(\.confirmMergeTrackers, true)),
 
             SettingSpec("auto_delete_mode", .torrentFiles, String(localized: "Delete .torrent files afterwards"),
-                        check: .pref(\.downloads.autoDeleteMode)),
+                        keywords: [String(localized: "Also when addition is cancelled")], check: .pref(\.downloads.autoDeleteMode)),
             SettingSpec("export_dir", .torrentFiles, String(localized: "Copy .torrent files to:"), check: .pref(\.downloads.exportDir)),
             SettingSpec("export_dir_fin", .torrentFiles, String(localized: "Copy .torrent files for finished downloads to:"),
                         check: .pref(\.downloads.exportDirFin)),
@@ -47,6 +47,7 @@ extension SettingsCatalog {
             SettingSpec("add_trackers_from_url_enabled", .extraTrackers,
                         String(localized: "Automatically append trackers from URL to new downloads:"),
                         keys: ["add_trackers_from_url_enabled", "add_trackers_url", "add_trackers_url_list"],
+                        keywords: [String(localized: "Fetched trackers")],
                         check: .pref(\.bittorrent.addTrackersFromUrlEnabled)),
         ]
     }

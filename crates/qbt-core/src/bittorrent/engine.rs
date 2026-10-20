@@ -431,7 +431,7 @@ impl Engine {
             bind_device_name: net.interface.clone(),
             fastresume: true,
             persistence: Some(SessionPersistenceConfig::FastResumeOnly { folder: resume_dir.clone() }),
-            peer_id: Some(librqbit::generate_azereus_style(*b"NR", (0, 2, 1, 0))),
+            peer_id: Some(librqbit::generate_azereus_style(*b"NR", (0, 2, 2, 0))),
             listen: with_listener.then(|| net.listener(None)),
             net: net.net.clone(),
             port_mapping: Some(net.port_mapping.clone()),

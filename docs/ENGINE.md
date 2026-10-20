@@ -154,6 +154,12 @@ incoming, utp, encrypted, holepunched, seed, super_seeding }`.
   IP filtering). A "have" is now sent to every peer that doesn't have the
   whole torrent, even one that already has the piece (needed by super-seeding
   seeds).
+* HAVEs are never lost: each writer remembers which pieces it advertised
+  (BITFIELD + HAVE, one bit per piece, nothing for connections that started
+  with every piece). Upstream dropped HAVEs when a writer fell more than 128
+  pieces behind the torrent's broadcast; now the writer compares the have
+  bitfield with what it advertised and sends the difference, each piece
+  once (`advertised_haves.rs`, `peer_connection::tests`).
 
 ### Choking and upload slots
 

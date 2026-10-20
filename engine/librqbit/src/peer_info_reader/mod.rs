@@ -361,7 +361,11 @@ impl PeerConnectionHandler for Handler {
         false
     }
 
-    fn serialize_bitfield_message_to_buf(&self, _buf: &mut [u8]) -> anyhow::Result<usize> {
+    fn serialize_bitfield_message_to_buf(
+        &self,
+        _buf: &mut [u8],
+        _advertised: &mut crate::advertised_haves::AdvertisedHaves,
+    ) -> anyhow::Result<usize> {
         Ok(0)
     }
 

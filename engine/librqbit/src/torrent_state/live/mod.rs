@@ -94,6 +94,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{Instrument, debug, debug_span, error, info, trace, warn};
 
 use crate::{
+    advertised_haves::AdvertisedHaves,
     Error,
     chunk_tracker::{ChunkMarkingResult, ChunkTracker, HaveNeededSelected},
     conn_limiter::{ConnLimiter, ConnPermit},
@@ -1617,12 +1618,45 @@ impl PeerConnectionHandler for &'_ PeerHandler {
         Ok(())
     }
 
-    fn serialize_bitfield_message_to_buf(&self, buf: &mut [u8]) -> anyhow::Result<usize> {
+    fn serialize_bitfield_message_to_buf(
+        &self,
+        buf: &mut [u8],
+        advertised: &mut AdvertisedHaves,
+    ) -> anyhow::Result<usize> {
         let g = self.state.lock_read("serialize_bitfield_message_to_buf");
-        let msg = Message::Bitfield(ByteBuf(g.get_chunks()?.get_have_pieces().as_bytes()));
+        let have = g.get_chunks()?.get_have_pieces();
+        let msg = Message::Bitfield(ByteBuf(have.as_bytes()));
         let len = msg.serialize(buf, &Default::default)?;
         trace!("sending: {:?}, length={}", &msg, len);
+        advertised.init(have.as_slice(), true);
         Ok(len)
+    }
+
+    fn init_advertised_haves(&self, advertised: &mut AdvertisedHaves) {
+        let g = self.state.lock_read("init_advertised_haves");
+        if let Ok(chunks) = g.get_chunks() {
+            advertised.init(chunks.get_have_pieces().as_slice(), false);
+        }
+    }
+
+    fn resync_haves(&self, advertised: &mut AdvertisedHaves, emit: &mut dyn FnMut(u32) -> bool) {
+        // Same rules as `should_transmit_have`; a super-seed reveals its
+        // pieces one by one and must not announce them all here.
+        let skip = self.state.shared.options.disable_upload()
+            || self
+                .state
+                .peers
+                .with_live(self.addr, |l| l.seeder || l.super_seeding)
+                .unwrap_or(true);
+        if skip {
+            advertised.cancel_resync();
+            return;
+        }
+        let g = self.state.lock_read("resync_haves");
+        match g.get_chunks() {
+            Ok(chunks) => advertised.resync_step(chunks.get_have_pieces().as_slice(), emit),
+            Err(_) => advertised.cancel_resync(),
+        }
     }
 
     fn on_handshake(

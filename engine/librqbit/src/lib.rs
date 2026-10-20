@@ -42,6 +42,7 @@ macro_rules! aframe {
 mod stat_gen;
 
 pub mod api;
+mod advertised_haves;
 mod api_error;
 mod bitv;
 mod bitv_factory;

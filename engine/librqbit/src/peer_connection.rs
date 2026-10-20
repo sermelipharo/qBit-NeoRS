@@ -5,7 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{Error, Result, session::CheckedIncomingConnection, stream_connect::ConnectionKind};
+use crate::{
+    Error, Result, advertised_haves::AdvertisedHaves, session::CheckedIncomingConnection,
+    stream_connect::ConnectionKind,
+};
 use buffers::{ByteBuf, ByteBufOwned};
 use bytes::Bytes;
 use futures::TryFutureExt;
@@ -49,7 +52,22 @@ pub trait PeerConnectionHandler {
         false
     }
     fn should_send_bitfield(&self) -> bool;
-    fn serialize_bitfield_message_to_buf(&self, buf: &mut [u8]) -> anyhow::Result<usize>;
+    /// Also records the pieces the BITFIELD announces in `advertised`, from
+    /// the same snapshot.
+    fn serialize_bitfield_message_to_buf(
+        &self,
+        buf: &mut [u8],
+        advertised: &mut AdvertisedHaves,
+    ) -> anyhow::Result<usize>;
+    /// No BITFIELD was sent: start `advertised` empty, sized to the torrent.
+    fn init_advertised_haves(&self, _advertised: &mut AdvertisedHaves) {}
+    /// The HAVE broadcast dropped entries for this connection: hand the
+    /// pieces we have that `advertised` lacks to `emit` (see
+    /// [`AdvertisedHaves::resync_step`]), or cancel the resync if this peer
+    /// gets no HAVEs.
+    fn resync_haves(&self, advertised: &mut AdvertisedHaves, _emit: &mut dyn FnMut(u32) -> bool) {
+        advertised.cancel_resync();
+    }
     /// `encrypted`: the connection uses MSE/PE with RC4.
     fn on_handshake(
         &self,
@@ -422,10 +440,11 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                 .keep_alive_interval
                 .unwrap_or(KEEP_ALIVE_INTERVAL);
 
+            let mut advertised = AdvertisedHaves::default();
             if self.handler.should_send_bitfield() {
                 let len = self
                     .handler
-                    .serialize_bitfield_message_to_buf(&mut *write_buf)
+                    .serialize_bitfield_message_to_buf(&mut *write_buf, &mut advertised)
                     .map_err(Error::Anyhow)?;
                 with_timeout(
                     "writing bitfield",
@@ -435,6 +454,8 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                 .await?;
                 self.handler.on_protocol_bytes_sent(len as u64);
                 trace!("sent bitfield");
+            } else {
+                self.handler.init_advertised_haves(&mut advertised);
             }
 
             // Every connection starts choked: the choker unchokes peers
@@ -454,6 +475,18 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
 
             loop {
                 let req = loop {
+                    if advertised.is_resyncing() {
+                        let mut next = None;
+                        self.handler.resync_haves(&mut advertised, &mut |index| {
+                            next.is_none() && {
+                                next = Some(index);
+                                true
+                            }
+                        });
+                        if let Some(index) = next {
+                            break WriterRequest::Message(Message::Have(index));
+                        }
+                    }
                     if upload_wait.is_terminated()
                         && let Some(chunk) = pending_uploads.pop_front()
                     {
@@ -465,8 +498,10 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                         }
                         r = have_broadcast.recv(), if !broadcast_closed => match r {
                             Ok(id) => {
-                                if self.handler.should_transmit_have(id) {
-                                     WriterRequest::Message(Message::Have(id.get()))
+                                if self.handler.should_transmit_have(id)
+                                    && advertised.mark(id.get())
+                                {
+                                    WriterRequest::Message(Message::Have(id.get()))
                                 } else {
                                     continue
                                 }
@@ -476,7 +511,12 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                                 debug!("broadcast channel closed, will not poll it anymore");
                                 continue
                             },
-                            _ => continue
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                // Never drop a HAVE: find what the peer missed.
+                                debug!(missed = n, "have broadcast lagged, resyncing");
+                                advertised.start_resync();
+                                continue
+                            }
                         },
                         r = timeout(keep_alive_interval, outgoing_chan.recv()) => match r {
                             Ok(Some(WriterRequest::ReadChunkRequest(chunk))) => {
@@ -659,5 +699,296 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
                 r
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        net::SocketAddr,
+        pin::Pin,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        task::{Context, Poll},
+        time::Duration,
+    };
+
+    use buffers::ByteBuf;
+    use librqbit_core::{
+        hash_id::Id20,
+        lengths::{ChunkInfo, Lengths, ValidPieceIndex},
+    };
+    use parking_lot::Mutex;
+    use peer_binary_protocol::{Handshake, Message, extended::handshake::ExtendedHandshake};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWrite},
+        sync::{broadcast, mpsc},
+    };
+
+    use super::{PeerConnection, PeerConnectionHandler, WriterRequest};
+    use crate::{
+        advertised_haves::AdvertisedHaves,
+        read_buf::ReadBuf,
+        session::CheckedIncomingConnection,
+        spawn_utils::BlockingSpawner,
+        stream_connect::{ConnectionKind, StreamConnector},
+        type_aliases::BF,
+        vectored_traits::AsyncReadVectoredIntoCompat,
+    };
+
+    const PIECES: u32 = 1000;
+
+    /// A torrent that has `have` and completes `burst` right after the
+    /// BITFIELD was taken, before the writer reads the broadcast.
+    struct Mock {
+        lengths: Lengths,
+        have: Mutex<BF>,
+        tx: broadcast::Sender<ValidPieceIndex>,
+        burst: Vec<u32>,
+    }
+
+    impl Mock {
+        fn complete(&self, piece: u32) {
+            self.have.lock().set(piece as usize, true);
+            let _ = self
+                .tx
+                .send(self.lengths.validate_piece_index(piece).unwrap());
+        }
+    }
+
+    impl PeerConnectionHandler for &Mock {
+        fn should_send_bitfield(&self) -> bool {
+            true
+        }
+        fn serialize_bitfield_message_to_buf(
+            &self,
+            buf: &mut [u8],
+            advertised: &mut AdvertisedHaves,
+        ) -> anyhow::Result<usize> {
+            let len = {
+                let have = self.have.lock();
+                advertised.init(&have, true);
+                Message::Bitfield(ByteBuf(have.as_raw_slice())).serialize(buf, &Default::default)?
+            };
+            for &p in &self.burst {
+                self.complete(p);
+            }
+            Ok(len)
+        }
+        fn resync_haves(
+            &self,
+            advertised: &mut AdvertisedHaves,
+            emit: &mut dyn FnMut(u32) -> bool,
+        ) {
+            advertised.resync_step(&self.have.lock(), emit);
+        }
+        fn on_handshake(
+            &self,
+            _handshake: Handshake,
+            _ckind: ConnectionKind,
+            _encrypted: bool,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn on_extended_handshake(&self, _: &ExtendedHandshake<ByteBuf>) -> anyhow::Result<()> {
+            Ok(())
+        }
+        async fn on_received_message(&self, _msg: Message<'_>) -> anyhow::Result<()> {
+            Ok(())
+        }
+        fn should_transmit_have(&self, _id: ValidPieceIndex) -> bool {
+            true
+        }
+        fn on_uploaded_bytes(&self, _bytes: u32) {}
+        fn read_chunk(&self, chunk: &ChunkInfo, buf: &mut [u8]) -> anyhow::Result<()> {
+            #[allow(clippy::cast_possible_truncation)]
+            buf.fill(chunk.piece_index.get() as u8);
+            Ok(())
+        }
+    }
+
+    /// Counts the writes that reach the socket.
+    struct CountingWriter<W> {
+        inner: W,
+        writes: Arc<AtomicUsize>,
+    }
+
+    impl<W: AsyncWrite + Unpin> AsyncWrite for CountingWriter<W> {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            let r = Pin::new(&mut self.inner).poll_write(cx, buf);
+            if matches!(r, Poll::Ready(Ok(_))) {
+                self.writes.fetch_add(1, Ordering::Relaxed);
+            }
+            r
+        }
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner).poll_flush(cx)
+        }
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner).poll_shutdown(cx)
+        }
+    }
+
+    /// What the remote peer received after the handshake.
+    #[derive(Debug, PartialEq)]
+    enum Got {
+        Have(u32),
+        Piece(u32, u32, usize),
+        Other(String),
+    }
+
+    async fn read_peer_side(
+        mut stream: tokio::io::DuplexStream,
+        got: mpsc::UnboundedSender<Got>,
+    ) -> anyhow::Result<()> {
+        let mut buf = Vec::new();
+        let mut chunk = vec![0u8; 65536];
+        let mut handshake_done = false;
+        loop {
+            if !handshake_done && buf.len() >= 68 {
+                buf.drain(..68);
+                handshake_done = true;
+            }
+            while handshake_done && let Ok((msg, size)) = Message::deserialize(&buf, &[]) {
+                let item = match msg {
+                    Message::Have(i) => Got::Have(i),
+                    Message::Piece(p) => Got::Piece(p.index, p.begin, p.len()),
+                    Message::Extended(_) => Got::Other("extended".into()),
+                    Message::Bitfield(_) => Got::Other("bitfield".into()),
+                    other => Got::Other(format!("{other:?}")),
+                };
+                let _ = got.send(item);
+                buf.drain(..size);
+            }
+            let n = stream.read(&mut chunk).await?;
+            if n == 0 {
+                return Ok(());
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        }
+    }
+
+    struct Rig {
+        mock: &'static Mock,
+        #[allow(dead_code)]
+        writes: Arc<AtomicUsize>,
+        out_tx: mpsc::UnboundedSender<WriterRequest>,
+        got: mpsc::UnboundedReceiver<Got>,
+        conn: tokio::task::JoinHandle<crate::Result<()>>,
+    }
+
+    fn start(have: impl IntoIterator<Item = u32>, burst: Vec<u32>) -> Rig {
+        let lengths = Lengths::new(u64::from(PIECES) * 16384, 16384).unwrap();
+        let mut bits =
+            bitvec::bitvec![u8, bitvec::order::Msb0; 0; PIECES as usize].into_boxed_bitslice();
+        for p in have {
+            bits.set(p as usize, true);
+        }
+        let (tx, rx) = broadcast::channel(128);
+        let mock: &'static Mock = Box::leak(Box::new(Mock {
+            lengths,
+            have: Mutex::new(bits),
+            tx,
+            burst,
+        }));
+
+        let (ours, theirs) = tokio::io::duplex(1 << 20);
+        let (r, w) = tokio::io::split(ours);
+        let writes = Arc::new(AtomicUsize::new(0));
+        let writer = CountingWriter {
+            inner: w,
+            writes: writes.clone(),
+        };
+        let info_hash = Id20::new([1; 20]);
+        let addr: SocketAddr = "127.0.0.1:6881".parse().unwrap();
+        let incoming = CheckedIncomingConnection {
+            kind: ConnectionKind::Tcp,
+            addr,
+            reader: Box::new(r.into_vectored_compat()),
+            writer: Box::new(writer),
+            read_buf: ReadBuf::new(),
+            handshake: Handshake::new(info_hash, Id20::new([2; 20])),
+            encrypted: false,
+        };
+        let (out_tx, out_rx) = mpsc::unbounded_channel();
+        let conn = tokio::spawn(async move {
+            let conn = PeerConnection::new(
+                addr,
+                info_hash,
+                Id20::new([3; 20]),
+                mock,
+                None,
+                BlockingSpawner::new(1),
+                Arc::new(StreamConnector::new(Default::default()).unwrap()),
+            );
+            conn.manage_peer_incoming(out_rx, incoming, rx).await
+        });
+        let (got_tx, got) = mpsc::unbounded_channel();
+        tokio::spawn(read_peer_side(theirs, got_tx));
+        Rig {
+            mock,
+            writes,
+            out_tx,
+            got,
+            conn,
+        }
+    }
+
+    async fn next_haves(got: &mut mpsc::UnboundedReceiver<Got>, n: usize) -> Vec<u32> {
+        let mut haves = Vec::new();
+        while haves.len() < n {
+            let item = tokio::time::timeout(Duration::from_secs(5), got.recv())
+                .await
+                .expect("timed out waiting for HAVEs")
+                .expect("connection closed");
+            if let Got::Have(i) = item {
+                haves.push(i);
+            }
+        }
+        haves
+    }
+
+    /// Everything received after `Disconnect`, until the socket closes.
+    async fn finish(mut rig: Rig) -> Vec<Got> {
+        rig.out_tx.send(WriterRequest::Disconnect(Ok(()))).unwrap();
+        let _ = rig.conn.await.unwrap();
+        let mut rest = Vec::new();
+        while let Some(item) = rig.got.recv().await {
+            rest.push(item);
+        }
+        rest
+    }
+
+    /// 300 pieces complete before the writer reads the 128-slot broadcast:
+    /// every one is announced exactly once, then later pieces as usual, and
+    /// a piece already announced is not announced again.
+    #[tokio::test]
+    async fn lagging_writer_sends_every_have_once() {
+        let mut rig = start(0..100, (100..400).collect());
+        let mut haves = next_haves(&mut rig.got, 300).await;
+        haves.sort_unstable();
+        assert_eq!(haves, (100..400).collect::<Vec<_>>());
+
+        for p in 400..410 {
+            rig.mock.complete(p);
+        }
+        rig.mock.complete(150);
+        let haves = next_haves(&mut rig.got, 10).await;
+        assert_eq!(haves, (400..410).collect::<Vec<_>>());
+
+        let rest = finish(rig).await;
+        assert!(
+            !rest.iter().any(|g| matches!(g, Got::Have(_))),
+            "duplicate HAVEs: {rest:?}"
+        );
     }
 }

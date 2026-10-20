@@ -2194,7 +2194,13 @@ impl Session {
             return None;
         }
         let one = |source| {
-            self.discovery_stream(info_hash, announce, source, tm.watch_disabled_discovery())
+            self.discovery_stream(
+                info_hash,
+                announce,
+                source,
+                tm.watch_disabled_discovery(),
+                tm.dht_pacing.pacer(),
+            )
                 .take_until(tm.clone().wait_private())
                 .boxed()
         };

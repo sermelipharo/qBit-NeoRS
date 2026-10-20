@@ -493,11 +493,25 @@ impl TorrentStateLive {
         })
     }
 
+    /// The connection limit of this torrent (`None` = unlimited).
+    pub(crate) fn peer_limit(&self) -> Option<usize> {
+        self.peer_limiter.limit()
+    }
+
+    /// (connected or connecting peers, peers queued for a connection).
+    pub(crate) fn active_and_queued_peers(&self) -> (usize, usize) {
+        let s = &self.peers.stats;
+        let load = |a: &std::sync::atomic::AtomicU32| a.load(Ordering::Relaxed) as usize;
+        (load(&s.live) + load(&s.connecting), load(&s.queued))
+    }
+
     /// Change the connection limit of this live torrent. When lowered below
     /// the current number of connections, the least useful peers are
     /// disconnected (they may be retried later, within the limit).
     pub(crate) fn set_peer_limit(&self, limit: Option<usize>) {
         self.peer_limiter.set_limit(limit);
+        // A higher limit may leave the torrent short of peers.
+        self.shared.tracker_manager.dht_pacing.wake();
         let Some(limit) = limit else {
             return;
         };
@@ -1929,6 +1943,14 @@ impl PeerConnectionHandler for &'_ PeerHandler {
 
 impl PeerHandler {
     fn on_peer_died(self, error: Option<crate::Error>) -> crate::Result<()> {
+        let state = self.state.clone();
+        let r = self.on_peer_died_inner(error);
+        // With the peer entry released: may wake the DHT lookups.
+        state.shared.tracker_manager.dht_pacing.on_peer_lost(&state);
+        r
+    }
+
+    fn on_peer_died_inner(self, error: Option<crate::Error>) -> crate::Result<()> {
         self.state.v2_hashes.on_peer_gone(self.addr);
         let peers = &self.state.peers;
         let handle = self.addr;

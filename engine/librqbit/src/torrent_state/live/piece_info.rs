@@ -48,6 +48,8 @@ impl TorrentStateLive {
             && !hns.finished()
         {
             self.reconnect_all_not_needed_peers();
+            // Downloading again: the DHT lookups may need to run sooner.
+            self.shared.tracker_manager.dht_pacing.wake();
         }
         self.new_pieces_notify.notify_waiters();
         Ok(())

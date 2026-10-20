@@ -446,6 +446,7 @@ impl Session {
         announce: bool,
         source: PeerSource,
         disabled: tokio::sync::watch::Receiver<crate::DisabledDiscovery>,
+        pacer: Arc<dht::LookupPacer>,
     ) -> BoxStream<'static, (SocketAddr, PeerSource)> {
         let session = Arc::downgrade(self);
         switching_discovery_stream(
@@ -456,7 +457,9 @@ impl Session {
                 let s = session.upgrade()?;
                 let port = if announce { s.announce_port() } else { None };
                 Some(match source {
-                    PeerSource::Dht => s.get_dht().map(|d| d.get_peers(info_hash, port).boxed()),
+                    PeerSource::Dht => s
+                        .get_dht()
+                        .map(|d| d.get_peers_paced(info_hash, port, pacer.clone()).boxed()),
                     _ => s.lsd.load_full().map(|l| l.announce(info_hash, port).boxed()),
                 })
             },

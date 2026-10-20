@@ -1,4 +1,5 @@
 mod control;
+pub(crate) mod dht_pacing;
 pub mod initializing;
 pub mod live;
 pub(crate) mod missing_layers;

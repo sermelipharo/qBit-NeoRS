@@ -561,6 +561,30 @@ pub fn get_dht(&self) -> Option<Dht>;   // was Option<&Dht>
   candidate list when it ends, so hundreds of torrents do not hold hundreds
   of lookups' state. Empty rounds (no nodes yet, or no IPv6) back off from 1 s
   to 8 s.
+* Lookup pacing: `DhtState::get_peers_paced(hash, port, LookupPacer)` takes
+  the time between rounds from the caller (`get_peers` keeps a fixed 60 s).
+  The loop sleeps for `interval()` after a round; `LookupPacer::wake()`
+  re-evaluates the interval (still counted from the end of the last round),
+  `force()` starts a round at once. `announce_peer` is sent at most every
+  `DHT_ANNOUNCE_INTERVAL` (15 min, libtorrent's `dht_announce_interval`;
+  rounds less than 13.5 min apart only ask for peers), on a stream's first
+  round and on a forced round.
+* librqbit's policy (`torrent_state/dht_pacing.rs`, one pacer per torrent in
+  `TorrentTrackers`, shared by IPv4/IPv6 and both hashes of a hybrid), each
+  ±10% jitter:
+
+  | torrent                                  | interval              |
+  |------------------------------------------|-----------------------|
+  | not live yet (magnet, starting)          | 1 min                 |
+  | complete (seeding)                       | 15 min                |
+  | downloading, short of peers              | 1 min; 2 min after 10 min short |
+  | downloading, enough peers (live + connecting + queued ≥ min(connection limit, 100)) | 1 → 2 → 5 → 15 min as it keeps enough |
+
+  A dying peer of a torrent that had enough peers wakes the pacer when it no
+  longer has; so do a higher connection limit and file selection that makes a
+  complete torrent download again. A manual reannounce to all trackers
+  (`force_reannounce(None)`, also `reannounce_all`) forces a DHT round with
+  an announce, like qBittorrent's `forceDHTAnnounce`.
 
 ### Session persistence and memory
 

@@ -43,6 +43,7 @@ use crate::torrent_state::{ManagedTorrent, ManagedTorrentShared, ManagedTorrentS
 use crate::type_aliases::PeerStream;
 
 use super::TorrentStateLive;
+use super::dht_pacing::DhtPacing;
 
 /// libtorrent reports this much left when the size is unknown (magnet without
 /// metadata), so the tracker does not take us for a seed.
@@ -71,6 +72,8 @@ pub struct TorrentTrackers {
     run_lock: tokio::sync::Mutex<()>,
     running: AtomicBool,
     pub(crate) peer_sources: PeerSourceRegistry,
+    /// How often the DHT lookups of this torrent run.
+    pub(crate) dht_pacing: DhtPacing,
 }
 
 impl std::fmt::Debug for TorrentTrackers {
@@ -125,7 +128,7 @@ impl TorrentTrackers {
         disabled: bool,
         force_interval: Option<Duration>,
     ) -> Arc<Self> {
-        Arc::new(Self {
+        Arc::new_cyclic(|weak| Self {
             info_hash,
             v2_hash: AtomicBool::new(false),
             key: rand::random(),
@@ -141,6 +144,7 @@ impl TorrentTrackers {
             run_lock: tokio::sync::Mutex::new(()),
             running: AtomicBool::new(false),
             peer_sources: Default::default(),
+            dht_pacing: DhtPacing::new(weak.clone()),
         })
     }
 
@@ -150,6 +154,11 @@ impl TorrentTrackers {
 
     fn torrent(&self) -> Option<Arc<ManagedTorrent>> {
         self.torrent.get().and_then(Weak::upgrade)
+    }
+
+    /// The torrent's live state, if it is running.
+    pub(crate) fn live_torrent(&self) -> Option<Arc<TorrentStateLive>> {
+        self.torrent().and_then(|t| t.live())
     }
 
     /// The hash this list was created with is a truncated v2 hash (a `btmh`
@@ -290,7 +299,12 @@ impl TorrentTrackers {
         })
     }
 
+    /// Without a URL, the DHT announces at once too (qBittorrent's
+    /// reannounce does both).
     pub fn force_reannounce(&self, url: Option<&str>) -> bool {
+        if url.is_none() {
+            self.dht_pacing.force();
+        }
         self.with_list(|l| l.force_reannounce(url))
     }
 

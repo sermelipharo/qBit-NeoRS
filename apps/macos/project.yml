@@ -236,6 +236,7 @@ targets:
       - path: QBTNeo/Features/Preferences/Catalog/SettingsSearchAliases.swift
       - path: QBTNeo/Features/Preferences/Catalog/SourceStrings.swift
       - path: QBTNeo/Shared/Table/SortKeyPromotion.swift
+      - path: QBTNeo/Properties/General/AdaptiveColumns.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests

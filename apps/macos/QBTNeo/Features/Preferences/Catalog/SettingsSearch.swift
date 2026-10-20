@@ -1,9 +1,11 @@
 import Foundation
 
 /// Settings search over the catalog: every word of the query must appear in
-/// the label, the section or pane title, a keyword, or a stored key (WebAPI
-/// or ini name). Case, diacritics and width are ignored, so it works the same
-/// in every language. Covers all tiers.
+/// the label, the section, segment or pane title, a keyword, qBittorrent's
+/// own label or group for the setting, or a stored key (WebAPI, GUI ini or
+/// imported qBittorrent ini name). Labels and titles match in the UI language
+/// and in English. Covers every tier with a row, advanced ones included
+/// (matching rules: `SettingsSearchIndex`).
 @MainActor
 enum SettingsSearch {
     struct Result: Identifiable {
@@ -16,36 +18,13 @@ enum SettingsSearch {
 
     static let limit = 40
 
-    /// One catalog entry's searchable text, folded once, by relevance.
-    private struct Entry {
-        let spec: SettingSpec
-        /// Label; section and pane titles; keywords and stored keys; explanation.
-        let fields: [String]
-        let all: String
-    }
+    /// Built on the first search.
+    private static let index = SettingsSearchIndex(items)
 
-    private static let entries: [Entry] = SettingsCatalog.all.filter(\.tier.hasRow).map { spec in
-        let fields = [
-            spec.title,
-            spec.section.title + " " + spec.pane.title,
-            (spec.keywords + spec.keys).joined(separator: " \u{1F} "),
-            spec.help ?? "",
-        ].map { fold($0) }
-        return Entry(spec: spec, fields: fields, all: fields.joined(separator: " \u{1F} "))
-    }
-
-    /// Matches ranked by where the words were found (label, section, keyword,
-    /// explanation), then in catalog (pane) order.
+    /// Best match first: a query that is exactly a stored key, then matches in
+    /// the label, section, keyword, key, explanation; then catalog (pane) order.
     static func search(_ query: String) -> [Result] {
-        let words = fold(query).split(whereSeparator: \.isWhitespace).map(String.init)
-        guard !words.isEmpty else { return [] }
-        let ranked = entries.compactMap { entry -> (rank: Int, spec: SettingSpec)? in
-            guard words.allSatisfy({ entry.all.contains($0) }) else { return nil }
-            let rank = entry.fields.firstIndex { field in words.allSatisfy { field.contains($0) } } ?? entry.fields.count
-            return (rank, entry.spec)
-        }
-        let ordered = ranked.enumerated().sorted { ($0.element.rank, $0.offset) < ($1.element.rank, $1.offset) }
-        return ordered.prefix(limit).map { Result(spec: $0.element.spec) }
+        index.search(query, limit: limit).compactMap { SettingsCatalog.spec($0).map(Result.init) }
     }
 
     /// The label without its trailing colon.
@@ -53,7 +32,37 @@ enum SettingsSearch {
         title.trimmingCharacters(in: CharacterSet(charactersIn: ":：").union(.whitespaces))
     }
 
-    nonisolated private static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+    /// The catalog as search items, with English texts when the UI isn't English.
+    private static var items: [SettingsSearchIndex.Item] {
+        let source = SourceStrings()
+        func texts(_ text: String) -> [String] {
+            [text] + (source?.english(text).map { [$0] } ?? [])
+        }
+        return SettingsCatalog.all.map { spec in
+            let segment = spec.section.segment?.title ?? spec.section.interfaceSegment?.title
+            let aliases = spec.keys.flatMap(SettingsSearchAliases.aliases(for:))
+            let labels = aliases.filter { !isKey($0) }
+            return SettingsSearchIndex.Item(
+                id: spec.id,
+                tier: spec.tier,
+                titles: texts(spec.title),
+                path: ([spec.section.title, spec.pane.title] + (segment.map { [$0] } ?? [])).flatMap(texts),
+                keywords: spec.keywords + labels + (source == nil ? [] : labels.compactMap(translated)),
+                keys: spec.keys + aliases.filter(isKey),
+                help: spec.help
+            )
+        }
+    }
+
+    /// qBittorrent's wording in the UI language: most of its labels came with
+    /// its translations into the string catalog ("Torrent Queueing").
+    private static func translated(_ label: String) -> String? {
+        let text = Bundle.main.localizedString(forKey: label, value: nil, table: nil)
+        return text == label ? nil : text
+    }
+
+    /// An ini or WebAPI key among the aliases (`BitTorrent/Session/Port`, `random_port`) rather than a label.
+    private static func isKey(_ alias: String) -> Bool {
+        !alias.contains(" ") && (alias.contains("/") || alias.contains("_"))
     }
 }

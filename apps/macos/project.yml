@@ -231,6 +231,10 @@ targets:
       - path: QBTNeo/App/AppRelaunchArguments.swift
       - path: QBTNeo/Features/TorrentNames/Parsing
       - path: QBTNeo/Shared/Design/Symbol.swift
+      - path: QBTNeo/Features/Preferences/Catalog/SettingTier.swift
+      - path: QBTNeo/Features/Preferences/Catalog/SettingsSearchIndex.swift
+      - path: QBTNeo/Features/Preferences/Catalog/SettingsSearchAliases.swift
+      - path: QBTNeo/Features/Preferences/Catalog/SourceStrings.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests

@@ -11,6 +11,7 @@ struct SnapshotRenderer {
 
     func run() async {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if FeatureSnapshots.isFiltered, FeatureSnapshots.isWanted("main-general") { return await renderGeneralTabVariants() }
         if FeatureSnapshots.isFiltered { return await FeatureSnapshots(directory: directory, launch: launch).run() }
         let suite = "mk.lex.qbitneors.snapshot"
         UserDefaults().removePersistentDomain(forName: suite)
@@ -66,6 +67,42 @@ struct SnapshotRenderer {
         await FeatureSnapshots(directory: directory, launch: launch).run()
     }
 
+    /// `--snapshot-only main-general`: the General tab at the default size,
+    /// with a short properties panel, in a narrow window and for a seeding
+    /// torrent, light and dark.
+    private func renderGeneralTabVariants() async {
+        let suite = "mk.lex.qbitneors.snapshot"
+        UserDefaults().removePersistentDomain(forName: suite)
+        let defaults = UserDefaults(suiteName: suite) ?? .standard
+        let gui = GUIPreferences(defaults: defaults)
+        gui.propertiesVisible = true
+        gui.propertiesTab = .general
+        let model = AppModel(launch: launch, gui: gui)
+        model.attach(DemoClient(large: launch.demoLarge, animated: false))
+        await model.refresh()
+        let downloading = model.transfers.items.first { $0.name.hasPrefix("Sintel") } ?? model.transfers.items.first
+        let seeding = model.transfers.items.first { $0.state == .uploading && !$0.comment.isEmpty }
+            ?? model.transfers.items.first { $0.state == .uploading }
+        let narrow = CGSize(width: Design.Window.mainMinSize.width, height: 700)
+        let variants: [(name: String, item: TorrentItem?, size: CGSize, panelHeight: Double)] = [
+            ("main-general", downloading, Design.Window.snapshotSize, 0),
+            ("main-general-short", downloading, Design.Window.snapshotSize, 250),
+            ("main-general-narrow", downloading, narrow, 330),
+            ("main-general-seeding", seeding, Design.Window.snapshotSize, 300),
+        ]
+        for variant in variants {
+            gui.propertiesHeight = variant.panelHeight
+            if let item = variant.item { model.list.selection = [item.id] }
+            await settle(model)
+            for appearance in SnapshotAppearance.allCases {
+                await renderMain(model, name: variant.name, appearance: appearance, size: variant.size)
+            }
+        }
+        model.list.selection = []
+        await settle(model)
+        await renderMain(model, name: "main-general-empty", appearance: .light)
+    }
+
     // MARK: Rendering
 
     func settle(_ model: AppModel) async {
@@ -73,11 +110,11 @@ struct SnapshotRenderer {
         try? await Task.sleep(for: .milliseconds(150))
     }
 
-    private func renderMain(_ model: AppModel, name: String, appearance: SnapshotAppearance) async {
+    private func renderMain(_ model: AppModel, name: String, appearance: SnapshotAppearance, size: CGSize = Design.Window.snapshotSize) async {
         let view = MainWindow()
             .environment(model)
             .environment(model.gui)
-        await render(view, size: Design.Window.snapshotSize, name: name, appearance: appearance)
+        await render(view, size: size, name: name, appearance: appearance)
     }
 
     /// Hosts `view` in an off-screen window of `size` (nil height = fitting

@@ -40,8 +40,11 @@ struct FeatureSnapshots {
         return arguments[index + 1].split(separator: ",")
     }
 
-    private func isWanted(_ name: String) -> Bool {
-        guard let filter = Self.filter else { return true }
+    private func isWanted(_ name: String) -> Bool { Self.isWanted(name) }
+
+    /// Whether `--snapshot-only` (if given) selects the window `name`.
+    static func isWanted(_ name: String) -> Bool {
+        guard let filter else { return true }
         return filter.contains { name.hasPrefix($0) }
     }
 }

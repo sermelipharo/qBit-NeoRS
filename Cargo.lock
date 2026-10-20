@@ -3247,7 +3247,7 @@ dependencies = [
 
 [[package]]
 name = "qbt-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -3293,7 +3293,7 @@ dependencies = [
 
 [[package]]
 name = "qbt-e2e"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "librqbit",
@@ -3306,7 +3306,7 @@ dependencies = [
 
 [[package]]
 name = "qbt-ffi"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "qbt-core",
  "uniffi",
@@ -3314,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "qbt-nox"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "qbt-core",
 ]

@@ -214,6 +214,15 @@ are translated at serve time).
   `DOMParser` document and shown as plain text; links are opened only for
   `http(s)` URLs. The CSP for the built-in UI is `script-src 'self';
   style-src 'self'` (no inline code; styles set from scripts use the CSSOM).
+* Torrent names: the macOS app pushes its enabled name rules and switches to
+  the core (`App::set_torrent_name_rules`, memory only), which serves them at
+  `api/v2/neors/nameRules` (a qBit NeoRS extension; `?since=<version>`
+  answers only `unchanged`). `nameparser.ts`/`contentkind.ts` port the
+  app's parser; `icuregex.ts` translates the ICU patterns (and refuses
+  ICU-only syntax, which `NameRuleWebCompatibility` warns about in the rule
+  editor). Parity: `NameParserWebFixtureTests` writes
+  `webui/test/names-fixture.json`, `scripts/test-webui.sh` checks the port
+  against it. Without the endpoint names stay raw.
 * Layout: sidebar · list/cards · inspector on wide screens; below 760 px a
   drawer, a tab bar, two-line rows and bottom sheets (`css/phone.css`).
 

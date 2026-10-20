@@ -6,6 +6,7 @@ import { get, post } from "./api";
 import { app, emit, on, setPoke, type Section } from "./app";
 import { createDetails } from "./details";
 import { icon } from "./icons";
+import { refreshNameRules } from "./names";
 import { createRss } from "./rss";
 import { createSearch } from "./search";
 import { applyAppearance, openSettings } from "./settings";
@@ -178,6 +179,7 @@ async function poll(): Promise<void> {
   if (inflight) return;
   inflight = true;
   try {
+    void refreshNameRules();
     const d = await get("sync/maindata", { rid: currentRid() });
     const ch = apply(d);
     failures = 0;
@@ -205,7 +207,10 @@ setPoke(poke);
 // No polling while the tab is hidden: no CPU or network work in the background.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) clearTimeout(timer);
-  else poll();
+  else {
+    void refreshNameRules(true);
+    poll();
+  }
 });
 
 // ---- input ---------------------------------------------------------------------------

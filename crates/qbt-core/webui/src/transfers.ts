@@ -4,6 +4,8 @@ import { remove, selected, start, stop, torrentMenu } from "./actions";
 import { app, emit, on } from "./app";
 import { icon } from "./icons";
 import { type Change, filter, kind, makePredicate, sort, sortList, STATUS, stateText, torrents, trackerHosts, type Torrent } from "./store";
+import { type Chip, contentKind, emphasizesTitles, parsedName, showsCardTags } from "./names";
+import { KIND_TITLES } from "./contentkind";
 import { menu } from "./ui";
 import { bytes, debounce, eta, h, isNarrow, pct, ratio, save, setText, shortDate, speed, toggle } from "./util";
 import { VList } from "./vlist";
@@ -44,8 +46,49 @@ interface Cells {
   added?: HTMLElement;
   meta?: HTMLElement;
   chips?: HTMLElement;
+  tags?: HTMLElement;
+  labels?: HTMLElement;
+  contentKind?: HTMLElement;
 }
 const cells = new WeakMap<HTMLElement, Cells>();
+/** What an element shows, so unchanged content is not rebuilt on every poll. */
+const shown = new WeakMap<Element, string>();
+
+const CONTENT_ICON: Record<string, string> = {
+  video: "film", music: "music", software: "app", game: "game", rom: "chip", audiobook: "headphones", book: "book", comic: "comic", adult: "adult", other: "doc",
+};
+
+/** The list's name: the parsed title semibold, the technical rest regular (like the app). */
+function setListName(el: HTMLElement, name: string): void {
+  const p = emphasizesTitles() ? parsedName(name) : null;
+  const sig = p && p.titleEnd > p.titleStart ? `${p.titleStart}:${p.titleEnd}:${name}` : "\u0000" + name;
+  if (shown.get(el) === sig) return;
+  shown.set(el, sig);
+  toggle(el, "parsed", !!p && p.titleEnd > p.titleStart);
+  if (!p || p.titleEnd <= p.titleStart) el.textContent = name;
+  else el.replaceChildren(name.slice(0, p.titleStart), h("span", { class: "tt" }, name.slice(p.titleStart, p.titleEnd)), name.slice(p.titleEnd));
+}
+
+function setContentKind(el: HTMLElement, kind: string): void {
+  if (shown.get(el) === kind) return;
+  shown.set(el, kind);
+  el.dataset.kind = kind;
+  el.title = KIND_TITLES[kind as keyof typeof KIND_TITLES] ?? "";
+  el.setAttribute("aria-label", el.title);
+  el.replaceChildren(icon(CONTENT_ICON[kind] ?? "doc"));
+}
+
+/** The name's tags in their category's style, then the torrent's category and tags. */
+function setCardChips(c: Cells, chips: Chip[], category: string, tags: string[]): void {
+  const sig = JSON.stringify([chips, category, tags]);
+  if (shown.get(c.chips!) === sig) return;
+  shown.set(c.chips!, sig);
+  c.tags!.replaceChildren(...chips.map((x) => h("span", { class: "chip", "data-c": x.category }, x.text)));
+  c.labels!.replaceChildren(
+    ...(category ? [h("span", { class: "chip lbl" }, icon("folder"), category)] : []),
+    ...tags.map((t) => h("span", { class: "chip lbl" }, icon("tag"), t)),
+  );
+}
 
 function setBadge(c: Cells, k: string): void {
   if (c.kind === k) return;
@@ -88,8 +131,12 @@ function createRow(): HTMLElement {
 function createCard(): HTMLElement {
   const c = {} as Cells;
   const el = h("div", { class: "card", role: "option" },
-    h("div", { class: "card-top" }, (c.badge = h("span", { class: "badge" })), (c.name = h("div", { class: "title" }))),
-    (c.chips = h("div", { class: "chips" })),
+    h("div", { class: "card-top" },
+      (c.contentKind = h("span", { class: "content-kind", role: "img" })),
+      (c.name = h("div", { class: "title" })),
+      (c.badge = h("span", { class: "badge" })),
+    ),
+    (c.chips = h("div", { class: "chips" }, (c.tags = h("span", { class: "name-tags" })), (c.labels = h("span", { class: "labels" })))),
     h("div", { class: "bar" }, (c.fill = h("div", { class: "fill" }))),
     h("div", { class: "card-line" }, (c.size = h("span", null)), (c.pct = h("span", { class: "pct" }))),
     h("div", { class: "card-line" }, (c.state = h("span", { class: "state" })), h("span", { class: "speeds" }, icon("down"), (c.dl = h("span", null)), icon("up"), (c.ul = h("span", null)))),
@@ -104,7 +151,6 @@ function fillCommon(el: HTMLElement, t: Torrent): Cells {
   const c = cells.get(el)!;
   const k = kind(t.state);
   setBadge(c, k);
-  setText(c.name, t.name);
   setFill(c, t.progress, k);
   setText(c.pct, pct(t.progress));
   setText(c.state, stateText(t.state));
@@ -121,6 +167,7 @@ function fillCommon(el: HTMLElement, t: Torrent): Cells {
 
 function updateRow(el: HTMLElement, t: Torrent, i: number): void {
   const c = fillCommon(el, t);
+  setListName(c.name, t.name);
   setText(c.size, bytes(t.size));
   setText(c.added!, shortDate(t.added_on));
   const parts = [stateText(t.state), t.progress >= 1 ? bytes(t.size) : `${bytes(t.size - t.amount_left)} of ${bytes(t.size)}`];
@@ -133,9 +180,13 @@ function updateRow(el: HTMLElement, t: Torrent, i: number): void {
 
 function updateCard(el: HTMLElement, t: Torrent): void {
   const c = fillCommon(el, t);
+  const parsed = parsedName(t.name);
+  setText(c.name, parsed ? parsed.title : t.name);
+  if (c.name.title !== t.name) c.name.title = t.name;
+  setContentKind(c.contentKind!, contentKind(t.name, t.category));
   setText(c.size, t.progress >= 1 ? bytes(t.size) : `${bytes(t.size - t.amount_left)} of ${bytes(t.size)}`);
-  const chips = [t.category, ...(t.tags ? t.tags.split(",").map((s) => s.trim()) : [])].filter(Boolean).join("  ·  ");
-  setText(c.chips!, chips);
+  const tags = t.tags ? t.tags.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  setCardChips(c, parsed && showsCardTags() ? parsed.chips : [], t.category, tags);
 }
 
 export function createTransfers() {
@@ -392,6 +443,12 @@ export function createTransfers() {
   on("filter", () => {
     scroller.scrollTop = 0;
     refresh();
+  });
+  // Name rules arrived or changed: redraw every name.
+  on("names", () => {
+    list.invalidate();
+    cards.invalidate();
+    active().render();
   });
   on("narrow", () => {
     active().relayout();

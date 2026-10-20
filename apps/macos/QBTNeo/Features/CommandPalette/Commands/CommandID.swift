@@ -12,6 +12,9 @@ enum CommandID: String, CaseIterable, Sendable {
     case startAll, stopAll, pauseSession, resumeSession
     // View
     case viewAsList, viewAsCards
+    case sortByQueue, sortByName, sortByStatus, sortByProgress, sortBySize, sortByDownSpeed, sortByUpSpeed, sortByETA
+    case sortByRatio, sortBySeeds, sortByPeers, sortByCategory, sortByAddedOn, sortByCompletedOn, sortByLastActivity
+    case sortAscending, sortDescending
     case toggleStatusBar, toggleFiltersSidebar, toggleSpeedInTitle, toggleDetails
     case detailsGeneral, detailsTrackers, detailsPeers, detailsHTTPSources, detailsContent, detailsSpeed
     case resetFilters

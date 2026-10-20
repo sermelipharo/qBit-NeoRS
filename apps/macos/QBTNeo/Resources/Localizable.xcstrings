@@ -192705,6 +192705,24 @@
         }
       }
     },
+    "palette.keywords.sort": {
+      "comment": "Command Palette search words, comma-separated",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "order, arrange"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сортировка, порядок, упорядочить, sort, order"
+          }
+        }
+      }
+    },
     "POSIX-compliant": {
       "localizations": {
         "ar": {
@@ -238306,6 +238324,143 @@
           "stringUnit": {
             "state": "translated",
             "value": "SMTP 伺服器："
+          }
+        }
+      }
+    },
+    "Sort by %@": {
+      "comment": "Command Palette: sort torrents by a field",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сортировать по: %@"
+          }
+        }
+      }
+    },
+    "sort.ascending": {
+      "comment": "Sort By: smallest, earliest or A first",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ascending"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По возрастанию"
+          }
+        }
+      }
+    },
+    "sort.command.ascending": {
+      "comment": "Command Palette: sort torrents in ascending order",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort Ascending"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сортировать по возрастанию"
+          }
+        }
+      }
+    },
+    "sort.command.descending": {
+      "comment": "Command Palette: sort torrents in descending order",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort Descending"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сортировать по убыванию"
+          }
+        }
+      }
+    },
+    "sort.descending": {
+      "comment": "Sort By: largest, latest or Z first",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descending"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По убыванию"
+          }
+        }
+      }
+    },
+    "sort.direction": {
+      "comment": "Sort By: the ascending / descending choice",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Order"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Порядок"
+          }
+        }
+      }
+    },
+    "sort.field.queuePosition": {
+      "comment": "Sort By: the queue position field",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queue Position"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позиция в очереди"
+          }
+        }
+      }
+    },
+    "sort.menu": {
+      "comment": "Toolbar and View menu: choose the transfer list's sort order",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort By"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сортировать по"
           }
         }
       }

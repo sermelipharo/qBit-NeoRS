@@ -59,6 +59,8 @@ extension MainMenuController {
             menu.addItem(action.makeItem(mode.title, shortcut: CommandRegistry[id].shortcut))
         }
         menu.addItem(.separator())
+        menu.addItem(sortMenuItem())
+        menu.addItem(.separator())
         menu.addItem(standardItem(SystemMenuTitle.text("Show Toolbar"), #selector(NSWindow.toggleToolbarShown(_:)), "t", [.command, .option]))
         menu.addItem(standardItem(SystemMenuTitle.text("Customize Toolbar…"), #selector(NSWindow.runToolbarCustomizationPalette(_:))))
         menu.addItem(.separator())

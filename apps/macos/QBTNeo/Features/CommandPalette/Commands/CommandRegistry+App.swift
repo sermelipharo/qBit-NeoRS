@@ -3,7 +3,7 @@ import SwiftUI
 /// Commands of the File, View, Tools and Help menus.
 extension CommandRegistry {
     static var appCommands: [AppCommand] {
-        fileCommands + viewCommands + detailsCommands + windowCommands
+        fileCommands + viewCommands + sortCommands + detailsCommands + windowCommands
     }
 
     private static var fileCommands: [AppCommand] {

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main window toolbar (features.md §1.2), customizable (View › Customize
 /// Toolbar…). On the Transfers tab: add, the List / Cards switch (a qBit
-/// NeoRS extension, like Finder's view picker), remove, start/stop, queue
+/// NeoRS extension, like Finder's view picker), Sort By, remove, start/stop, queue
 /// (when queueing is enabled), lock and options; buttons render from the
 /// command registry, like the menus. The RSS tab shows the reader's actions,
 /// the full-size log nothing of its own. The search field is
@@ -39,6 +39,10 @@ struct MainToolbar: CustomizableToolbarContent {
     @ToolbarContentBuilder private var transferItems: some CustomizableToolbarContent {
         ToolbarItem(id: "viewMode") {
             TransferViewModePicker(gui: model.gui)
+        }
+        // In the list and the cards alike, so switching never moves the switch.
+        ToolbarItem(id: "sort") {
+            TransferSortMenu(list: model.list, queueingEnabled: model.queueingEnabled)
         }
         ToolbarItem(id: "remove") {
             CommandToolbarButton(.remove, model: model)

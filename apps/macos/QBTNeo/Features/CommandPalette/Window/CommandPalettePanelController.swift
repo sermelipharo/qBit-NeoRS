@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 
 /// Shows the palette panel centered over the main window (upper half, like
-/// Spotlight and Xcode's Open Quickly) on clear Liquid Glass, the most
-/// transparent material, and closes it when it loses key status (a click
-/// outside, another window).
+/// Spotlight and Xcode's Open Quickly) on regular Liquid Glass (clear glass
+/// melts into the background with reduced blur), and closes it when it loses
+/// key status (a click outside, another window).
 @MainActor
 final class CommandPalettePanelController: NSObject, NSWindowDelegate {
     static let size = CGSize(width: 640, height: 440)
@@ -18,7 +18,7 @@ final class CommandPalettePanelController: NSObject, NSWindowDelegate {
         self.model = model
         super.init()
         let background = NSGlassEffectView(frame: CGRect(origin: .zero, size: Self.size))
-        background.style = .clear
+        background.style = .regular
         background.cornerRadius = Self.cornerRadius
         let hosting = NSHostingView(rootView: CommandPaletteView(model: model))
         hosting.frame = background.bounds

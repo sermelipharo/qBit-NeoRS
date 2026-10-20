@@ -90,6 +90,8 @@ enum SettingsCatalogCheck {
         var ids: [String: Int] = [:]
         for spec in SettingsCatalog.all { ids[spec.id, default: 0] += 1 }
         problems += ids.filter { $0.value > 1 }.keys.sorted().map { "\($0): duplicate id" }
+        // Search aliases are looked up by these keys, so a renamed key would silently lose them.
+        problems += SettingsSearchAliases.keys.filter { counts[$0] == nil }.sorted().map { "\($0): search aliases for an unknown key" }
         return problems
     }
 

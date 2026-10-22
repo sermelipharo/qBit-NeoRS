@@ -81,6 +81,9 @@ jobs:
       - name: SwiftLint
         working-directory: apps/macos
         run: swiftlint lint --strict --quiet
+      - name: Build the core
+        # Also writes the Swift bindings (apps/macos/Generated) that xcodegen lists.
+        run: scripts/build-core.sh release
       - name: Generate the project
         working-directory: apps/macos
         run: xcodegen generate

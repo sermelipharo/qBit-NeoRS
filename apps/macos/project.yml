@@ -237,6 +237,7 @@ targets:
       - path: QBTNeo/Features/Preferences/Catalog/SourceStrings.swift
       - path: QBTNeo/Shared/Table/SortKeyPromotion.swift
       - path: QBTNeo/Properties/General/AdaptiveColumns.swift
+      - path: QBTNeo/Features/Paste/PastedText.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests

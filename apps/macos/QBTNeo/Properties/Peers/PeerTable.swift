@@ -45,6 +45,7 @@ enum PeerTable {
         }
         configuration.deleteAction = { model.requestBanPeers(properties.peerSelection) }
         configuration.copyAction = { model.copyPeers(properties.peerSelection) }
+        configuration.pasteAction = { model.pastePeers() }
         let controller = ListTableController(configuration)
         controller.observe({ gui.hideZeroValues && gui.hideZeroMode == .always }, apply: { [weak controller] _ in
             controller?.refreshAll()

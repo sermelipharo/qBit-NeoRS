@@ -33,6 +33,7 @@ where Row.ID: Sendable {
         var primaryAction: (@MainActor (Set<Row.ID>) -> Void)?
         var deleteAction: (@MainActor () -> Void)?
         var copyAction: (@MainActor () -> Void)?
+        var pasteAction: (@MainActor () -> Void)?
         var allowsMultipleSelection = true
         /// False for single-column lists (the Execution Log).
         var showsHeader = true
@@ -79,6 +80,7 @@ where Row.ID: Sendable {
         }
         if let action = configuration.deleteAction { table.deleteAction = { _ in action() } }
         table.copyAction = configuration.copyAction
+        table.pasteAction = configuration.pasteAction
         columns = TableColumnsController(table: table, specs: configuration.specs, storageKey: configuration.layoutKey)
         if !configuration.showsHeader {
             table.headerView = nil

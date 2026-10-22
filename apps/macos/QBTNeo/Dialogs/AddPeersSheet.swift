@@ -30,32 +30,11 @@ struct AddPeersSheet: View {
             error = String(localized: "Please type at least one peer.")
             return
         }
-        if let invalid = lines.first(where: { !Self.isValidPeer($0) }) {
+        if let invalid = lines.first(where: { !PastedText.isPeerAddress($0) }) {
             error = String(localized: "The peer '\(invalid)' is invalid.")
             return
         }
         model.perform { try $0.addPeers(hashes: ids, peers: lines) }
         dismiss()
-    }
-
-    /// `PeerAddress::parse`: `[v6]:port` or `v4:port` with a non-zero port.
-    static func isValidPeer(_ line: String) -> Bool {
-        let host: Substring
-        let port: Substring
-        if line.hasPrefix("[") {
-            guard let close = line.firstIndex(of: "]"), line[line.index(after: close)...].hasPrefix(":") else { return false }
-            host = line[line.index(after: line.startIndex)..<close]
-            port = line[line.index(close, offsetBy: 2)...]
-            guard host.contains(":") else { return false }
-        } else {
-            let parts = line.split(separator: ":", omittingEmptySubsequences: false)
-            guard parts.count == 2 else { return false }
-            host = parts[0]
-            port = parts[1]
-            let octets = host.split(separator: ".", omittingEmptySubsequences: false)
-            guard octets.count == 4, octets.allSatisfy({ UInt8($0) != nil }) else { return false }
-        }
-        guard let number = UInt16(port), number > 0 else { return false }
-        return true
     }
 }

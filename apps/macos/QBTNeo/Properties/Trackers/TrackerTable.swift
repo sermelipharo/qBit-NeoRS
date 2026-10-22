@@ -60,6 +60,7 @@ enum TrackerTable {
             let urls = model.selectedTrackerURLs()
             if !urls.isEmpty { model.copyToPasteboard(urls.joined(separator: "\n")) }
         }
+        configuration.pasteAction = { model.pasteTrackers() }
         let controller = ListTableController(configuration)
         // Expanding a tracker blanks its totals and turns its chevron.
         controller.observe({ properties.expandedTrackers }, apply: { [weak controller] _ in controller?.refreshAll() })

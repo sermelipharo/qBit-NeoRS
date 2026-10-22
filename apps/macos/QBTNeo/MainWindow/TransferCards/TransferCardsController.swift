@@ -55,6 +55,7 @@ final class TransferCardsController: NSObject, NSCollectionViewDataSource, NSCol
             guard let self else { return }
             model.performDoubleClick(ids(paths))
         }
+        collectionView.pasteAction = { [weak self] in self?.model.pasteFromClipboard() }
         collectionView.deleteAction = { [weak self] shift in
             guard let self else { return }
             model.requestRemove(model.list.selectedIDs, deleteFiles: shift)

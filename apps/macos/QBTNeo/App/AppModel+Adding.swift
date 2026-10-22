@@ -109,17 +109,6 @@ extension AppModel {
         return !links.isEmpty
     }
 
-    /// ⌘V in the transfer list: links in the text, or copied .torrent files.
-    func pasteFromClipboard() {
-        let pasteboard = NSPasteboard.general
-        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
-           !urls.isEmpty {
-            addTorrentFiles(urls.filter { $0.pathExtension.lowercased() == "torrent" })
-        } else if let text = pasteboard.string(forType: .string) {
-            addTorrentLinks(fromText: text)
-        }
-    }
-
     /// Files and links dropped on the transfer list.
     func handleDrop(_ items: [DroppedItem]) -> Bool {
         var handled = false
@@ -152,26 +141,12 @@ extension AppModel {
             || lower.hasPrefix("http:") || lower.hasPrefix("https:")
     }
 
-    /// Lines the links dialog prefills from the clipboard: URLs, magnets and
-    /// bare v1 (hex/base32) or v2 info hashes.
-    static func isDownloadable(_ line: String) -> Bool {
-        let lower = line.lowercased()
-        if lower.hasPrefix("magnet:") || lower.hasPrefix("http:") || lower.hasPrefix("https:")
-            || lower.hasPrefix("ftp:") || lower.hasPrefix("file:") || lower.hasPrefix("data:") {
-            return true
-        }
-        let hex = line.allSatisfy(\.isHexDigit)
-        if hex, line.count == 40 || line.count == 64 { return true }
-        let base32 = line.allSatisfy { ("a"..."z").contains($0.lowercased()) || ("2"..."7").contains($0) }
-        return base32 && line.count == 32
-    }
-
     /// Clipboard lines suitable for the links dialog.
     static func clipboardLinks() -> String {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         let lines = text.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter(isDownloadable)
+            .filter(PastedText.isDownloadable)
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
 }

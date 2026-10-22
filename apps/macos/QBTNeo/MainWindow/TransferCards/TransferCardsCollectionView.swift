@@ -10,6 +10,7 @@ final class TransferCardsCollectionView: NSCollectionView {
     var menuProvider: ((Set<IndexPath>) -> NSMenu?)?
     var primaryAction: ((Set<IndexPath>) -> Void)?
     var deleteAction: ((_ shift: Bool) -> Void)?
+    var pasteAction: (() -> Void)?
     var keyHandler: ((NSEvent) -> Bool)?
     /// Called when the emphasis (key window and focus) of the selection changes.
     var onEmphasisChange: ((Bool) -> Void)?
@@ -88,9 +89,14 @@ final class TransferCardsCollectionView: NSCollectionView {
         deleteAction?(false)
     }
 
+    @objc func paste(_ sender: Any?) {
+        pasteAction?()
+    }
+
     override func responds(to aSelector: Selector!) -> Bool {
         MainActor.assumeIsolated {
             if aSelector == #selector(delete(_:)) { return deleteAction != nil && !selectionIndexPaths.isEmpty }
+            if aSelector == #selector(paste(_:)) { return pasteAction != nil }
             return super.responds(to: aSelector)
         }
     }

@@ -167,7 +167,7 @@ impl Session {
 
         session.restore_records(records.0, records.1, &prefs).await;
 
-        logger.info("Peer ID: \"-NR0220-\"");
+        logger.info("Peer ID: \"-NR0230-\"");
         logger.info(format!("HTTP User-Agent: \"{}\"", super::policy::client_name()));
         let onoff = |b: bool| if b { "ON" } else { "OFF" };
         logger.info(format!("Distributed Hash Table (DHT) support: {}", onoff(prefs.bittorrent.dht)));

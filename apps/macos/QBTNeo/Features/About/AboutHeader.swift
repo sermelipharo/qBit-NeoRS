@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// App icon, name and version (`qBit NeoRS v0.2.2 (64-bit)`).
+/// App icon, name and version (`qBit NeoRS v0.2.3 (64-bit)`).
 struct AboutHeader: View {
     let version: String
     let bitness: Int32

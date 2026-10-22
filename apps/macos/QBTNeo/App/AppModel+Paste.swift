@@ -6,7 +6,6 @@ extension AppModel {
     /// The transfer list: copied .torrent files or torrent links are added;
     /// text with only trackers or only peers goes to the selected torrents.
     func pasteFromClipboard() {
-        let pasteboard = NSPasteboard.general
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
             addTorrentFiles(urls.filter { $0.pathExtension.lowercased() == "torrent" })
@@ -35,7 +34,7 @@ extension AppModel {
     /// The Trackers tab: tracker URLs (and a magnet's trackers) join the
     /// torrent in new tiers after its last one, like "Add trackers".
     func pasteTrackers() {
-        guard let item = list.currentItem, let text = NSPasteboard.general.string(forType: .string) else { return NSSound.beep() }
+        guard let item = list.currentItem, let text = pasteboard.string(forType: .string) else { return NSSound.beep() }
         let pasted = PastedText(text, context: .trackers)
         guard pasted.trackerCount > 0 else { return NSSound.beep() }
         let lastTier = properties.trackerEntries.filter { $0.tier >= 0 }.map(\.tier).max()
@@ -45,7 +44,7 @@ extension AppModel {
 
     /// The Peers tab: `IP:port` lines (and a magnet's peers) are added, like "Add Peers…".
     func pastePeers() {
-        guard let item = list.currentItem, let text = NSPasteboard.general.string(forType: .string),
+        guard let item = list.currentItem, let text = pasteboard.string(forType: .string),
               addPeersDisabledReason(item) == nil else { return NSSound.beep() }
         let peers = PastedText(text, context: .transfers).peers
         guard !peers.isEmpty else { return NSSound.beep() }

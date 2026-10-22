@@ -68,6 +68,8 @@ final class AppModel {
     @ObservationIgnored private(set) lazy var termination = TerminationController(app: self)
     /// In-app updates (Sparkle); inactive except in release downloads.
     @ObservationIgnored let updater: AppUpdater
+    /// Where ⌘V reads from; UI scenarios use a private one to leave the user's clipboard alone.
+    @ObservationIgnored var pasteboard = NSPasteboard.general
     /// The main window, once SwiftUI has created it.
     @ObservationIgnored weak var mainWindow: NSWindow?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?

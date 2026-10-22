@@ -26,6 +26,7 @@ enum UIScenarios {
             case "live-lock": try await liveLock(driver)
             case "live-toolbar": try await liveToolbar(driver)
             case "live-details": try await liveDetails(driver)
+            case "live-paste": try await livePaste(driver)
             case "live-labels-set": try await liveLabelsSet(driver)
             case "live-labels-verify": try await liveLabelsVerify(driver)
             case "mem-window": try await memWindow(driver)

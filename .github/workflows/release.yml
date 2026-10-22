@@ -48,6 +48,8 @@ jobs:
           xcodebuild build -project QBTNeo.xcodeproj -scheme QBTNeo -configuration Release \
             -derivedDataPath "$RUNNER_TEMP/dd" \
             CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO -quiet
+          # Ad-hoc code may only load Sparkle.framework without library validation.
+          ../../scripts/adhoc-sign.sh "$RUNNER_TEMP/dd/Build/Products/Release/qBit NeoRS.app"
       - name: Check the bundle
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Release/qBit NeoRS.app"

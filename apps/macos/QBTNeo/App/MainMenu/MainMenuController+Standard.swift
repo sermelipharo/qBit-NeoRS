@@ -7,6 +7,13 @@ extension MainMenuController {
         let menu = NSMenu(title: SystemMenuTitle.appName)
         let about = MenuItemAction { [model] in model.show(.about) }
         menu.addItem(about.makeItem(String(localized: "About qBit NeoRS")))
+        if model.updater.isAvailable {
+            let update = MenuItemAction(
+                isEnabled: { [model] in model.updater.canCheckForUpdates },
+                perform: { [model] in model.updater.checkForUpdates() }
+            )
+            menu.addItem(update.makeItem(String(localized: "Check for Updates…")))
+        }
         menu.addItem(.separator())
         let settings = MenuItemAction { [model] in
             if model.openSettings != nil {

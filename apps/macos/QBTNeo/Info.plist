@@ -114,6 +114,12 @@
 	<string>NSApplication</string>
 	<key>QBTAppGroup</key>
 	<string>$(QBT_APP_GROUP)</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/sermelipharo/qBit-NeoRS/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>X4Mr2cc3URUCnJTrl/CsVd50BRa8epb3k++Q/vGwm3A=</string>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

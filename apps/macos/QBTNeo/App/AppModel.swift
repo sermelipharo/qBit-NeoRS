@@ -66,6 +66,8 @@ final class AppModel {
 
     /// Quitting: sheets, exit confirmation, lock password, core shutdown.
     @ObservationIgnored private(set) lazy var termination = TerminationController(app: self)
+    /// In-app updates (Sparkle); inactive except in release downloads.
+    @ObservationIgnored let updater: AppUpdater
     /// The main window, once SwiftUI has created it.
     @ObservationIgnored weak var mainWindow: NSWindow?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
@@ -90,6 +92,7 @@ final class AppModel {
         names = TorrentNamesModel(gui: gui)
         properties = PropertiesModel(patternFormat: gui.contentFilterPatternFormat)
         palette = CommandPaletteModel(persistent: !launch.isSnapshot)
+        updater = AppUpdater(launch: launch, gui: gui)
         lock.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
         favicons.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
         names.clientProvider = { [weak self] in self?.client as? any TorrentNamesClient }

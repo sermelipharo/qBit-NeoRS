@@ -17,6 +17,7 @@ import Foundation
 ///   widget installed (testing). Otherwise only the default profile feeds
 ///   them, and only while widgets exist, because every instance shares the
 ///   widgets' App Group container.
+/// * `--updates`: check for updates (Sparkle) with `--profile` too, for testing them.
 /// * `--widget-pin <hash>`: publish that torrent as if a Torrent widget
 ///   followed it (testing; repeatable).
 struct LaunchOptions: Sendable {
@@ -29,6 +30,7 @@ struct LaunchOptions: Sendable {
     var profileDirectory = ""
     var assumesVisibleWindow = false
     var widgetsRequested = false
+    var updatesRequested = false
     var widgetPins: [String] = []
 
     static let current = Self(arguments: CommandLine.arguments)
@@ -49,6 +51,7 @@ struct LaunchOptions: Sendable {
                 profileDirectory = iterator.next() ?? ""
             case "--assume-visible": assumesVisibleWindow = true
             case "--widgets": widgetsRequested = true
+            case "--updates": updatesRequested = true
             case "--widget-pin":
                 if let id = iterator.next() { widgetPins.append(id.lowercased()) }
             default: break

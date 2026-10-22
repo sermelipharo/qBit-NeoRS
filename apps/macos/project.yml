@@ -19,6 +19,11 @@ settings:
     # Shared by the app and the widget extension. Starting with the team ID
     # lets macOS honour it without a provisioning profile.
     QBT_APP_GROUP: YWA2X8G6VY.mk.lex.qbitneors
+packages:
+  # In-app updates from the GitHub releases (appcast signed with EdDSA).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   QBTNeo:
     type: application
@@ -31,6 +36,7 @@ targets:
       - framework: ../../build/QBTCoreFFI.xcframework
         embed: false
       - target: QBTNeoWidgets
+      - package: Sparkle
       - sdk: SystemConfiguration.framework
       - sdk: Security.framework
       - sdk: CoreFoundation.framework
@@ -49,6 +55,10 @@ targets:
         LSMinimumSystemVersion: "27.0"
         QBTAppGroup: $(QBT_APP_GROUP)
         NSPrincipalClass: NSApplication
+        SUFeedURL: https://github.com/sermelipharo/qBit-NeoRS/releases/latest/download/appcast.xml
+        SUPublicEDKey: X4Mr2cc3URUCnJTrl/CsVd50BRa8epb3k++Q/vGwm3A=
+        # The app turns checks on from "Check for program updates" (AppUpdater).
+        SUEnableAutomaticChecks: false
         CFBundleLocalizations:
           - en
           - ar

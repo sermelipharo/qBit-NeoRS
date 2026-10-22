@@ -56737,6 +56737,16 @@
         }
       }
     },
+    "Check for Updates…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить обновления…"
+          }
+        }
+      }
+    },
     "Checked": {
       "localizations": {
         "ru": {

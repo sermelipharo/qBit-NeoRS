@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+
+jobs:
+  core:
+    name: Rust core
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/setup-rust.sh
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: core-${{ hashFiles('Cargo.lock') }}
+          restore-keys: core-
+      - name: Clippy
+        run: cargo clippy -p qbt-core --features ffi --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+
+  webui:
+    name: Web UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Tests
+        run: scripts/test-webui.sh
+      - name: Committed bundle is up to date
+        run: |
+          scripts/build-webui.sh --check
+          git diff --exit-code -- crates/qbt-core/webui/www
+
+  app:
+    name: macOS app
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: .github/scripts/setup-rust.sh
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-
+      - name: Tools
+        run: brew install xcodegen swiftlint
+      - name: SwiftLint
+        working-directory: apps/macos
+        run: swiftlint lint --strict --quiet
+      - name: Generate the project
+        working-directory: apps/macos
+        run: xcodegen generate
+      - name: Unit tests
+        working-directory: apps/macos
+        run: |
+          for scheme in QBTNeoUnitTests QBTNeoWidgetTests; do
+            xcodebuild test -project QBTNeo.xcodeproj -scheme "$scheme" -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= -quiet
+          done
+      - name: Build the app
+        working-directory: apps/macos
+        run: |
+          xcodebuild build -project QBTNeo.xcodeproj -scheme QBTNeo -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO -quiet

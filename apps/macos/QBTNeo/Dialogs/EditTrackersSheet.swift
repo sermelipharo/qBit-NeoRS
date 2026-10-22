@@ -22,6 +22,7 @@ struct EditTrackersSheet: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             TrackerListEditor(text: $text, minHeight: 220)
+            TrackerListSources(text: $text)
         }
         .task { text = await model.commonTrackersText(ids) }
     }

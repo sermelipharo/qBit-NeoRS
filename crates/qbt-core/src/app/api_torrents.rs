@@ -4,8 +4,9 @@
 
 use super::App;
 use crate::bittorrent::session::DiscoverySource;
-use crate::error::QbtResult;
+use crate::error::{QbtError, QbtResult};
 use crate::model::*;
+use crate::net::http::{self, HttpPurpose, HttpRequest};
 
 #[cfg_attr(feature = "ffi", uniffi::export)]
 impl App {
@@ -266,6 +267,27 @@ impl App {
 
     pub fn add_trackers(&self, hash: String, trackers: Vec<TrackerTierEntry>) -> QbtResult<()> {
         self.session.add_trackers(&hash, trackers)
+    }
+
+    /// "Add trackers" dialog's download button (qBittorrent's
+    /// `TrackersAdditionDialog`): the text of the tracker list at `url`, over
+    /// http(s) only, at most 4 MiB, through the general-purpose proxy.
+    pub async fn download_tracker_list(&self, url: String) -> QbtResult<String> {
+        let url = url.trim().to_string();
+        let lower = url.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            return Err(QbtError::invalid("The trackers list URL must start with http:// or https://"));
+        }
+        let ctx = self.ctx.clone();
+        self.spawn_on_rt(async move {
+            let req = HttpRequest { url, cookie: None, max_size: 4 * 1024 * 1024, timeout_secs: 60 };
+            let resp = http::fetch(&ctx, req, HttpPurpose::General).await?;
+            if !(200..300).contains(&resp.status) {
+                return Err(QbtError::network(format!("HTTP error {}", resp.status)));
+            }
+            Ok(String::from_utf8_lossy(&resp.body).trim().to_string())
+        })
+        .await
     }
 
     pub fn edit_tracker(&self, hash: String, orig_url: String, new_url: String) -> QbtResult<()> {

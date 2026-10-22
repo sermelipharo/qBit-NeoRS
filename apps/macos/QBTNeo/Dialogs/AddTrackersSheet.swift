@@ -4,19 +4,14 @@ import SwiftUI
 struct AddTrackersSheet: View {
     let id: String
     @Environment(AppModel.self) private var model
-    @Environment(GUIPreferences.self) private var gui
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
 
     var body: some View {
-        @Bindable var gui = gui
         DialogContainer(title: "Add trackers", confirmTitle: "Add", width: Design.Window.wideDialogWidth, onConfirm: save) {
             Text("List of trackers to add (one per line):")
             TrackerListEditor(text: $text, minHeight: 200)
-            LabeledContent("µTorrent compatible list URL:") {
-                TextField("List URL", text: $gui.trackersListURL, prompt: Text("https://"))
-                    .labelsHidden()
-            }
+            TrackerListSources(text: $text)
         }
     }
 

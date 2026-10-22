@@ -57715,6 +57715,16 @@
         }
       }
     },
+    "Choose File…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать файл…"
+          }
+        }
+      }
+    },
     "Choose a save directory": {
       "localizations": {
         "ar": {
@@ -73017,6 +73027,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Авторское право © 2006–2026, проект qBittorrent"
+          }
+        }
+      }
+    },
+    "Could not download the trackers list: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось загрузить список трекеров: %@"
+          }
+        }
+      }
+    },
+    "Could not read the file: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось прочитать файл: %@"
           }
         }
       }

@@ -82,6 +82,7 @@ protocol CoreClient: AnyObject, Sendable {
     func editTracker(hash: String, origUrl: String, newUrl: String) throws
     func removeTrackers(hash: String, urls: [String]) throws
     func replaceTrackers(hash: String, trackers: [TrackerTierEntry]) throws
+    func downloadTrackerList(url: String) async throws -> String
     func addPeers(hashes: [String], peers: [String]) throws
     func banPeers(peers: [String]) throws
     func addWebSeeds(hash: String, urls: [String]) throws

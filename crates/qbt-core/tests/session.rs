@@ -709,3 +709,45 @@ fn session_pause_is_runtime_state() {
     assert!(!app2.is_session_paused(), "pause must not survive a restart");
     app2.shutdown();
 }
+
+/// Answers one HTTP request on a local port with `status` and `body`.
+fn serve_once(status: &str, body: &'static str) -> u16 {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let status = status.to_string();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0u8; 4096];
+        let _ = stream.read(&mut request);
+        let reply = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let _ = stream.write_all(reply.as_bytes());
+    });
+    port
+}
+
+/// "Add trackers": a downloaded list comes back trimmed; HTTP errors and
+/// non-http(s) URLs are errors.
+#[test]
+fn download_tracker_list() {
+    let tmp = tempfile::tempdir().unwrap();
+    let profile = tmp.path().join("profile");
+    let downloads = tmp.path().join("downloads");
+    write_prefs(&profile, &downloads);
+    let app = start(&profile);
+    let rt = app.runtime();
+
+    let list = "udp://a.example:1337/announce\n\nhttps://b.example/announce\n";
+    let port = serve_once("200 OK", list);
+    let text = rt.block_on(app.download_tracker_list(format!(" http://127.0.0.1:{port}/trackers.txt "))).unwrap();
+    assert_eq!(text, list.trim());
+
+    let port = serve_once("404 Not Found", "");
+    let err = rt.block_on(app.download_tracker_list(format!("http://127.0.0.1:{port}/missing"))).unwrap_err();
+    assert!(err.to_string().contains("HTTP error 404"), "{err}");
+
+    for url in ["file:///etc/hosts", "ftp://example.org/list", ""] {
+        assert!(matches!(rt.block_on(app.download_tracker_list(url.into())), Err(QbtError::InvalidArgument { .. })), "{url}");
+    }
+    app.shutdown();
+}

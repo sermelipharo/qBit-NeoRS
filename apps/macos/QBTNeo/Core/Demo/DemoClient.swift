@@ -151,6 +151,15 @@ final class DemoClient: CoreClient {
         return metadata
     }
 
+    func downloadTrackerList(url: String) async throws -> String {
+        let lower = url.trimmingCharacters(in: .whitespaces).lowercased()
+        guard lower.hasPrefix("http://") || lower.hasPrefix("https://") else {
+            throw QbtError.InvalidArgument(message: "The trackers list URL must start with http:// or https://")
+        }
+        try await Task.sleep(for: .seconds(1))
+        return "udp://tracker.opentrackr.org:1337/announce\n\nudp://open.demonii.com:1337/announce\n\nhttps://tracker.example.org/announce"
+    }
+
     func saveFetchedMetadata(hash: String) throws -> Data {
         let name = try read { state in
             guard let metadata = state.fetched[hash] else { throw QbtError.NotFound(message: "metadata \(hash)") }

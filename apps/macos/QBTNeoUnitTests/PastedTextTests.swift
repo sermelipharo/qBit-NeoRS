@@ -29,6 +29,14 @@ struct PastedTextTests {
         #expect(PastedText("https://example.org/file.torrent", context: .trackers).trackerCount == 0)
     }
 
+    @Test func rutrackerStyleAnnIsATrackerEverywhere() {
+        let line = "http://bt4.t-ru.org/ann"
+        #expect(PastedText(line, context: .transfers).trackerText == line)
+        #expect(PastedText(line, context: .transfers).torrentLinks.isEmpty)
+        #expect(PastedText.isTracker(line, context: .transfers))
+        #expect(!PastedText.isTracker("http://example.org/announcements.torrent", context: .transfers))
+    }
+
     @Test func peers() {
         let text = "1.2.3.4:6881\n[2001:db8::1]:51413\n1.2.3.4:6881\n300.1.1.1:1\n1.2.3.4:0\nlocalhost:80"
         #expect(PastedText(text, context: .transfers).peers == ["1.2.3.4:6881", "[2001:db8::1]:51413"])

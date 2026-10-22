@@ -141,12 +141,13 @@ extension AppModel {
             || lower.hasPrefix("http:") || lower.hasPrefix("https:")
     }
 
-    /// Clipboard lines suitable for the links dialog.
+    /// Clipboard lines suitable for the links dialog: tracker URLs (copied
+    /// along with a magnet, say) are not torrents.
     static func clipboardLinks() -> String {
         let text = NSPasteboard.general.string(forType: .string) ?? ""
         let lines = text.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter(PastedText.isDownloadable)
+            .filter { PastedText.isDownloadable($0) && !PastedText.isTracker($0, context: .transfers) }
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
 }

@@ -60,8 +60,9 @@ struct PastedText: Equatable {
 
     // MARK: Recognizers
 
-    /// A tracker URL: udp and ws(s) always; http(s) when it announces, or
-    /// anywhere a tracker is expected (but not a `.torrent` file).
+    /// A tracker URL: udp and ws(s) always; http(s) when it announces
+    /// (`…announce…`, or `/ann` like RuTracker's), or anywhere a tracker is
+    /// expected (but not a `.torrent` file).
     static func isTracker(_ line: String, context: Context) -> Bool {
         guard let url = URL(string: line), let scheme = url.scheme?.lowercased(), url.host() != nil else { return false }
         switch scheme {
@@ -70,7 +71,7 @@ struct PastedText: Equatable {
         case "http", "https":
             let path = url.path(percentEncoded: false).lowercased()
             if path.hasSuffix(".torrent") { return false }
-            return context == .trackers || path.contains("announce")
+            return context == .trackers || path.contains("announce") || path.hasSuffix("/ann")
         default:
             return false
         }

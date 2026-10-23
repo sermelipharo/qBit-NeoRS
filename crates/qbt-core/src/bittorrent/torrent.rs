@@ -116,6 +116,8 @@ pub struct Runtime {
     pub seeding_ms: u64,
     pub slow_since: Option<Instant>,
     pub metadata_task: Option<tokio::task::AbortHandle>,
+    /// The trackers the running metadata lookup announces to.
+    pub metadata_trackers: Option<super::engine::MetadataTrackers>,
     pub dirty: bool,
     pub adding: bool,
     /// Data was downloaded since the last full check.

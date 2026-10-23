@@ -1336,6 +1336,12 @@ unparsable URLs are skipped; at most 1000 trackers per torrent. Unsupported
 schemes (anything but http/https/udp) are listed but never contacted
 ("unsupported URL protocol", not retried).
 
+A `list_only` add of a magnet (fetching its metadata) announces with a
+manager of its own that no `ManagedTorrent` holds:
+`AddTorrentOptions::tracker_manager_out` receives it, so the core shows the
+trackers' state (`statuses()`) while the lookup runs. The core restarts a
+lookup when the torrent's tracker list changes.
+
 `ManagedTorrent` API (changes apply immediately, also to live torrents):
 
 ```rust

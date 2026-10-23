@@ -367,6 +367,12 @@ pub struct AddTorrentOptions {
     #[serde(skip)]
     pub storage_factory: Option<BoxStorageFactory>,
 
+    /// Receives the torrent's tracker manager as soon as it exists, so a
+    /// `list_only` add (fetching a magnet's metadata) can show its trackers'
+    /// state while it runs.
+    #[serde(skip)]
+    pub tracker_manager_out: Option<Arc<std::sync::OnceLock<Arc<TorrentTrackers>>>>,
+
     /// Extra trackers, appended in one new tier after the torrent's own.
     pub trackers: Option<Vec<String>>,
 
@@ -1691,6 +1697,9 @@ impl Session {
             opts.force_tracker_interval,
         );
         tracker_manager.set_disabled_discovery(opts.disabled_discovery);
+        if let Some(out) = &opts.tracker_manager_out {
+            let _ = out.set(tracker_manager.clone());
+        }
         if info_hash_v2.is_some() {
             // A `btmh` magnet: discovered under a v2 hash.
             tracker_manager.set_announces_v2();

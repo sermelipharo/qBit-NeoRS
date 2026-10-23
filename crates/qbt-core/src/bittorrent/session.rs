@@ -506,12 +506,14 @@ impl Session {
 
     pub fn trackers(&self, hash: &str) -> QbtResult<Vec<TrackerEntry>> {
         let prefs = self.ctx.prefs.current();
-        let (handle, private, list, flags) = self.with_torrent(hash, |e, _| {
+        let (handle, private, list, flags, lookup) = self.with_torrent(hash, |e, _| {
             (
                 e.rt.engine.as_ref().map(|(h, _)| h.clone()),
                 e.is_private(),
                 e.trackers.clone(),
                 (e.disable_dht, e.disable_pex, e.disable_lsd),
+                // A magnet still fetching its metadata announces from the lookup.
+                e.rt.metadata_task.as_ref().filter(|t| !t.is_finished()).and(e.rt.metadata_trackers.clone()),
             )
         })?;
         let engine = self.engine();
@@ -531,6 +533,8 @@ impl Session {
                 }
             }
             statuses = engine.trackers(h).statuses;
+        } else if let Some(tm) = lookup.as_ref().and_then(|l| l.get()) {
+            statuses = tm.statuses();
         }
         // Like qBittorrent, the DHT row is "working" only once the routing
         // table has nodes (PeX and LSD have no such state).
@@ -560,7 +564,7 @@ impl Session {
         let now = now_secs();
         let opt = |v: Option<u32>| v.map(|v| v as i64).unwrap_or(-1);
         let at = |d: Option<std::time::Duration>| d.map(|d| now + d.as_secs() as i64).unwrap_or(0);
-        if handle.is_some() && !statuses.is_empty() {
+        if !statuses.is_empty() {
             for t in statuses {
                 out.push(TrackerEntry {
                     url: t.url.clone(),
@@ -1129,8 +1133,25 @@ impl Session {
     }
 
     /// Hands the stored tracker lists to attached torrents (kept URLs keep
-    /// their status in the engine).
+    /// their status in the engine). Magnets fetching metadata restart the
+    /// lookup, which announces to the list it started with.
     fn push_trackers(&self, ids: &[String]) {
+        let lookups: Vec<String> = {
+            let mut st = self.state.write();
+            ids.iter()
+                .filter(|id| match st.torrents.get_mut(id.as_str()).and_then(|e| e.rt.metadata_task.take()) {
+                    Some(task) => {
+                        task.abort();
+                        true
+                    }
+                    None => false,
+                })
+                .cloned()
+                .collect()
+        };
+        for id in &lookups {
+            self.start_metadata_task(id);
+        }
         let Some(engine) = self.engine() else { return };
         let work: Vec<_> = {
             let st = self.state.read();

@@ -751,3 +751,64 @@ fn download_tracker_list() {
     }
     app.shutdown();
 }
+
+/// A local HTTP tracker that answers every announce with no peers; returns
+/// its port and the number of announces it got.
+fn serve_tracker() -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = hits.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut request = [0u8; 4096];
+            let _ = stream.read(&mut request);
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let body = "d8:intervali1800e5:peers0:e";
+            let reply = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            let _ = stream.write_all(reply.as_bytes());
+        }
+    });
+    (port, hits)
+}
+
+fn tracker_status(app: &App, hash: &str, url: &str) -> TrackerStatus {
+    app.trackers(hash.into()).unwrap().into_iter().find(|t| t.url == url).map(|t| t.status).unwrap_or_default()
+}
+
+/// A magnet fetching its metadata announces to its trackers, and the
+/// Trackers tab shows it; trackers added meanwhile join the lookup.
+#[test]
+fn magnet_lookup_reports_its_trackers() {
+    let tmp = tempfile::tempdir().unwrap();
+    let profile = tmp.path().join("profile");
+    let downloads = tmp.path().join("downloads");
+    write_prefs(&profile, &downloads);
+    let app = start(&profile);
+    let rt = app.runtime();
+
+    let (port, hits) = serve_tracker();
+    let first = format!("http://127.0.0.1:{port}/announce");
+    let h = "89abcdef0123456789abcdef0123456789abcdef";
+    let magnet = format!("magnet:?xt=urn:btih:{h}&tr={}", first.replace(':', "%3A").replace('/', "%2F"));
+    rt.block_on(app.add_torrent(TorrentSource::Url { url: magnet }, AddTorrentParams::default())).unwrap();
+    wait_for(&app, h, "metadata download", |t| t.state == TorrentState::DownloadingMetadata);
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while tracker_status(&app, h, &first) != TrackerStatus::Working {
+        assert!(Instant::now() < deadline, "{} announces; trackers: {:#?}", hits.load(std::sync::atomic::Ordering::SeqCst), app.trackers(h.into()));
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    let (port2, hits2) = serve_tracker();
+    let second = format!("http://127.0.0.1:{port2}/announce");
+    app.add_trackers(h.into(), vec![TrackerTierEntry { url: second.clone(), tier: 1 }]).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while tracker_status(&app, h, &second) != TrackerStatus::Working {
+        assert!(Instant::now() < deadline, "{} announces; trackers: {:#?}", hits2.load(std::sync::atomic::Ordering::SeqCst), app.trackers(h.into()));
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    app.shutdown();
+}

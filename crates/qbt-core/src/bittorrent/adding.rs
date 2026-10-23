@@ -552,7 +552,11 @@ impl Session {
                 return;
             };
             if let Some(engine) = self.engine() {
-                match engine.resolve_metadata(&magnet, peers, disabled).await {
+                let trackers = super::engine::MetadataTrackers::default();
+                if let Some(e) = self.state.write().torrents.get_mut(&id) {
+                    e.rt.metadata_trackers = Some(trackers.clone());
+                }
+                match engine.resolve_metadata(&magnet, peers, disabled, trackers).await {
                     Ok(r) => {
                         self.on_metadata_received(&id, r.torrent_bytes, r.seen_peers).await;
                         return;
@@ -745,7 +749,7 @@ impl Session {
                 let v2 = link.info_hash_v2.map(|h| metainfo::hex(&h)).unwrap_or_default();
                 let v1 = link.info_hash_v1.map(|h| metainfo::hex(&h)).unwrap_or_default();
                 let magnet = metainfo::build_magnet(&v1, &v2, "", None, &list, &[]);
-                let r = engine.resolve_metadata(&magnet, link.peers.clone(), Default::default()).await.map_err(|e| {
+                let r = engine.resolve_metadata(&magnet, link.peers.clone(), Default::default(), Default::default()).await.map_err(|e| {
                     let msg = format!("{e:#}");
                     self.ctx.logger.warning(format!("Failed to download torrent metadata. Reason: \"{msg}\""));
                     QbtError::network(msg)

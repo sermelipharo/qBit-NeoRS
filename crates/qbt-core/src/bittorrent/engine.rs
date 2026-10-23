@@ -296,6 +296,10 @@ pub struct AddRequest {
     pub settings: TorrentSettings,
 }
 
+/// The trackers of a running metadata lookup (filled once the engine has
+/// set them up).
+pub type MetadataTrackers = Arc<std::sync::OnceLock<Arc<librqbit::TorrentTrackers>>>;
+
 pub struct ResolvedMetadata {
     pub torrent_bytes: Vec<u8>,
     pub seen_peers: Vec<SocketAddr>,
@@ -654,17 +658,20 @@ impl Engine {
 
     /// Fetches the metadata of a magnet link from the swarm without adding
     /// the torrent (cancel by dropping the future). `disabled`: the
-    /// torrent's DHT/PeX/LSD switches.
+    /// torrent's DHT/PeX/LSD switches. `trackers` receives the trackers the
+    /// lookup announces to, for their status meanwhile.
     pub async fn resolve_metadata(
         &self,
         magnet: &str,
         peers: Vec<SocketAddr>,
         disabled: DisabledDiscovery,
+        trackers: MetadataTrackers,
     ) -> anyhow::Result<ResolvedMetadata> {
         let opts = AddTorrentOptions {
             list_only: true,
             initial_peers: (!peers.is_empty()).then_some(peers),
             disabled_discovery: disabled,
+            tracker_manager_out: Some(trackers),
             ..Default::default()
         };
         match self.session.add_torrent(AddTorrent::from_url(magnet), Some(opts)).await? {

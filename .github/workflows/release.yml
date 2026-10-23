@@ -21,6 +21,7 @@ jobs:
       contents: write
     env:
       CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -28,6 +29,15 @@ jobs:
         with:
           persist-credentials: false
       - run: .github/scripts/setup-rust.sh
+      # The dependencies' release builds, so a release recompiles only our crates.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.github/scripts/setup-rust.sh') }}
+          restore-keys: release-
       - name: Tools
         run: brew install xcodegen
       - name: Tag matches the app version

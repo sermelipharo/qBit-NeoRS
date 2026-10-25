@@ -13,7 +13,8 @@ struct AddTorrentContentTree: View {
     var body: some View {
         let tree = dialog.tree
         VStack(spacing: 0) {
-            FileTreeFilterBar(tree: tree, onSelectAll: { tree.setAllChecked(true) }, onSelectNone: { tree.setAllChecked(false) })
+            FileTreeFilterBar(tree: tree, onSelectAll: { tree.setAllChecked(true) }, onSelectNone: { tree.setAllChecked(false) },
+                              summary: dialog.hasMetadata ? dialog.filesSummary : nil)
                 .padding(.horizontal, Design.Spacing.medium)
                 .padding(.vertical, Design.Spacing.small)
                 .disabled(!dialog.hasMetadata)
@@ -39,7 +40,7 @@ struct AddTorrentContentTree: View {
         let rename = { (node: FileNode) in beginRename(node) }
         var configuration = FileTreeTableController.Configuration(
             identifier: "AddTorrentContent", columns: [.name, .size, .priority], layoutKey: nil,
-            nameMinWidth: 200, nameIdealWidth: 340, apply: { _ in }
+            nameMinWidth: 160, nameIdealWidth: 270, apply: { _ in }
         )
         configuration.menu = { nodes in
             let menu = NSMenu.manual()

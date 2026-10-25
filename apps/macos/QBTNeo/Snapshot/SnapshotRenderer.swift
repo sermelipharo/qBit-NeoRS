@@ -12,7 +12,8 @@ struct SnapshotRenderer {
     func run() async {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         if FeatureSnapshots.isFiltered, FeatureSnapshots.isWanted("main-general") { return await renderGeneralTabVariants() }
-        if FeatureSnapshots.isFiltered { return await FeatureSnapshots(directory: directory, launch: launch).run() }
+        let onlyAddTorrent = FeatureSnapshots.isFiltered && FeatureSnapshots.isWanted("add-torrent")
+        if FeatureSnapshots.isFiltered, !onlyAddTorrent { return await FeatureSnapshots(directory: directory, launch: launch).run() }
         let suite = "mk.lex.qbitneors.snapshot"
         UserDefaults().removePersistentDomain(forName: suite)
         let defaults = UserDefaults(suiteName: suite) ?? .standard
@@ -23,6 +24,9 @@ struct SnapshotRenderer {
         let client = DemoClient(large: launch.demoLarge, animated: false)
         model.attach(client)
         await model.refresh()
+
+        // `--snapshot-only add-torrent`: just the Add Torrent dialog.
+        if onlyAddTorrent { return await SnapshotDialogs(renderer: self, model: model, client: client).renderAddTorrent() }
 
         let focus = model.transfers.items.first { $0.name.hasPrefix("Sintel") } ?? model.transfers.items.first
         if let focus { model.list.selection = [focus.id] }

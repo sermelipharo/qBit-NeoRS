@@ -49,7 +49,7 @@ struct AddTorrentContentTree: View {
             nameMinWidth: 160, nameIdealWidth: 270, apply: { _ in }
         )
         let names = model.names
-        configuration.emphasis = { names.emphasizesListTitles ? names.parsed($0)?.titleRange : nil }
+        configuration.emphasis = { names.fileTitleRange($0) }
         configuration.menu = { nodes in
             let menu = NSMenu.manual()
             if nodes.count == 1, let node = nodes.first {

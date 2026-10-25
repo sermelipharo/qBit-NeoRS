@@ -49,7 +49,7 @@ struct ContentTab: View {
             return ContentContextMenu(model: model, item: item, nodes: nodes, apply: apply).makeMenu()
         }
         let names = model.names
-        configuration.emphasis = { names.emphasizesListTitles ? names.parsed($0)?.titleRange : nil }
+        configuration.emphasis = { names.fileTitleRange($0) }
         configuration.primaryAction = { nodes in
             guard nodes.count == 1, let node = nodes.first, let item = model.list.currentItem else { return }
             model.openContent(item, node)

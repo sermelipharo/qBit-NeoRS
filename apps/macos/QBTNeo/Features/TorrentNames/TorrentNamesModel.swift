@@ -64,6 +64,18 @@ final class TorrentNamesModel {
     /// Whether the list emphasizes titles (parsing on and the list option on).
     var emphasizesListTitles: Bool { gui.parseTorrentNames && gui.torrentNamesSemiboldTitles }
 
+    /// The title of a file name to draw semibold in file lists: only when a
+    /// rule found a tag in it, so names with nothing but an extension (or
+    /// other hidden tokens) stay plain.
+    /// The extension is left out, so "Storyboards.pdf" is not a PDF tag.
+    func fileTitleRange(_ name: String) -> NSRange? {
+        guard emphasizesListTitles else { return nil }
+        let ext = (name as NSString).pathExtension
+        let stem = ext.isEmpty || ext.count > 5 ? name : String(name.dropLast(ext.count + 1))
+        guard !stem.isEmpty, let parsed = parsed(stem), !parsed.chips.isEmpty else { return nil }
+        return parsed.titleRange
+    }
+
     /// Whether cards show tags.
     var showsCardTags: Bool { gui.parseTorrentNames && gui.torrentNamesCardTags }
 

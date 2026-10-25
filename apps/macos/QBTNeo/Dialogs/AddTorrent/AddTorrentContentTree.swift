@@ -9,12 +9,12 @@ struct AddTorrentContentTree: View {
     @State private var newName = ""
     @State private var renameError: String?
     @Environment(GUIPreferences.self) private var gui
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         let tree = dialog.tree
         VStack(spacing: 0) {
-            FileTreeFilterBar(tree: tree, onSelectAll: { tree.setAllChecked(true) }, onSelectNone: { tree.setAllChecked(false) },
-                              summary: dialog.hasMetadata ? dialog.filesSummary : nil)
+            FileTreeFilterBar(tree: tree, onSelectAll: { tree.setAllChecked(true) }, onSelectNone: { tree.setAllChecked(false) })
                 .padding(.horizontal, Design.Spacing.medium)
                 .padding(.vertical, Design.Spacing.small)
                 .disabled(!dialog.hasMetadata)
@@ -24,6 +24,12 @@ struct AddTorrentContentTree: View {
                         AddTorrentMetadataState(dialog: dialog)
                     }
                 }
+            if dialog.hasMetadata {
+                Divider()
+                AddTorrentFilesSummary(dialog: dialog)
+                    .padding(.horizontal, Design.Spacing.medium)
+                    .padding(.vertical, Design.Spacing.small)
+            }
         }
         .alert("Renaming", isPresented: isRenaming) {
             TextField("New name:", text: $newName)
@@ -42,6 +48,8 @@ struct AddTorrentContentTree: View {
             identifier: "AddTorrentContent", columns: [.name, .size, .priority], layoutKey: nil,
             nameMinWidth: 160, nameIdealWidth: 270, apply: { _ in }
         )
+        let names = model.names
+        configuration.emphasis = { names.emphasizesListTitles ? names.parsed($0)?.titleRange : nil }
         configuration.menu = { nodes in
             let menu = NSMenu.manual()
             if nodes.count == 1, let node = nodes.first {

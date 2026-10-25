@@ -18,6 +18,8 @@ final class FileTreeTableController: NSObject, NSTableViewDataSource, NSTableVie
         var apply: @MainActor ([FilePriority: [Int64]]) -> Void
         var menu: (@MainActor ([FileNode]) -> NSMenu?)?
         var primaryAction: (@MainActor ([FileNode]) -> Void)?
+        /// The part of a file name to draw semibold (the parsed title).
+        var emphasis: (@MainActor (String) -> NSRange?)?
     }
 
     let table = NativeTableView()
@@ -167,7 +169,8 @@ final class FileTreeTableController: NSObject, NSTableViewDataSource, NSTableVie
     private func configure(_ view: NSView, column: FileColumn, node: FileNode) {
         switch column {
         case .name:
-            (view as? FileNameCell)?.configure(node, filtering: !tree.filterText.isEmpty)
+            (view as? FileNameCell)?.configure(node, filtering: !tree.filterText.isEmpty,
+                                               emphasized: configuration.emphasis?(node.name))
         case .priority:
             (view as? FilePriorityMenu)?.configure(node)
         case .progress:

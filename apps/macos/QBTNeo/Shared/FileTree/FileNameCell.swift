@@ -18,6 +18,8 @@ final class FileNameCell: NSTableCellView {
     private var depth = 0
     private weak var node: FileNode?
     private var isIgnored = false
+    private var emphasized: NSRange?
+    private var showsAttributed = false
     var onToggleExpanded: ((FileNode) -> Void)?
     var onToggleChecked: ((FileNode) -> Void)?
 
@@ -55,7 +57,7 @@ final class FileNameCell: NSTableCellView {
         table.makeView(withIdentifier: identifier, owner: nil) as? FileNameCell ?? FileNameCell()
     }
 
-    func configure(_ node: FileNode, filtering: Bool) {
+    func configure(_ node: FileNode, filtering: Bool, emphasized: NSRange? = nil) {
         self.node = node
         if node.depth != depth {
             depth = node.depth
@@ -78,7 +80,11 @@ final class FileNameCell: NSTableCellView {
         isIgnored = node.priority == .ignored
         let image = node.isFolder ? FileIconCache.folder : FileIconCache.icon(forExtension: (node.name as NSString).pathExtension)
         if icon.image !== image { icon.image = image }
-        if label.stringValue != node.name { label.stringValue = node.name }
+        self.emphasized = emphasized.flatMap { $0.length > 0 && NSMaxRange($0) <= (node.name as NSString).length ? $0 : nil }
+        if self.emphasized == nil, showsAttributed || label.stringValue != node.name {
+            label.stringValue = node.name
+            showsAttributed = false
+        }
         if label.toolTip != node.path { label.toolTip = node.path }
         applyColors()
     }
@@ -89,7 +95,18 @@ final class FileNameCell: NSTableCellView {
 
     private func applyColors() {
         let emphasized = backgroundStyle == .emphasized
-        label.textColor = emphasized ? .alternateSelectedControlTextColor : (isIgnored ? .secondaryLabelColor : .labelColor)
+        let textColor: NSColor = emphasized ? .alternateSelectedControlTextColor : (isIgnored ? .secondaryLabelColor : .labelColor)
+        label.textColor = textColor
+        if let range = self.emphasized, let name = node?.name {
+            // The title semibold, the technical part regular, like the transfer list.
+            let text = NSMutableAttributedString(string: name, attributes: [.font: TableTextCell.font, .foregroundColor: textColor])
+            text.addAttribute(.font, value: NSFont.systemFont(ofSize: TableTextCell.font.pointSize, weight: .semibold), range: range)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingMiddle
+            text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+            label.attributedStringValue = text
+            showsAttributed = true
+        }
         chevron.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .secondaryLabelColor
         let unchecked = node?.checkState == .unchecked
         checkbox.contentTintColor = emphasized ? .alternateSelectedControlTextColor : (unchecked ? .secondaryLabelColor : .controlAccentColor)

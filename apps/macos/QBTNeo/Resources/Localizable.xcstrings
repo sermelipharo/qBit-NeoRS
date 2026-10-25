@@ -3476,6 +3476,16 @@
         }
       }
     },
+    "%lld formats": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Форматов: %lld"
+          }
+        }
+      }
+    },
     "%lld min": {
       "localizations": {
         "ru": {
@@ -63001,6 +63011,16 @@
         }
       }
     },
+    "Collapsed": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свёрнуто"
+          }
+        }
+      }
+    },
     "Color by state:": {
       "localizations": {
         "ru": {
@@ -115724,6 +115744,16 @@
         }
       }
     },
+    "Expanded": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Развёрнуто"
+          }
+        }
+      }
+    },
     "Expiration Date": {
       "localizations": {
         "ar": {
@@ -142013,6 +142043,16 @@
         }
       }
     },
+    "Incomplete files": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неполные файлы"
+          }
+        }
+      }
+    },
     "Incomplete path": {
       "localizations": {
         "ru": {
@@ -148495,6 +148535,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Хранить незавершенные загрузки в:"
+          }
+        }
+      }
+    },
+    "Keep incomplete files elsewhere": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неполные — в другую папку"
           }
         }
       }
@@ -190783,6 +190833,16 @@
         }
       }
     },
+    "Other": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другое"
+          }
+        }
+      }
+    },
     "Other error": {
       "localizations": {
         "ru": {
@@ -192825,12 +192885,32 @@
         }
       }
     },
+    "Remember Last Used Folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запоминать последнюю папку"
+          }
+        }
+      }
+    },
     "Save to": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Сохранить в"
+          }
+        }
+      }
+    },
+    "Stop after": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановить после"
           }
         }
       }
@@ -192881,6 +192961,44 @@
           "stringUnit": {
             "state": "translated",
             "value": "Информация о торренте"
+          }
+        }
+      }
+    },
+    "Use as Default Category": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сделать категорией по умолчанию"
+          }
+        }
+      }
+    },
+    "Use the category's folder": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка из категории"
+          }
+        }
+      }
+    },
+    "names.rule.groupRelease": {
+      "comment": "Built-in torrent name rule",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release group (NLT-Release)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Релиз-группа (NLT-Release)"
           }
         }
       }

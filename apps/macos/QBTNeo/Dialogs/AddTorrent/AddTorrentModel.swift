@@ -300,12 +300,22 @@ final class AddTorrentModel {
         return String(localized: "\(tree.fileCount) files · \(UnitFormatter.size(tree.wantedSize)) selected")
     }
 
-    /// "More options" while collapsed: the management mode, and the options
-    /// that differ from their defaults.
+    /// The selected files by format, largest first: "MKV 3.81 GB", or
+    /// "SRT ×3 262 KB" when there are several.
+    var formats: [FileFormatShare] {
+        _ = tree.valuesRevision
+        var shares: [String: FileFormatShare] = [:]
+        for file in tree.roots.flatMap({ tree.files(under: $0) }) where file.priority != .ignored {
+            let ext = (file.name as NSString).pathExtension.uppercased()
+            let key = ext.isEmpty || ext.count > 5 ? "" : ext
+            shares[key, default: FileFormatShare(format: key)].add(file.size)
+        }
+        return shares.values.sorted { $0.size == $1.size ? $0.format < $1.format : $0.size > $1.size }
+    }
+
+    /// "More options" while collapsed: the options that differ from their defaults.
     var moreOptionsSummary: String {
-        var parts = [autoTMM ? String(localized: "Automatic") : String(localized: "Manual")]
-        if useDownloadPath, !autoTMM { parts.append(String(localized: "Incomplete path")) }
-        if stopCondition != .none, startTorrent { parts.append(String(localized: "Stop condition")) }
+        var parts: [String] = []
         if addToQueueTop { parts.append(String(localized: "Top of queue")) }
         if skipHashCheck { parts.append(String(localized: "Skip hash check")) }
         if firstLastPiece { parts.append(String(localized: "First and last pieces first")) }

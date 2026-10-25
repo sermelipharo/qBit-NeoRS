@@ -7,6 +7,8 @@ struct FolderMenu: View {
     let title: LocalizedStringKey
     @Binding var path: String
     var history: [String] = []
+    /// "Remember Last Used Folder" at the end of the menu, when given.
+    var remembers: Binding<Bool>?
 
     @State private var isBrowsing = false
 
@@ -26,6 +28,10 @@ struct FolderMenu: View {
             }
             Divider()
             Button("Choose Folder…") { isBrowsing = true }
+            if let remembers {
+                Divider()
+                Toggle("Remember Last Used Folder", isOn: remembers)
+            }
         } label: {
             Label(Self.displayName(path), systemImage: Symbol.folder)
         }

@@ -11,6 +11,15 @@ struct NameParserTests {
         #expect(parsed == .plain("Some.Name.1080p"))
     }
 
+    @Test func updatesKeepTheirWholeVersion() {
+        let parsed = NameParser(rules: NameRuleDefaults.rules).parse("ParseDemo 6.0 + Content Pack (Multilanguage)NLT-Release + update 6.0.4")
+        #expect(parsed.chips.contains(NameChip(category: .version, text: "Update 6.0.4")), "\(parsed.chips)")
+        #expect(parsed.chips.contains(NameChip(category: .audioLanguage, text: "Multi")), "\(parsed.chips)")
+        #expect(parsed.chips.contains(NameChip(category: .releaseGroup, text: "NLT")), "\(parsed.chips)")
+        #expect(parsed.title == "ParseDemo 6.0 + Content Pack", "\(parsed.title) \(parsed.chips)")
+        #expect(NameParser(rules: NameRuleDefaults.rules).parse("Game.Update.1.2.3.4-GRP").chips.contains(NameChip(category: .version, text: "Update 1.2.3.4")))
+    }
+
     @Test func emptyNameIsPlain() {
         #expect(NameParser(rules: NameRuleDefaults.rules).parse("") == .plain(""))
     }

@@ -118,7 +118,7 @@ enum NameRuleDefaults {
         NameRule(id: idPrefix + "languageList", category: .audioLanguage, pattern: #"\(((?:En|Fr|De|Es|It|Ja|Nl|Pt|Sv|No|Da|Fi|Zh|Ko|Pl|Ru)(?:,(?:En|Fr|De|Es|It|Ja|Nl|Pt|Sv|No|Da|Fi|Zh|Ko|Pl|Ru))+)\)"#, template: "$1", isCaseSensitive: true),
         NameRule(id: idPrefix + "languagePair", category: .audioLanguage, pattern: #"\[((?:Multi|Rus?|Eng?|Ukr?)(?:[/+,] ?(?:Multi|Rus?|Eng?|Ukr?))+)\]"#, template: "$1"),
         NameRule(id: idPrefix + "dualAudio", category: .audioLanguage, pattern: #"Dual[ ._-]?Audio"#, template: "Dual Audio"),
-        NameRule(id: idPrefix + "multiAudio", category: .audioLanguage, pattern: #"Multi(?:lingual|[ ._-]?(?:Audio|Lang))?\d{0,2}"#, template: "Multi"),
+        NameRule(id: idPrefix + "multiAudio", category: .audioLanguage, pattern: #"Multi(?:lingual|language|[ ._-]?(?:Audio|Lang(?:uage)?))?\d{0,2}"#, template: "Multi"),
         NameRule(id: idPrefix + "russianAudio", category: .audioLanguage, pattern: #"RUS"#, template: "RUS"),
         NameRule(id: idPrefix + "englishAudio", category: .audioLanguage, pattern: #"ENG"#, template: "ENG"),
         NameRule(id: idPrefix + "ukrainianAudio", category: .audioLanguage, pattern: #"UKR"#, template: "UKR"),
@@ -158,7 +158,7 @@ enum NameRuleDefaults {
         NameRule(id: idPrefix + "pc", category: .platform, pattern: #"PC"#, template: "PC", isCaseSensitive: true),
         NameRule(id: idPrefix + "version", category: .version, pattern: #"v\d+(?:\.\d+){1,3}"#),
         NameRule(id: idPrefix + "build", category: .version, pattern: #"Build[ ._]?(\d{2,6})"#, template: "Build $1"),
-        NameRule(id: idPrefix + "update", category: .version, pattern: #"Update[ ._]?(\d{1,3}(?:\.\d{1,3})?)"#, template: "Update $1"),
+        NameRule(id: idPrefix + "update", category: .version, pattern: #"Update[ ._]?(\d{1,4}(?:\.\d{1,5}){0,3})"#, template: "Update $1"),
         NameRule(id: idPrefix + "revision", category: .version, pattern: #"\(Rev[ ._]?([0-9A-Z]{1,3})\)"#, template: "Rev $1"),
         NameRule(id: idPrefix + "plainVersion", category: .version, pattern: #"(?<=[ ._(\[])\d{1,4}\.\d{1,4}\.\d{1,5}(?:\.\d{1,6})?"#),
         NameRule(id: idPrefix + "region", category: .region, pattern: #"\(((?:USA|Europe|Japan|World|Korea|Asia|Australia|Brazil|China|France|Germany|Italy|Spain|UK|Canada|Russia|Taiwan)(?:, ?[A-Z][A-Za-z]{1,14})*)\)"#, template: "$1", isCaseSensitive: true),
@@ -173,6 +173,7 @@ enum NameRuleDefaults {
         NameRule(id: idPrefix + "m4b", category: .format, pattern: #"M4B"#, template: "M4B"),
         NameRule(id: idPrefix + "discImage", category: .format, pattern: #"NSP|XCI|NSZ|XCZ|CIA|RVZ|WBFS|CHD|PKG|VPK|ISO|BIN/CUE"#, isCaseSensitive: true),
         NameRule(id: idPrefix + "container", category: .format, pattern: #"MP4|MKV|AVI"#, isCaseSensitive: true),
+        NameRule(id: idPrefix + "groupRelease", category: .releaseGroup, pattern: #"(?<=[\])\s._]|^)([A-Z][A-Za-z0-9]{1,15})-Release"#, template: "$1", isCaseSensitive: true),
         NameRule(id: idPrefix + "repackBy", category: .releaseGroup, pattern: #"(?:Re-?Pack|Rip)[ ._]+(?:от|by)[ ._]+([\p{L}\p{N}_.-]{2,30})"#, template: "$1"),
         NameRule(id: idPrefix + "releasedBy", category: .releaseGroup, pattern: #"(?<=\s)от\s+([\p{L}\p{N}_.-]{2,30})"#, template: "$1"),
         NameRule(id: idPrefix + "narrator", category: .other, pattern: #"(?:читает|Читает|чит\.|Narrated[ ._]by|Read[ ._]by)[ :]+(?-i:\p{Lu})[\p{L}.'’-]+(?:[ ](?-i:\p{Lu})[\p{L}.'’-]+){0,2}"#),
@@ -359,6 +360,7 @@ enum NameRuleDefaults {
         case "m4b": String(localized: "names.rule.m4b", defaultValue: "M4B audiobook", comment: "Built-in torrent name rule")
         case "discImage": String(localized: "names.rule.discImage", defaultValue: "Game and disc images (NSP, CHD, ISO)", comment: "Built-in torrent name rule")
         case "container": String(localized: "names.rule.container", defaultValue: "Video container (MP4, MKV)", comment: "Built-in torrent name rule")
+        case "groupRelease": String(localized: "names.rule.groupRelease", defaultValue: "Release group (NLT-Release)", comment: "Built-in torrent name rule")
         case "repackBy": String(localized: "names.rule.repackBy", defaultValue: "Repack author (RePack by …)", comment: "Built-in torrent name rule")
         case "releasedBy": String(localized: "names.rule.releasedBy", defaultValue: "Release author (от …)", comment: "Built-in torrent name rule")
         case "narrator": String(localized: "names.rule.narrator", defaultValue: "Narrator (читает …, Narrated by …)", comment: "Built-in torrent name rule")

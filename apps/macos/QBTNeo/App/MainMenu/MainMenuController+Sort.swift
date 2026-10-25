@@ -25,6 +25,20 @@ extension MainMenuController {
         let other = MenuItemAction(isEnabled: { !model.lock.isLocked }, isOn: { true }, perform: {})
             .makeItem("")
         menu.addItem(other)
+        // How names compare, shown while sorting by name.
+        let namesSeparator = NSMenuItem.separator()
+        menu.addItem(namesSeparator)
+        var nameItems = [namesSeparator]
+        for byTitle in [false, true] {
+            let action = MenuItemAction(
+                isEnabled: { !model.lock.isLocked },
+                isOn: { list.sortsNamesByTitle == byTitle },
+                perform: { list.sortsNamesByTitle = byTitle }
+            )
+            let item = action.makeItem(byTitle ? TransferSortMenu.titleTitle : TransferSortMenu.fullNameTitle)
+            menu.addItem(item)
+            nameItems.append(item)
+        }
         menu.addItem(.separator())
         for ascending in [true, false] {
             let action = MenuItemAction(
@@ -34,7 +48,7 @@ extension MainMenuController {
             )
             menu.addItem(action.makeItem(ascending ? TransferSortMenu.ascendingTitle : TransferSortMenu.descendingTitle))
         }
-        let updater = SortMenuUpdater(list: list, otherItem: other)
+        let updater = SortMenuUpdater(list: list, otherItem: other, nameItems: nameItems)
         updater.menuNeedsUpdate(menu)
         menu.delegate = updater
         // The menu's delegate is weak; the item keeps it alive.

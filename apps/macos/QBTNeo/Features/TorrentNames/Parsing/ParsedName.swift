@@ -19,3 +19,14 @@ struct ParsedName: Equatable, Sendable {
         Self(title: name, titleRange: NSRange(location: 0, length: (name as NSString).length), chips: [], technicalRanges: [], kind: kind)
     }
 }
+
+extension ParsedName {
+    /// What sorting by title compares: the title without a leading "The"
+    /// ("The Matrix" sorts as "Matrix").
+    var titleSortKey: String {
+        for article in ["The ", "the ", "THE "] where title.hasPrefix(article) && title.count > article.count {
+            return String(title.dropFirst(article.count))
+        }
+        return title
+    }
+}

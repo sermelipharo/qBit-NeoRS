@@ -341819,6 +341819,60 @@
         }
       }
     },
+    "sort.names": {
+      "comment": "Sort By: how names are compared",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort Names By"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сортировать имена"
+          }
+        }
+      }
+    },
+    "sort.names.full": {
+      "comment": "Sort By: compare the whole torrent names",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Name"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По полному имени"
+          }
+        }
+      }
+    },
+    "sort.names.title": {
+      "comment": "Sort By: compare the parsed titles (the semibold part), skipping a leading article",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title, Ignoring “The”"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По названию, без «The»"
+          }
+        }
+      }
+    },
     "then": {
       "localizations": {
         "ar": {

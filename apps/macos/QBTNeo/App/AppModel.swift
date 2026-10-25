@@ -98,6 +98,8 @@ final class AppModel {
         lock.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
         favicons.clientProvider = { [weak self] in self?.client as? any AppInfoClient }
         names.clientProvider = { [weak self] in self?.client as? any TorrentNamesClient }
+        list.titleSortKey = { [names] in names.titleSortKey($0) }
+        names.onChange = { [list] in list.titlesChanged() }
         palette.app = self
     }
 

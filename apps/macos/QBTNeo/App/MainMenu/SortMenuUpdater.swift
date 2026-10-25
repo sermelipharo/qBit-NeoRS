@@ -7,10 +7,13 @@ import AppKit
 final class SortMenuUpdater: NSObject, NSMenuDelegate {
     private let list: TransferListModel
     private let otherItem: NSMenuItem
+    /// Full Name / Title, with their separator: only while sorting by name.
+    private let nameItems: [NSMenuItem]
 
-    init(list: TransferListModel, otherItem: NSMenuItem) {
+    init(list: TransferListModel, otherItem: NSMenuItem, nameItems: [NSMenuItem]) {
         self.list = list
         self.otherItem = otherItem
+        self.nameItems = nameItems
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -18,5 +21,6 @@ final class SortMenuUpdater: NSObject, NSMenuDelegate {
         let isOther = !TransferColumn.sortFields.contains(column)
         if otherItem.isHidden == isOther { otherItem.isHidden = !isOther }
         if isOther, otherItem.title != column.sortTitle { otherItem.title = column.sortTitle }
+        for item in nameItems where item.isHidden != (column != .name) { item.isHidden = column != .name }
     }
 }

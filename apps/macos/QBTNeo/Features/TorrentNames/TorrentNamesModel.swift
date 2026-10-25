@@ -20,6 +20,8 @@ final class TorrentNamesModel {
     /// The core that serves the rules to the Web UI (set by `AppModel`).
     @ObservationIgnored var clientProvider: @MainActor () -> (any TorrentNamesClient)? = { nil }
     @ObservationIgnored private var pushTask: Task<Void, Never>?
+    /// Called when parse results may have changed (rules or switches).
+    @ObservationIgnored var onChange: (@MainActor () -> Void)?
 
     private static let rulesKey = GUIPreferenceKey.torrentNameRules.rawValue
 
@@ -76,6 +78,12 @@ final class TorrentNamesModel {
         return parsed.titleRange
     }
 
+    /// What sorting by title compares: the parsed title without a leading
+    /// "The", or nil while parsing is off (the full name is used then).
+    func titleSortKey(_ name: String) -> String? {
+        parsed(name)?.titleSortKey
+    }
+
     /// Whether cards show tags.
     var showsCardTags: Bool { gui.parseTorrentNames && gui.torrentNamesCardTags }
 
@@ -104,6 +112,7 @@ final class TorrentNamesModel {
         cache?.replaceParser(makeParser(rules))
         revision &+= 1
         pushToCore()
+        onChange?()
     }
 
     // MARK: Web UI
@@ -167,6 +176,7 @@ final class TorrentNamesModel {
             } else {
                 revision &+= 1
                 pushToCore()
+                onChange?()
             }
         }
         observeSwitches()

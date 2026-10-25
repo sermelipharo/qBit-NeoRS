@@ -21,6 +21,19 @@ struct TransferSortMenu: View {
         String(localized: "sort.descending", defaultValue: "Descending", comment: "Sort By: largest, latest or Z first")
     }
 
+    static var namesTitle: String {
+        String(localized: "sort.names", defaultValue: "Sort Names By", comment: "Sort By: how names are compared")
+    }
+
+    static var fullNameTitle: String {
+        String(localized: "sort.names.full", defaultValue: "Full Name", comment: "Sort By: compare the whole torrent names")
+    }
+
+    static var titleTitle: String {
+        String(localized: "sort.names.title", defaultValue: "Title, Ignoring “The”",
+               comment: "Sort By: compare the parsed titles (the semibold part), skipping a leading article")
+    }
+
     var body: some View {
         Menu {
             Picker(Self.title, selection: $list.sortColumn) {
@@ -29,6 +42,13 @@ struct TransferSortMenu: View {
                 }
             }
             .pickerStyle(.inline)
+            if list.sortColumn == .name {
+                Picker(Self.namesTitle, selection: $list.sortsNamesByTitle) {
+                    Text(Self.fullNameTitle).tag(false)
+                    Text(Self.titleTitle).tag(true)
+                }
+                .pickerStyle(.inline)
+            }
             Picker(String(localized: "sort.direction", defaultValue: "Order", comment: "Sort By: the ascending / descending choice"),
                    selection: $list.sortAscending) {
                 Text(Self.ascendingTitle).tag(true)

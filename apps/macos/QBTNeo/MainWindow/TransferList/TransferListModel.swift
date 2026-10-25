@@ -46,6 +46,24 @@ final class TransferListModel {
     /// Set while the main window's views are released (`TransferTableController`).
     @ObservationIgnored var savedScrollPosition: TransferScrollPosition?
 
+    /// The title sort key of a name (`TorrentNamesModel.titleSortKey`).
+    @ObservationIgnored var titleSortKey: (@MainActor (String) -> String?)?
+
+    /// Sorting by name compares the parsed titles, without a leading "The".
+    var sortsNamesByTitle: Bool {
+        get { gui.sortNamesByTitle }
+        set {
+            guard newValue != gui.sortNamesByTitle else { return }
+            gui.sortNamesByTitle = newValue
+            resort()
+        }
+    }
+
+    /// The names' titles changed (rules or parsing switches).
+    func titlesChanged() {
+        if gui.sortNamesByTitle, sortOrder.contains(where: { $0.column == .name }) { resort() }
+    }
+
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var matcher: TextMatcher?
 
@@ -228,9 +246,18 @@ final class TransferListModel {
 
     private func sorted(_ items: [TorrentItem]) -> [TorrentItem] {
         let order = sortOrder.isEmpty ? [TransferSort(.name)] : sortOrder
+        // By title: one key per torrent (cached parses), compared like names.
+        var titles: [String: String] = [:]
+        if gui.sortNamesByTitle, let titleSortKey, order.contains(where: { $0.column == .name }) {
+            for item in items { titles[item.id] = titleSortKey(item.name) ?? item.name }
+        }
         return items.sorted { lhs, rhs in
             for comparator in order {
-                var result = TransferSort.compareAscending(comparator.column, lhs, rhs)
+                var result = if comparator.column == .name, let left = titles[lhs.id], let right = titles[rhs.id] {
+                    left.localizedStandardCompare(right).then(lhs.name.localizedStandardCompare(rhs.name))
+                } else {
+                    TransferSort.compareAscending(comparator.column, lhs, rhs)
+                }
                 if comparator.order == .reverse { result = result.reversed }
                 if result != .orderedSame { return result == .orderedAscending }
             }

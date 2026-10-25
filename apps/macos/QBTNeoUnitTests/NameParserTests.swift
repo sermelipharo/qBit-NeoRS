@@ -20,6 +20,13 @@ struct NameParserTests {
         #expect(NameParser(rules: NameRuleDefaults.rules).parse("Game.Update.1.2.3.4-GRP").chips.contains(NameChip(category: .version, text: "Update 1.2.3.4")))
     }
 
+    @Test func titleSortKeySkipsALeadingThe() {
+        let parser = NameParser(rules: NameRuleDefaults.rules)
+        #expect(parser.parse("The.Matrix.1999.1080p.BluRay.x264-GRP").titleSortKey == "Matrix")
+        #expect(parser.parse("Theatre.Of.Blood.1973.720p").titleSortKey == "Theatre Of Blood")
+        #expect(ParsedName.plain("The").titleSortKey == "The")
+    }
+
     @Test func emptyNameIsPlain() {
         #expect(NameParser(rules: NameRuleDefaults.rules).parse("") == .plain(""))
     }

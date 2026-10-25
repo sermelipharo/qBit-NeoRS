@@ -15,7 +15,16 @@ extension CommandRegistry {
             .state { $0.list.sortColumn == column }
             return column == .queuePosition ? command.available { $0.model.queueingEnabled } : command
         }
-        return fields + [
+        let names = [false, true].map { byTitle in
+            AppCommand(byTitle ? .sortNamesByTitle : .sortNamesByFullName,
+                       "\(TransferSortMenu.namesTitle): \(byTitle ? TransferSortMenu.titleTitle : TransferSortMenu.fullNameTitle)",
+                       symbol: Symbol.arrowUpArrowDown, keywords: sortWords) {
+                $0.model.list.sortColumn = .name
+                $0.model.list.sortsNamesByTitle = byTitle
+            }
+            .state { $0.list.sortColumn == .name && $0.list.sortsNamesByTitle == byTitle }
+        }
+        return fields + names + [
             AppCommand(.sortAscending, String(localized: "sort.command.ascending", defaultValue: "Sort Ascending",
                                               comment: "Command Palette: sort torrents in ascending order"),
                        symbol: Symbol.arrowUp, keywords: sortWords) { $0.model.list.sortAscending = true }

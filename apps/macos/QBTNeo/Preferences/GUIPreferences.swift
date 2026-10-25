@@ -38,6 +38,8 @@ final class GUIPreferences {
     var parseTorrentNames: Bool { didSet { set(parseTorrentNames, .parseTorrentNames) } }
     /// The list shows the title semibold and the technical part in regular weight.
     var torrentNamesSemiboldTitles: Bool { didSet { set(torrentNamesSemiboldTitles, .torrentNamesSemiboldTitles) } }
+    /// Sorting by name compares the parsed titles, without a leading "The".
+    var sortNamesByTitle: Bool { didSet { set(sortNamesByTitle, .sortNamesByTitle) } }
     /// Cards show technical info as tags under the title.
     var torrentNamesCardTags: Bool { didSet { set(torrentNamesCardTags, .torrentNamesCardTags) } }
     /// The year is a tag (otherwise it stays in the title).
@@ -161,6 +163,7 @@ final class GUIPreferences {
         transferViewMode = TransferViewMode(rawValue: read.int(.transferViewMode, 0)) ?? .list
         parseTorrentNames = read.bool(.parseTorrentNames, true)
         torrentNamesSemiboldTitles = read.bool(.torrentNamesSemiboldTitles, true)
+        sortNamesByTitle = read.bool(.sortNamesByTitle, false)
         torrentNamesCardTags = read.bool(.torrentNamesCardTags, true)
         torrentNamesYearAsTag = read.bool(.torrentNamesYearAsTag, true)
 

@@ -91,6 +91,7 @@ enum GUIPreferenceKey: String, CaseIterable {
     // Torrent names (qBit NeoRS only)
     case parseTorrentNames = "GUI/TorrentNames/Enabled"
     case torrentNamesSemiboldTitles = "GUI/TorrentNames/SemiboldTitles"
+    case sortNamesByTitle = "GUI/TransferList/SortNamesByTitle"
     case torrentNamesCardTags = "GUI/TorrentNames/CardTags"
     case torrentNamesYearAsTag = "GUI/TorrentNames/YearAsTag"
     /// The edited rules (`NameRule` JSON); absent while the built-in rules are used.

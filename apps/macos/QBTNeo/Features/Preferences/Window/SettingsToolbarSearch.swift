@@ -22,6 +22,7 @@ struct SettingsToolbarSearch: NSViewRepresentable {
     func makeNSView(context: Context) -> InstallerView {
         let view = InstallerView()
         view.coordinator = context.coordinator
+        context.coordinator.installer = view
         return view
     }
 
@@ -48,6 +49,13 @@ struct SettingsToolbarSearch: NSViewRepresentable {
             guard let window else { return }
             MainActor.assumeIsolated { coordinator?.install(in: window) }
         }
+
+        /// SwiftUI drops the search item while it lays out the window; putting it back from here, in the
+        /// same layout pass, keeps the frame being drawn from showing the toolbar without it.
+        override func layout() {
+            super.layout()
+            MainActor.assumeIsolated { coordinator?.restoreSearchItem() }
+        }
     }
 
     @MainActor
@@ -60,6 +68,9 @@ struct SettingsToolbarSearch: NSViewRepresentable {
         /// Read by the Objective-C forwarding overrides, which AppKit calls on the main thread.
         nonisolated(unsafe) private weak var original: (any NSToolbarDelegate)?
         private var isInstalling = false
+        weak var installer: InstallerView?
+        /// The toolbar SwiftUI just took the search field out of.
+        private weak var toolbarMissingSearch: NSToolbar?
         /// Typing pause before the query is handed to SwiftUI.
         static let typingPause = Duration.milliseconds(400)
         private var pushTask: Task<Void, Never>?
@@ -83,29 +94,88 @@ struct SettingsToolbarSearch: NSViewRepresentable {
             item.resignsFirstResponderWithCancel = true
         }
 
-        /// Pins the item's view to its smallest width (the magnifying-glass button the item itself shows
-        /// when the toolbar has no room), the toolbar's own collapsed state.
-        private var collapsedWidth: NSLayoutConstraint?
+        /// The item's width. The Settings toolbar centers the pane buttons in the room the trailing items
+        /// leave, and it measures that room again only when a constraint changes, not when the item
+        /// expands or collapses itself. So this constraint follows the field's focus, and the pane buttons
+        /// glide aside instead of the expanded field running over them.
+        private var itemWidth: NSLayoutConstraint?
+        private var focusObservation: NSKeyValueObservation?
+        private var frameObserver: (any NSObjectProtocol)?
+        private var lastItemWidth: Double?
 
-        func collapse() {
+        func collapse(animated: Bool = true) {
             item.endSearchInteraction()
-            guard let itemView = item.searchField.superview else { return }
-            if collapsedWidth?.firstItem !== itemView {
-                collapsedWidth?.isActive = false
-                let constraint = itemView.widthAnchor.constraint(equalToConstant: Self.collapsedItemWidth)
-                constraint.priority = .init(800)
-                collapsedWidth = constraint
-            }
-            collapsedWidth?.isActive = true
+            setItemWidth(Self.collapsedItemWidth, animated: animated)
         }
 
         /// Widens the item and moves the keyboard focus into the field.
         func expand() {
-            collapsedWidth?.isActive = false
             item.beginSearchInteraction()
         }
 
         static let collapsedItemWidth = 28.5
+
+        /// Sets the width constraint, animating the toolbar's layout (the pane buttons move with it).
+        private func setItemWidth(_ width: Double, animated: Bool = true) {
+            guard let itemView = item.searchField.superview else { return }
+            if itemWidth?.firstItem !== itemView { attachWidth(to: itemView, width: width) }
+            guard let constraint = itemWidth, abs(constraint.constant - width) > 0.5 else { return }
+            guard animated, let frame = itemView.window?.contentView?.superview else {
+                constraint.constant = width
+                return
+            }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.2
+                context.allowsImplicitAnimation = true
+                constraint.constant = width
+                frame.layoutSubtreeIfNeeded()
+            }
+        }
+
+        private func attachWidth(to itemView: NSView, width: Double) {
+            itemWidth?.isActive = false
+            let constraint = itemView.widthAnchor.constraint(equalToConstant: width)
+            constraint.priority = .init(800)
+            constraint.isActive = true
+            itemWidth = constraint
+            // The item starts widening before the field takes the focus, and it can collapse without a focus
+            // change (an expansion through accessibility): follow its own width too.
+            if let frameObserver { NotificationCenter.default.removeObserver(frameObserver) }
+            itemView.postsFrameChangedNotifications = true
+            lastItemWidth = itemView.frame.width
+            frameObserver = NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification, object: itemView, queue: .main
+            ) { [weak self] note in
+                guard let view = note.object as? NSView else { return }
+                let width = view.frame.width
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    // The direction of the item's own animation, step to step.
+                    let previous = self.lastItemWidth
+                    self.lastItemWidth = width
+                    // A view put back into the toolbar starts from no width: that is no expansion.
+                    guard let previous, previous >= Self.collapsedItemWidth - 0.5, abs(width - previous) > 0.5 else { return }
+                    self.setItemWidth(width > previous ? SettingsLayout.searchFieldWidth : Self.collapsedItemWidth)
+                }
+            }
+        }
+
+        /// The field expands when it takes the keyboard focus (a click on the magnifying glass, ⌘F) and
+        /// collapses when it loses it empty: follow the window's first responder.
+        private func observeFocus(in window: NSWindow) {
+            focusObservation = window.observe(\.firstResponder) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.focusChanged() }
+            }
+        }
+
+        private func focusChanged() {
+            let field = item.searchField
+            if field.currentEditor() != nil {
+                setItemWidth(SettingsLayout.searchFieldWidth)
+            } else if field.stringValue.isEmpty, restoredSelection == nil, !isPushPending, field.window != nil {
+                setItemWidth(Self.collapsedItemWidth)
+            }
+        }
 
         /// Wraps the toolbar's delegate once the scene has created the toolbar (retrying briefly).
         func install(in window: NSWindow) {
@@ -123,8 +193,9 @@ struct SettingsToolbarSearch: NSViewRepresentable {
             }
             original = toolbar.delegate
             toolbar.delegate = self
+            observeFocus(in: window)
             insertSearchItem(into: toolbar)
-            if parent.text.isEmpty { collapse() }
+            if parent.text.isEmpty { collapse(animated: false) }
         }
 
         /// Appends the flexible space and the search field unless they're there.
@@ -180,20 +251,30 @@ struct SettingsToolbarSearch: NSViewRepresentable {
             }
         }
 
-        /// SwiftUI rebuilds the pane items when the scene updates and drops
-        /// ours with them: put the search field back once it's done.
+        /// SwiftUI updates the pane items (on every pane switch) while it lays out the window, inside the
+        /// display cycle, and drops ours with them. Putting the field back on the next turn of the run loop
+        /// would let that frame be drawn without it, the pane buttons shifted into its place, so it goes
+        /// back in the same layout pass (the installer view lays out after SwiftUI's hosting view), with
+        /// the next turn as a fallback.
         func toolbarDidRemoveItem(_ notification: Notification) {
             original?.toolbarDidRemoveItem?(notification)
             let removed = notification.userInfo?["item"] as? NSToolbarItem
             if removed === item, let editor = item.searchField.currentEditor() { restoredSelection = editor.selectedRange }
             guard removed === item, let toolbar = notification.object as? NSToolbar else { return }
-            Task { [weak self, weak toolbar] in
-                guard let self, let toolbar, toolbar.delegate === self else { return }
-                if let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .flexibleSpace }), index == toolbar.items.count - 1 {
-                    toolbar.removeItem(at: index)
-                }
-                insertSearchItem(into: toolbar)
+            toolbarMissingSearch = toolbar
+            installer?.needsLayout = true
+            Task { [weak self] in self?.restoreSearchItem() }
+        }
+
+        /// Puts the flexible space and the search field back after SwiftUI removed them.
+        func restoreSearchItem() {
+            guard let toolbar = toolbarMissingSearch else { return }
+            toolbarMissingSearch = nil
+            guard toolbar.delegate === self else { return }
+            if let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .flexibleSpace }), index == toolbar.items.count - 1 {
+                toolbar.removeItem(at: index)
             }
+            insertSearchItem(into: toolbar)
         }
 
         override func responds(to selector: Selector!) -> Bool {

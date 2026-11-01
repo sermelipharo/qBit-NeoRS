@@ -20,6 +20,7 @@ enum UIScenarios {
             case "remove-probe": try await removeProbe(driver)
             case "palette": try await palette(driver)
             case "live-settings": try await liveSettings(driver)
+            case "live-settings-toolbar": try await liveSettingsToolbar(driver)
             case "live-dump": try await liveDump(driver)
             case "live-palette": try await livePalette(driver)
             case "live-menubar": try await liveMenuBar(driver)

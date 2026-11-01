@@ -19,9 +19,22 @@ extension UIScenarios {
 
     static func openSettings(_ d: UIDriver) async throws -> NSWindow {
         if let existing = settingsWindow(d) { return existing }
+        // The key equivalent goes to the main window's menus: wait for it on a slow start.
+        _ = await d.wait(timeout: 20) { d.model.mainWindow?.isVisible == true }
         await d.command(",", code: 43)
-        _ = await d.wait(timeout: 15) { settingsWindow(d) != nil }
-        guard let window = settingsWindow(d) else { throw UIDriver.Failure(description: "Settings did not open on Cmd-,") }
+        _ = await d.wait(timeout: 10) { settingsWindow(d) != nil }
+        if settingsWindow(d) == nil, let open = d.model.openSettings {
+            // Cmd-, can miss when the keyboard layout isn't Latin: open it the way the Settings menu item does.
+            d.log("Cmd-, did not open Settings; opening it through the app")
+            open()
+            _ = await d.wait(timeout: 10) { settingsWindow(d) != nil }
+        }
+        guard let window = settingsWindow(d) else {
+            for window in NSApp.windows where window.isVisible {
+                d.log("window '\(window.title)' toolbar \(window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? [])")
+            }
+            throw UIDriver.Failure(description: "Settings did not open on Cmd-,")
+        }
         await d.pause(1)
         return window
     }

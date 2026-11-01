@@ -145,11 +145,10 @@ struct SettingsToolbarSearch: NSViewRepresentable {
             lastItemWidth = itemView.frame.width
             frameObserver = NotificationCenter.default.addObserver(
                 forName: NSView.frameDidChangeNotification, object: itemView, queue: .main
-            ) { [weak self] note in
-                guard let view = note.object as? NSView else { return }
-                let width = view.frame.width
+            ) { [weak self, weak itemView] _ in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    guard let self, let itemView else { return }
+                    let width = itemView.frame.width
                     // The direction of the item's own animation, step to step.
                     let previous = self.lastItemWidth
                     self.lastItemWidth = width

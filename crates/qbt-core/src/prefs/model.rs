@@ -424,6 +424,9 @@ pub struct WebUiPrefs {
     pub web_ui_ban_duration: i64,
     /// Seconds, 0 = disabled.
     pub web_ui_session_timeout: i64,
+    /// Most WebUI sessions kept at once; the oldest is dropped for a new one.
+    /// 0 = no limit (still capped at `webui::session::MAX_SESSIONS`).
+    pub web_ui_sessions_count_limit: i64,
     pub alternative_webui_enabled: bool,
     pub alternative_webui_path: String,
     pub web_ui_clickjacking_protection_enabled: bool,
@@ -463,6 +466,7 @@ impl Default for WebUiPrefs {
             web_ui_max_auth_fail_count: 5,
             web_ui_ban_duration: 3600,
             web_ui_session_timeout: 3600,
+            web_ui_sessions_count_limit: 15,
             alternative_webui_enabled: false,
             alternative_webui_path: String::new(),
             web_ui_clickjacking_protection_enabled: true,

@@ -165,6 +165,7 @@ enum SettingsSearchAliases {
         "web_ui_max_auth_fail_count": ["Preferences/WebUI/MaxAuthenticationFailCount", "Web User Interface (Remote control)", "Authentication"],
         "web_ui_ban_duration": ["Preferences/WebUI/BanDuration", "Web User Interface (Remote control)", "Authentication"],
         "web_ui_session_timeout": ["Preferences/WebUI/SessionTimeout", "Web User Interface (Remote control)", "Authentication"],
+        "web_ui_sessions_count_limit": ["Preferences/WebUI/SessionsCountLimit", "Web User Interface (Remote control)", "Authentication"],
         "alternative_webui_enabled": ["Preferences/WebUI/AlternativeUIEnabled", "Web User Interface (Remote control)"],
         "alternative_webui_path": ["Preferences/WebUI/RootFolder", "Web User Interface (Remote control)", "Use alternative WebUI"],
         "web_ui_clickjacking_protection_enabled": ["Preferences/WebUI/ClickjackingProtection", "Security", "Web User Interface (Remote control)"],

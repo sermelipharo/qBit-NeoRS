@@ -168,6 +168,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("web_ui_max_auth_fail_count", "Preferences/WebUI/MaxAuthenticationFailCount", Int),
     ("web_ui_ban_duration", "Preferences/WebUI/BanDuration", Int),
     ("web_ui_session_timeout", "Preferences/WebUI/SessionTimeout", Int),
+    ("web_ui_sessions_count_limit", "Preferences/WebUI/SessionsCountLimit", Int),
     ("alternative_webui_enabled", "Preferences/WebUI/AlternativeUIEnabled", Bool),
     ("alternative_webui_path", "Preferences/WebUI/RootFolder", Str),
     ("web_ui_clickjacking_protection_enabled", "Preferences/WebUI/ClickjackingProtection", Bool),

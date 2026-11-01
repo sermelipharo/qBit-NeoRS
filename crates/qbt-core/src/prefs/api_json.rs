@@ -169,7 +169,7 @@ fn scan_dirs_json(folders: &[WatchedFolder]) -> Value {
     Value::Object(m)
 }
 
-/// Builds the `app/preferences` object (223 keys, Appendix A order).
+/// Builds the `app/preferences` object (Appendix A order plus 5.3 keys).
 pub fn to_json(p: &Preferences) -> Value {
     let b = &p.behavior;
     let d = &p.downloads;
@@ -324,6 +324,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("web_ui_max_auth_fail_count", json!(w.web_ui_max_auth_fail_count));
     put("web_ui_ban_duration", json!(w.web_ui_ban_duration));
     put("web_ui_session_timeout", json!(w.web_ui_session_timeout));
+    put("web_ui_sessions_count_limit", json!(w.web_ui_sessions_count_limit));
     put("web_ui_api_key", json!(w.web_ui_api_key));
     put("alternative_webui_enabled", json!(w.alternative_webui_enabled));
     put("alternative_webui_path", json!(w.alternative_webui_path));
@@ -749,6 +750,7 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("web_ui_max_auth_fail_count", w.web_ui_max_auth_fail_count, to_int);
     set!("web_ui_ban_duration", w.web_ui_ban_duration, to_int);
     set!("web_ui_session_timeout", w.web_ui_session_timeout, to_int);
+    set!("web_ui_sessions_count_limit", w.web_ui_sessions_count_limit, to_int);
     set!("alternative_webui_enabled", w.alternative_webui_enabled, to_bool);
     set!("alternative_webui_path", w.alternative_webui_path, to_str);
     set!("web_ui_clickjacking_protection_enabled", w.web_ui_clickjacking_protection_enabled, to_bool);
@@ -933,6 +935,7 @@ mod tests {
         "web_ui_domain_list", "web_ui_address", "web_ui_port", "web_ui_upnp", "use_https", "web_ui_https_cert_path",
         "web_ui_https_key_path", "web_ui_username", "bypass_local_auth", "bypass_auth_subnet_whitelist_enabled",
         "bypass_auth_subnet_whitelist", "web_ui_max_auth_fail_count", "web_ui_ban_duration", "web_ui_session_timeout",
+        "web_ui_sessions_count_limit",
         "web_ui_api_key", "alternative_webui_enabled", "alternative_webui_path",
         "web_ui_clickjacking_protection_enabled", "web_ui_csrf_protection_enabled", "web_ui_secure_cookie_enabled",
         "web_ui_host_header_validation_enabled", "web_ui_use_custom_http_headers_enabled", "web_ui_custom_http_headers",
@@ -965,7 +968,8 @@ mod tests {
 
     #[test]
     fn get_has_exact_key_order() {
-        assert_eq!(APPENDIX_A.len(), 223);
+        // 5.2.4's 223 keys plus the ones added for 5.3 (web_ui_sessions_count_limit).
+        assert_eq!(APPENDIX_A.len(), 224);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);

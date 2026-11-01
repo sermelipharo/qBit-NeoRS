@@ -102,9 +102,18 @@ impl WebSession {
 #[derive(Default)]
 pub struct SessionStore {
     sessions: HashMap<SessionKey, Arc<WebSession>>,
+    /// "Sessions count limit" for cookie sessions; 0 = only `MAX_SESSIONS`.
+    cookie_limit: usize,
 }
 
 impl SessionStore {
+    /// qBittorrent 5.3's sessions count limit: a new login drops the least
+    /// recently used cookie session once this many exist. API-key sessions
+    /// do not count. 0 = no limit beyond `MAX_SESSIONS`.
+    pub fn set_cookie_limit(&mut self, limit: usize) {
+        self.cookie_limit = limit.min(MAX_SESSIONS);
+    }
+
     /// Finds a live session and refreshes its idle timer; drops it if expired.
     pub fn lookup(&mut self, sid: &str, timeout: Option<Duration>, now: Instant) -> Option<Arc<WebSession>> {
         if sid.is_empty() || sid.len() > 128 {
@@ -144,6 +153,16 @@ impl SessionStore {
 
     fn insert(&mut self, sid: String, api_key: bool, timeout: Option<Duration>, now: Instant) -> Arc<WebSession> {
         self.sessions.retain(|_, s| !s.has_expired(timeout, now));
+        if !api_key && self.cookie_limit > 0 {
+            while self.sessions.values().filter(|s| !s.api_key).count() >= self.cookie_limit {
+                let Some(k) =
+                    self.sessions.iter().filter(|(_, s)| !s.api_key).min_by_key(|(_, s)| s.last_access()).map(|(k, _)| *k)
+                else {
+                    break;
+                };
+                self.sessions.remove(&k);
+            }
+        }
         while self.sessions.len() >= MAX_SESSIONS {
             let victim = self
                 .sessions
@@ -344,6 +363,29 @@ mod tests {
         let a = st.create(None, t0);
         let b = st.create(None, t0);
         assert_ne!(a.id(), b.id());
+    }
+
+    #[test]
+    fn sessions_count_limit_drops_the_least_recently_used_login() {
+        let mut st = SessionStore::default();
+        st.set_cookie_limit(2);
+        let t0 = Instant::now();
+        let key = st.api_key_session("qbt_key1", t0);
+        let a = st.create(None, t0);
+        let b = st.create(None, t0 + Duration::from_millis(1));
+        // `a` was used after `b`, so `b` is the one dropped.
+        assert!(st.lookup(a.id(), None, t0 + Duration::from_millis(2)).is_some());
+        let c = st.create(None, t0 + Duration::from_millis(3));
+        assert!(st.lookup(b.id(), None, t0).is_none());
+        assert!(st.lookup(a.id(), None, t0).is_some());
+        assert!(st.lookup(c.id(), None, t0).is_some());
+        // The API-key session does not count and is never the victim.
+        assert!(st.lookup(key.id(), None, t0).is_some());
+        assert_eq!(st.len(), 3);
+        // 0 = no limit.
+        st.set_cookie_limit(0);
+        st.create(None, t0 + Duration::from_millis(4));
+        assert_eq!(st.len(), 4);
     }
 
     #[test]

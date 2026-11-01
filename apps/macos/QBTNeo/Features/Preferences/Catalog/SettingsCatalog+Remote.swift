@@ -30,6 +30,8 @@ extension SettingsCatalog {
             SettingSpec("web_ui_ban_duration", .accessRules, String(localized: "ban for:"), check: .pref(\.webui.webUiBanDuration)),
             SettingSpec("web_ui_session_timeout", .accessRules, String(localized: "Session timeout:"),
                         check: .pref(\.webui.webUiSessionTimeout)),
+            SettingSpec("web_ui_sessions_count_limit", .accessRules, String(localized: "Sessions count limit:"),
+                        check: .pref(\.webui.webUiSessionsCountLimit)),
             SettingSpec("alternative_webui_enabled", .alternativeWebUI, String(localized: "Use alternative WebUI"),
                         check: .pref(\.webui.alternativeWebuiEnabled)),
             SettingSpec("alternative_webui_path", .alternativeWebUI, String(localized: "Files location:"),

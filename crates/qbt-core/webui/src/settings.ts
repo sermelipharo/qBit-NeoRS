@@ -148,6 +148,7 @@ const PANES: Pane[] = [
       ["web_ui_max_auth_fail_count", "Ban after failed attempts", "number"],
       ["web_ui_ban_duration", "Ban for", "number", "seconds"],
       ["web_ui_session_timeout", "Session timeout", "number", "seconds"],
+      ["web_ui_sessions_count_limit", "Sessions count limit (0 = unlimited)", "number"],
     ]],
     ["Security", [
       ["web_ui_clickjacking_protection_enabled", "Clickjacking protection"],

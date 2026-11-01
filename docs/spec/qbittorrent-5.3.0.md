@@ -36,7 +36,7 @@ Things to know before reading:
 | #24793 | SMTP header injection | ✅ | Handled earlier (`net/smtp.rs:259` test) |
 | #24805 | HTTPS DynDNS, no https-to-http redirects | ✅ | Handled earlier |
 | #24869 | Unauthenticated announce created a torrent entry | ✅ | Handled earlier |
-| #24720 | WebUI sessions count limit | ⬜ | Core pref `web_ui_sessions_count_limit` (default 15) replacing hardcoded `MAX_SESSIONS = 512` (`webui/session.rs:24`); WebAPI get/set; field in the Swift remote-access settings and the WebUI settings page |
+| #24720 | WebUI sessions count limit | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24379 | Allow cross-origin links to the webroot | ⬜ | Skip the CSRF check for `/` and `/index.html` only (`webui/webapp.rs:451`); today a cross-site link gets 401 |
 | #23838 | Fix STARTTLS; replace the SSL checkbox by an encryption type (None / STARTTLS / SMTPS) | ⬜ | Replace `mail_notification_ssl_enabled` (`prefs/api_json.rs:229,542`) with `mail_notification_encryption_type`, migrate the old value, adjust `net/smtp.rs` (its header comment describes the old rule), Swift picker. WebAPI 2.16.0 |
 | #24512 | Drop unsupported tracker URLs from magnets | ⬜ | `parse_magnet` (`bittorrent/metainfo.rs:525`) keeps any `tr`; keep only `http`, `https`, `udp` with a host. Unit test |
@@ -124,7 +124,7 @@ Things to know before reading:
 | #24249 | Prefs `start_paused`, `shutdown_timeout` | ⬜ | `shutdown_timeout` exists (`prefs/model.rs:523`); add `start_paused` |
 | #24791 | POST-only endpoints | ✅ | See Security |
 | #24724 | `seedMode` replaces `skip_checking` | ⬜ | See Core/engine |
-| #24720 | `web_ui_sessions_count_limit` | ⬜ | See Security |
+| #24720 | `web_ui_sessions_count_limit` | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24641 | New backup prefs, `export_dir*` removed | ⬜ | See Core/engine |
 | #24684 | `enable_multi_connections_from_same_peer_id` | ⬜ | See Core/engine |
 | #23989 | `contribution` in `sync/torrentPeers` | ⬜ | See macOS app UI |
@@ -169,7 +169,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24376 | Secondary sort column | ⬜ | `transfers.ts` sorts by one key |
 | #24678 | "Copy path" in the content menu | ⬜ | Port in `details.ts` |
 | #24692 | Non-torrent RSS link handling | ⬜ | Port in `rss.ts`; mirror `RSSLinkPolicy.swift` (only http(s), magnet and hashes are downloadable) |
-| #24720 | Sessions limit setting | ⬜ | Settings row once the pref exists |
+| #24720 | Sessions limit setting | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #23784 | Keep search tabs across restarts and sessions | ⬜ | Port in `search.ts` after the WebAPI/pref change |
 | #24249, #24269 | Start paused, shutdown timeout, pause/resume session | ⬜ | Port after the core state exists |
 | #24842 | Export/import RSS rules | ⬜ | Port in `rss.ts` after the endpoints exist |

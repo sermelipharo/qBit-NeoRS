@@ -71,6 +71,8 @@ pub struct WebConfig {
     pub whitelist_enabled: bool,
     pub whitelist: Vec<Subnet>,
     pub session_timeout: Option<Duration>,
+    /// Sessions count limit (0 = none).
+    pub sessions_limit: usize,
     pub domains: Vec<String>,
     pub csrf: bool,
     pub secure_cookie: bool,
@@ -110,6 +112,7 @@ impl WebConfig {
             whitelist_enabled: w.bypass_auth_subnet_whitelist_enabled,
             whitelist: super::subnet::parse_list(w.bypass_auth_subnet_whitelist.iter().map(String::as_str)),
             session_timeout: (w.web_ui_session_timeout > 0).then(|| capped_secs(w.web_ui_session_timeout)),
+            sessions_limit: usize::try_from(w.web_ui_sessions_count_limit).unwrap_or(0),
             domains: w.web_ui_domain_list.split(';').map(str::trim).filter(|d| !d.is_empty()).map(str::to_owned).collect(),
             csrf: w.web_ui_csrf_protection_enabled,
             secure_cookie: w.web_ui_secure_cookie_enabled,
@@ -341,6 +344,7 @@ impl WebApp {
                 sessions.clear_cookie_sessions();
             }
             sessions.retain_api_key(cfg.api_key.as_deref());
+            sessions.set_cookie_limit(cfg.sessions_limit);
         }
         *self.config.write() = Arc::new(cfg);
     }

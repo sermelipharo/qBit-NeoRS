@@ -219,6 +219,8 @@ fn launch_loads_and_unloads() {
     std::fs::create_dir_all(ctx.profile.geoip_dir()).unwrap();
     std::fs::write(ctx.profile.geoip_dir().join(DATABASE_FILE), db).unwrap();
 
+    // Off by default since qBittorrent 5.3.
+    ctx.prefs.update(|p| p.advanced.resolve_peer_countries = true).unwrap();
     let geo = GeoIp::launch(&ctx);
     let wait = |want: bool| {
         let deadline = std::time::Instant::now() + Duration::from_secs(5);

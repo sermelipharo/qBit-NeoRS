@@ -672,7 +672,7 @@ fn share_limit_action_from_str(s: &str) -> Option<ShareLimitAction> {
 }
 
 const EXTRA_PARAM_KEYS: [&str; 5] = ["operating_mode", "share_limit_action", "ssl_certificate", "ssl_private_key", "ssl_dh_params"];
-const KNOWN_PARAM_KEYS: [&str; 16] = [
+const KNOWN_PARAM_KEYS: [&str; 17] = [
     "category",
     "tags",
     "save_path",
@@ -681,6 +681,8 @@ const KNOWN_PARAM_KEYS: [&str; 16] = [
     "add_to_top_of_queue",
     "stopped",
     "stop_condition",
+    "seed_mode",
+    // qBittorrent 5.2 and older wrote this name for `seed_mode`.
     "skip_checking",
     "content_layout",
     "use_auto_tmm",
@@ -720,7 +722,11 @@ pub(crate) fn parse_params(obj: &Map<String, Value>) -> (TorrentParamsTemplate, 
         auto_tmm: opt_bool("use_auto_tmm"),
         stopped: opt_bool("stopped"),
         stop_condition: opt_str("stop_condition").map(|s| stop_condition_from_str(&s)),
-        skip_checking: obj.get("skip_checking").and_then(Value::as_bool).unwrap_or(false),
+        skip_checking: obj
+            .get("seed_mode")
+            .or_else(|| obj.get("skip_checking"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         add_to_queue_top: opt_bool("add_to_top_of_queue"),
         content_layout: opt_str("content_layout").map(|s| content_layout_from_str(&s)),
         upload_limit: json_int(obj.get("upload_limit")).unwrap_or(-1),
@@ -765,7 +771,7 @@ pub(crate) fn serialize_params(p: &TorrentParamsTemplate, extra: &Map<String, Va
     m.insert("save_path".into(), p.save_path.clone().into());
     m.insert("download_path".into(), p.download_path.clone().into());
     m.insert("operating_mode".into(), extra_str("operating_mode", "AutoManaged"));
-    m.insert("skip_checking".into(), p.skip_checking.into());
+    m.insert("seed_mode".into(), p.skip_checking.into());
     m.insert("upload_limit".into(), p.upload_limit.into());
     m.insert("download_limit".into(), p.download_limit.into());
     m.insert("seeding_time_limit".into(), p.seeding_time_limit.into());
@@ -1040,6 +1046,19 @@ mod tests {
         assert_eq!(dto.must_contain, "a|b");
         let again = Rule::from_dto(&dto, Some(&back));
         assert_eq!(again.to_json(), v);
+    }
+
+    #[test]
+    fn seed_mode_reads_the_5_2_name_and_writes_the_5_3_one() {
+        let legacy = serde_json::json!({"skip_checking": true});
+        let (p, extra) = parse_params(legacy.as_object().unwrap());
+        assert!(p.skip_checking);
+        assert!(extra.is_empty(), "the old key is known, not carried along");
+        let both = serde_json::json!({"seed_mode": false, "skip_checking": true});
+        assert!(!parse_params(both.as_object().unwrap()).0.skip_checking, "seed_mode wins");
+        let out = serialize_params(&p, &extra);
+        assert_eq!(out["seed_mode"], true);
+        assert!(out.get("skip_checking").is_none());
     }
 
     #[test]

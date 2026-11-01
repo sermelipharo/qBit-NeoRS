@@ -120,7 +120,7 @@ export async function openAdd(o: { files?: File[]; urls?: string } = {}): Promis
           if (tagIn.value.trim()) fd.append("tags", tagIn.value.split(",").map((x) => x.trim()).filter(Boolean).join(","));
           fd.append("stopped", String(!startIt.checked));
           fd.append("addToTopOfQueue", String(top.checked));
-          fd.append("skip_checking", String(skip.checked));
+          fd.append("seedMode", String(skip.checked));
           fd.append("sequentialDownload", String(seq.checked));
           fd.append("firstLastPiecePrio", String(fl.checked));
           fd.append("contentLayout", layout.value);

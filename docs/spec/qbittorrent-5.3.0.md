@@ -60,7 +60,7 @@ Things to know before reading:
 | #24870 | I2P PeX setting | ➖ | No I2P PeX in the engine (`docs/PARITY.md`, I2P row). Optionally accept the key as inert for client compatibility |
 | #24837 | WebTorrent STUN server setting | ➖ | No WebTorrent in the engine. Optionally accept the key as inert |
 | #24641 | Revamp .torrent backup management | ⬜ | Replace `export_dir`/`export_dir_fin` (`prefs/api_json.rs:220`) with `torrent_files_backup_enabled`, `torrent_files_backup_dir`, `torrent_files_finished_backup_dir_enabled`, `torrent_files_finished_backup_dir`, `remove_torrent_file_backup`; migrate old keys; the export code is `export_to` in `bittorrent/adding.rs`; Swift Downloads prefs |
-| #24724 | `seedMode` replaces `skip_checking` | ⬜ | Rename in `torrents/add` (`webui/api/torrents.rs:772`), accept `seedMode`, drop `skip_checking`; the core field (`bittorrent/adding.rs:284`) can keep its name; update Swift label |
+| #24724 | `seedMode` replaces `skip_checking` | ✅ | `torrents/add` takes `seedMode` and still `skip_checking` for older clients; saved add parameters (RSS rules) write `seed_mode` and read either name. The core field keeps its name. The Mac app keeps the label "Skip hash check": it says what the option does and is translated, while 5.3 has no translations for "Seed mode" yet |
 | #24336 | Magnet `so` (select only) parameter | ⬜ | `parse_magnet` ignores `so` (`bittorrent/metainfo.rs:488`); map indexes/ranges to file priorities (rest "do not download") on add; Add Torrent dialog preselection |
 | #24346 | Torrent Creator "Ignore dotfiles" (default on) | ⬜ | Creator always skips hidden names and the macOS hidden flag (`creator/layout.rs:96,132`); add the option (`ignoreDotfiles` in `torrentcreator/addTask` and `status`); when on, filter by name only; when off, include hidden files |
 | #24173 | Dotfiles filtered on all platforms | ✅ | `creator/layout.rs:65,96,132` |
@@ -123,7 +123,7 @@ Things to know before reading:
 | #24269 | `transfer/pauseSession`, `transfer/resumeSession`, `session_state` in `server_state` | ⬜ | Needs a core "session paused" state (stop all engine activity without changing torrent states) |
 | #24249 | Prefs `start_paused`, `shutdown_timeout` | ⬜ | `shutdown_timeout` exists (`prefs/model.rs:523`); add `start_paused` |
 | #24791 | POST-only endpoints | ✅ | See Security |
-| #24724 | `seedMode` replaces `skip_checking` | ⬜ | See Core/engine |
+| #24724 | `seedMode` replaces `skip_checking` | ✅ | See Core/engine |
 | #24720 | `web_ui_sessions_count_limit` | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24641 | New backup prefs, `export_dir*` removed | ⬜ | See Core/engine |
 | #24684 | `enable_multi_connections_from_same_peer_id` | ⬜ | See Core/engine |

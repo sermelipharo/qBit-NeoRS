@@ -772,7 +772,8 @@ async fn add(c: &mut Call<'_>) -> ApiResult {
             "FilesChecked" => StopCondition::FilesChecked,
             _ => StopCondition::None,
         }),
-        skip_checking: p.bool_or("skip_checking", false),
+        // qBittorrent 5.3 renamed `skip_checking` to `seedMode`.
+        skip_checking: p.bool_opt("seedMode").or_else(|| p.bool_opt("skip_checking")).unwrap_or(false),
         add_to_queue_top: p.bool_opt("addToTopOfQueue"),
         content_layout: Some(p.str("contentLayout"))
             .filter(|s| !s.is_empty())

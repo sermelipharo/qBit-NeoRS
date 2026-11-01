@@ -19,12 +19,10 @@ pub struct CreatorExtras {
 }
 
 /// Qt's default `QDateTime::toString()` text format, local time.
-fn qt_date(secs: i64) -> Option<String> {
-    if secs <= 0 {
-        return None;
-    }
-    chrono::DateTime::from_timestamp(secs, 0)
-        .map(|t| t.with_timezone(&chrono::Local).format("%a %b %-d %H:%M:%S %Y").to_string())
+/// qBittorrent 5.3 reports the times as seconds since the epoch (it sent Qt
+/// date strings before); unset times are left out.
+fn epoch(secs: i64) -> Option<i64> {
+    (secs > 0).then_some(secs)
 }
 
 fn format_str(f: TorrentFormat) -> &'static str {
@@ -51,7 +49,7 @@ fn task_json(t: &CreatorTask, extras: Option<&CreatorExtras>) -> Value {
     m.insert("sourcePath".into(), json!(t.source_path));
     m.insert("pieceSize".into(), json!(t.piece_size));
     m.insert("private".into(), json!(x.private));
-    m.insert("timeAdded".into(), json!(qt_date(t.time_added).unwrap_or_default()));
+    m.insert("timeAdded".into(), json!(t.time_added));
     m.insert("format".into(), json!(format_str(t.format)));
     m.insert("status".into(), json!(status_str(t.status)));
     if !x.comment.is_empty() {
@@ -69,10 +67,10 @@ fn task_json(t: &CreatorTask, extras: Option<&CreatorExtras>) -> Value {
     if !x.url_seeds.is_empty() {
         m.insert("urlSeeds".into(), json!(x.url_seeds));
     }
-    if let Some(d) = qt_date(t.time_started) {
+    if let Some(d) = epoch(t.time_started) {
         m.insert("timeStarted".into(), json!(d));
     }
-    if let Some(d) = qt_date(t.time_finished) {
+    if let Some(d) = epoch(t.time_finished) {
         m.insert("timeFinished".into(), json!(d));
     }
     match t.status {
@@ -239,7 +237,7 @@ mod tests {
         assert_eq!(j["comment"], "c");
         assert_eq!(j["trackers"], json!(["u", ""]));
         assert!(j.get("timeStarted").is_none());
-        assert!(j["timeAdded"].as_str().unwrap().contains("2023"));
+        assert_eq!(j["timeAdded"], 1_700_000_000, "seconds since the epoch, as qBittorrent 5.3");
         assert!(j.get("errorMessage").is_none());
     }
 }

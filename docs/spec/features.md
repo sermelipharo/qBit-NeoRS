@@ -4049,11 +4049,11 @@ Response `{"taskID": "<uuid>"}`.
 Param `taskID` (optional; empty = all tasks; unknown -> `404`). Array of:
 | Key | Presence | Meaning |
 |---|---|---|
-| `taskID`, `sourcePath`, `pieceSize`, `private`, `timeAdded`, `status` | always | `status`: `Queued`, `Running`, `Finished`, `Failed`; `timeAdded` = `QDateTime::toString()` (Qt default text format, e.g. `Mon Oct 13 12:34:56 2026`) |
+| `taskID`, `sourcePath`, `pieceSize`, `private`, `timeAdded`, `status` | always | `status`: `Queued`, `Running`, `Finished`, `Failed`; `timeAdded` = seconds since the epoch (qBittorrent 5.3, #24210; 5.2 sent the Qt text date, e.g. `Mon Oct 13 12:34:56 2026`) |
 | `format` | lt2 | `v1`/`v2`/`hybrid` |
 | `optimizeAlignment`, `paddedFileSizeLimit` | lt1.2 | |
 | `comment`, `torrentFilePath`, `source`, `trackers` (array), `urlSeeds` (array) | if non-empty | |
-| `timeStarted`, `timeFinished` | if set | Qt text date |
+| `timeStarted`, `timeFinished` | if set | seconds since the epoch |
 | `errorMessage` | finished + failed | e.g. `Failed to start seeding.` or creation error |
 | `pieceSize` | finished OK | overwritten with the actual piece size chosen |
 | `progress` | running | int 0..100 |

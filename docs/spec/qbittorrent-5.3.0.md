@@ -130,7 +130,7 @@ Things to know before reading:
 | #23989 | `contribution` in `sync/torrentPeers` | ⬜ | See macOS app UI |
 | #24346 | `ignoreDotfiles` in `torrentcreator/addTask` and `status` | ⬜ | See Core/engine |
 | #24246 | File `priority` in `torrents/fetchMetadata`/`parseMetadata` when excluded names apply | ⬜ | Check the handlers in `webui/api/torrents.rs` return priority 0 for excluded names (the excluded-names list is in the core) |
-| #24210 | `torrentcreator/status` times as Unix timestamps | ⬜ | `webui/api/creator.rs:54` emits a Qt date string via `qt_date`; emit epoch seconds for `timeAdded`, `timeStarted`, `timeFinished`; update `webui/src` and any Swift reader |
+| #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |
 | #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |
 | #24152 | `request_latency` in `sync/maindata` | ⬜ | Emit (0 if not measured) in `server_state` |
 | #24084 | `queued_tracker_announces` in `sync/maindata` | ⬜ | See Core/engine |
@@ -177,7 +177,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24920 | Missing Options page settings | ⬜ | `settings.ts` is a subset of the prefs; add the new keys together with the ones above |
 | #24984 | Shared download window for RSS articles | ⬜ | Low; `rss.ts` downloads one article at a time |
 | #24379 | Cross-origin links to webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |
-| #24210 | Creator dates as epoch seconds | ⬜ | See WebAPI |
+| #24210 | Creator dates as epoch seconds | ✅ | See WebAPI |
 | #23878, #23837, #23818, #24708, #24710, #24804, #24816, #24879, #24686 | Folder collapse, in-place array filtering, set-rows speed, disabled instead of hidden menu items, header click errors, category indentation, version table layout, sortable properties panel, RSS refresh back-off | ➖ | Behaviour of upstream's MooTools/Mocha code; the NeoRS UI is different code. Spot-check folder collapse and disabled-vs-hidden menu items when touching `details.ts` |
 
 ## RSS

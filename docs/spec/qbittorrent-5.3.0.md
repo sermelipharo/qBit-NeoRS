@@ -95,7 +95,7 @@ Things to know before reading:
 | #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
 | #24740 | Detect redundant quotes in the Python path | ⬜ | Small: strip surrounding quotes from the configured path and warn (`search/python.rs`, Search prefs) |
 | #24279 | Python minimum becomes 3.13 | ⬜ | Trivial decision: `PythonVersion::MINIMUM` is 3.9 (`search/python.rs:31`); follow upstream or keep 3.9 on purpose |
-| #23825 | "North Macedonia" instead of FYR Macedonia | ⬜ | Trivial: `net/geoip/countries.rs:148` |
+| #23825 | "North Macedonia" instead of FYR Macedonia | ✅ | `net/geoip/countries.rs` |
 | #25037 | Re-sort when Remaining changes | ⬜ | Verify: `TransferSort.swift:51` compares `amountLeft`; make sure the table re-sorts as the value changes |
 | #23949 | E-mail examples as placeholder text | ⬜ | Trivial: prompts in the Downloads prefs e-mail fields |
 | #24061 | Tooltips on e-mail option fields | ⬜ | Trivial: `.help()` on the same fields |

@@ -145,7 +145,7 @@ pub(super) static COUNTRIES: &[(&str, &str)] = &[
     ("MF", "Saint Martin (French part)"),
     ("MG", "Madagascar"),
     ("MH", "Marshall Islands"),
-    ("MK", "Macedonia, The Former Yugoslav Republic of"),
+    ("MK", "North Macedonia"),
     ("ML", "Mali"),
     ("MM", "Myanmar"),
     ("MN", "Mongolia"),

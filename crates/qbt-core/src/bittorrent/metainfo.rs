@@ -354,6 +354,19 @@ pub fn is_web_url(u: &str) -> bool {
         && ["http://", "https://", "ftp://"].iter().any(|p| lower.starts_with(p) && lower.len() > p.len())
 }
 
+/// A tracker a magnet link may bring: http, https or udp with a host
+/// (qBittorrent 5.3, #24512). Anything else (`wss://`, `ws://`, junk) is
+/// dropped instead of being announced to.
+pub fn is_supported_tracker_url(u: &str) -> bool {
+    let u = u.trim();
+    // WHATWG parsing reads `http:///x` as host "x"; qBittorrent sees no host.
+    if u.split_once("://").is_none_or(|(_, rest)| rest.is_empty() || rest.starts_with('/')) {
+        return false;
+    }
+    reqwest::Url::parse(u)
+        .is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "udp") && url.host_str().is_some_and(|h| !h.is_empty()))
+}
+
 /// Tracker URL sanity check used by the edit/add operations.
 pub fn is_valid_tracker_url(u: &str) -> bool {
     let u = u.trim();
@@ -524,7 +537,7 @@ pub fn parse_magnet(input: &str) -> Result<MagnetLink, String> {
             "dn" => link.name = clean_line(&pct_decode(v, true)),
             "tr" => {
                 let url = pct_decode(v, false).trim().to_string();
-                if !url.is_empty() && !link.trackers.iter().any(|t| t.url == url) && link.trackers.len() < 1000 {
+                if is_supported_tracker_url(&url) && !link.trackers.iter().any(|t| t.url == url) && link.trackers.len() < 1000 {
                     link.trackers.push(TrackerTierEntry { url, tier });
                     tier += 1;
                 }
@@ -708,6 +721,20 @@ pub(crate) mod tests {
         assert_eq!(p.meta.files[0].path, "x/a_b/c_d");
         assert!(parse_torrent(b"garbage", Limits::default()).is_err());
         assert!(parse_torrent(b"d4:infoi1ee", Limits::default()).is_err());
+    }
+
+    #[test]
+    fn magnets_keep_only_trackers_they_can_announce_to() {
+        let h = "0123456789abcdef0123456789abcdef01234567";
+        let m = parse_magnet(&format!(
+            "magnet:?xt=urn:btih:{h}&tr=udp%3A%2F%2Ft.example%3A80&tr=wss%3A%2F%2Fws.example&tr=http%3A%2F%2F%2Fannounce\
+             &tr=junk&tr=HTTPS%3A%2F%2FT2.example%2Fa&tr=ftp%3A%2F%2Ff.example&tr=http%3A%2F%2Fh.example%2Fannounce"
+        ))
+        .unwrap();
+        let urls: Vec<&str> = m.trackers.iter().map(|t| t.url.as_str()).collect();
+        assert_eq!(urls, ["udp://t.example:80", "HTTPS://T2.example/a", "http://h.example/announce"]);
+        let tiers: Vec<_> = m.trackers.iter().map(|t| t.tier).collect();
+        assert_eq!(tiers, [0, 1, 2]);
     }
 
     #[test]

@@ -39,7 +39,7 @@ Things to know before reading:
 | #24720 | WebUI sessions count limit | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24379 | Allow cross-origin links to the webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |
 | #23838 | Fix STARTTLS; replace the SSL checkbox by an encryption type (None / STARTTLS / SMTPS) | ⬜ | Replace `mail_notification_ssl_enabled` (`prefs/api_json.rs:229,542`) with `mail_notification_encryption_type`, migrate the old value, adjust `net/smtp.rs` (its header comment describes the old rule), Swift picker. WebAPI 2.16.0 |
-| #24512 | Drop unsupported tracker URLs from magnets | ⬜ | `parse_magnet` (`bittorrent/metainfo.rs:525`) keeps any `tr`; keep only `http`, `https`, `udp` with a host. Unit test |
+| #24512 | Drop unsupported tracker URLs from magnets | ✅ | `parse_magnet` keeps only http/https/udp trackers with a host (`is_supported_tracker_url`, `bittorrent/metainfo.rs`); test `magnets_keep_only_trackers_they_can_announce_to` |
 | #24087 | Do not load a zero-size GeoIP database | ✅ | `net/geoip.rs:95-110` turns a failed open into a warning; add a test with an empty file to be sure |
 
 ## Core/engine

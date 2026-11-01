@@ -78,6 +78,10 @@ jobs:
           restore-keys: cargo-registry-
       - name: Tools
         run: brew install xcodegen swiftlint
+      - name: Xcode
+        # The image defaults to an older Xcode than the one the project is
+        # developed with; tests compare against files generated with 27.2.
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app
       - name: SwiftLint
         working-directory: apps/macos
         run: swiftlint lint --strict --quiet

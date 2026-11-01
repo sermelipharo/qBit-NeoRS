@@ -134,7 +134,27 @@ struct NameParserWebFixtureTests {
             try (encoder.encode(fixture) + Data("\n".utf8)).write(to: Self.fixtureURL, options: .atomic)
         }
         let stored = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: Self.fixtureURL))
-        #expect(stored == fixture, "names-fixture.json is out of date; regenerate it (see NameParserWebFixtureTests)")
+        #expect(stored == fixture, "names-fixture.json is out of date; regenerate it (see NameParserWebFixtureTests). \(Self.firstDifference(stored, fixture))")
+    }
+
+    /// The first entry that differs, so a failure on another machine says what changed.
+    static func firstDifference(_ stored: Fixture, _ current: Fixture) -> String {
+        for (set, old, new) in [("builtIn", stored.builtIn, current.builtIn), ("custom", stored.custom, current.custom)] {
+            if old.rules != new.rules {
+                let index = old.rules.indices.first { $0 >= new.rules.count || old.rules[$0] != new.rules[$0] } ?? min(old.rules.count, new.rules.count)
+                return "\(set) rule \(index): stored \(old.rules.count) rules, now \(new.rules.count); " +
+                    "stored \(old.rules.dropFirst(index).first.map(String.init(describing:)) ?? "none"), " +
+                    "now \(new.rules.dropFirst(index).first.map(String.init(describing:)) ?? "none")"
+            }
+            if old.results != new.results {
+                let index = old.results.indices.first {
+                    $0 >= new.results.count || old.results[$0] != new.results[$0]
+                } ?? min(old.results.count, new.results.count)
+                return "\(set) result \(index): stored \(old.results.dropFirst(index).first.map(String.init(describing:)) ?? "none"), " +
+                    "now \(new.results.dropFirst(index).first.map(String.init(describing:)) ?? "none")"
+            }
+        }
+        return stored.categoryKinds == current.categoryKinds ? "format" : "categoryKinds: \(current.categoryKinds)"
     }
 
     @Test func webCompatibility() {

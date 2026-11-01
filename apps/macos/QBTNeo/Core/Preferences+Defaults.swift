@@ -45,8 +45,9 @@ extension ConnectionPrefs {
     static let qbtDefaults = ConnectionPrefs(
         bittorrentProtocol: .both, listenPort: -1, sslEnabled: false, sslListenPort: -1, upnp: true,
         maxConnec: 500, maxConnecPerTorrent: 100, maxUploads: 20, maxUploadsPerTorrent: 4,
-        i2pEnabled: false, i2pAddress: "127.0.0.1", i2pPort: 7656, i2pMixedMode: false,
+        i2pEnabled: false, i2pAddress: "127.0.0.1", i2pPort: 7656, i2pMixedMode: false, i2pPexEnabled: true,
         i2pInboundQuantity: 3, i2pOutboundQuantity: 3, i2pInboundLength: 3, i2pOutboundLength: 3,
+        i2pInboundLengthVariance: 0, i2pOutboundLengthVariance: 0,
         proxyType: .none, proxyIp: "", proxyPort: 8080, proxyAuthEnabled: false, proxyUsername: "",
         proxyPassword: "", proxyHostnameLookup: true, proxyBittorrent: false, proxyPeerConnections: false,
         proxyRss: false, proxyMisc: false, ipFilterEnabled: false, ipFilterPath: "", ipFilterTrackers: false,
@@ -122,6 +123,7 @@ extension AdvancedPrefs {
         uploadChokingAlgorithm: .fastestUpload, announceToAllTrackers: false, announceToAllTiers: true,
         announceIp: "", announcePort: 0, maxConcurrentHttpAnnounces: 50, stopTrackerTimeout: 2,
         peerTurnover: 4, peerTurnoverCutoff: 90, peerTurnoverInterval: 300, requestQueueSize: 500,
-        dhtBootstrapNodes: "dht.libtorrent.org:25401, dht.transmissionbt.com:6881, router.bittorrent.com:6881"
+        dhtBootstrapNodes: "dht.libtorrent.org:25401, dht.transmissionbt.com:6881, router.bittorrent.com:6881",
+        webtorrentStunServer: "stun.l.google.com:19302"
     )
 }

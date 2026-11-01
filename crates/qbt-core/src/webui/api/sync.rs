@@ -28,6 +28,8 @@ pub fn server_state_json(s: &ServerState, prefs: &Preferences) -> Map<String, Va
         }
     }
     m.insert("queueing".into(), json!(prefs.bittorrent.queueing_enabled));
+    // qBittorrent 5.3 (libtorrent's disk request latency, ms); the engine does not measure it.
+    m.insert("request_latency".into(), json!(0));
     if s.refresh_interval <= 0 {
         m.insert("refresh_interval".into(), json!(prefs.advanced.refresh_interval));
     }

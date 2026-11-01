@@ -56,9 +56,9 @@ Things to know before reading:
 | #24158 | `seeding_outgoing_connections` setting | ⬜ | Pref (default true); needs engine support to stop dialling peers while seeding (`engine/librqbit`), otherwise inert |
 | #24253 | `max_outstanding_block_requests` (libtorrent `max_allowed_in_request_queue`) | ⬜ | Low: pref + cap on queued incoming requests per peer in the engine. NeoRS only has `request_queue_size` (`prefs/model.rs:582`) |
 | #24684 | `allow_multiple_connections_per_pid` | ⬜ | Low: pref + engine check on duplicate peer IDs; only `enable_multi_connections_from_same_ip` exists (`prefs/api_json.rs:404`) |
-| #24891 | I2P inbound/outbound length variance | ⬜ | Small: add `i2p_inbound_length_variance`/`i2p_outbound_length_variance` to prefs and the SAM options (`engine/i2p/src/lib.rs:207` sends `inbound.length`, no variance) |
-| #24870 | I2P PeX setting | ➖ | No I2P PeX in the engine (`docs/PARITY.md`, I2P row). Optionally accept the key as inert for client compatibility |
-| #24837 | WebTorrent STUN server setting | ➖ | No WebTorrent in the engine. Optionally accept the key as inert |
+| #24891 | I2P inbound/outbound length variance | ⬜ | Small: the prefs exist (stored, clamped); add them to the SAM options (`engine/i2p/src/lib.rs:207` sends `inbound.length`, no variance) |
+| #24870 | I2P PeX setting | ➖ | No I2P PeX in the engine (`docs/PARITY.md`, I2P row); `i2p_pex_enabled` is stored and returned for clients |
+| #24837 | WebTorrent STUN server setting | ➖ | No WebTorrent in the engine; `webtorrent_stun_server` is stored and returned for clients |
 | #24641 | Revamp .torrent backup management | ⬜ | Replace `export_dir`/`export_dir_fin` (`prefs/api_json.rs:220`) with `torrent_files_backup_enabled`, `torrent_files_backup_dir`, `torrent_files_finished_backup_dir_enabled`, `torrent_files_finished_backup_dir`, `remove_torrent_file_backup`; migrate old keys; the export code is `export_to` in `bittorrent/adding.rs`; Swift Downloads prefs |
 | #24724 | `seedMode` replaces `skip_checking` | ✅ | `torrents/add` takes `seedMode` and still `skip_checking` for older clients; saved add parameters (RSS rules) write `seed_mode` and read either name. The core field keeps its name. The Mac app keeps the label "Skip hash check": it says what the option does and is translated, while 5.3 has no translations for "Seed mode" yet |
 | #24336 | Magnet `so` (select only) parameter | ⬜ | `parse_magnet` ignores `so` (`bittorrent/metainfo.rs:488`); map indexes/ranges to file priorities (rest "do not download") on add; Add Torrent dialog preselection |
@@ -76,7 +76,7 @@ Things to know before reading:
 | #24505 | "Resolve peer countries" off by default | ⬜ | Trivial: default is `true` (`prefs/model.rs:607`); change for new profiles only |
 | #24711 | Disk queue default 100 MiB | ⬜ | Trivial: default is 1 MiB (`prefs/model.rs:625`); only matters if the engine uses it, else ➖ |
 | #24084 | "Queued tracker announces" session metric | ⬜ | Count announces waiting on `max_concurrent_http_announces` (`prefs/model.rs:573`); needs a counter in `engine/tracker_comms`; show in Statistics and `server_state` |
-| #24152 | "Request latency" metric | ➖ | libtorrent session counter; the engine does not measure it. Optionally emit 0 in `server_state` for client compatibility |
+| #24152 | "Request latency" metric | ➖ | The engine does not measure it; `server_state.request_latency` is always 0 |
 | #24675 | Fix IP address comparison | ➖ | C++ `lt::address` bug; Rust `IpAddr` ordering is correct |
 | #25047 | Avoid heavy work in a callback | ➖ | Qt/libtorrent callback internals |
 
@@ -117,8 +117,8 @@ Things to know before reading:
 | #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | 🟡 | Done except `shareLimitsMode` (comes with #24043): limits parsed and validated in `apply_share_limit_params`; `torrents/categories` now reports the stored limits instead of -2 |
 | #24798 | `editCategory` must not overwrite unrelated options | ✅ | Edits start from the stored category; `savePath` optional; empty `downloadPathEnabled` = default (`webui/api/torrents.rs` `edit_category`, e2e `edit_category_keeps_what_the_call_leaves_out`) |
 | #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ✅ | Core preferences (`advanced`), imported from qBittorrent's ini; the Mac app moved its own stored values into them once and reads them from the core; the Web UI honours `confirm_remove_all_tags` and `confirm_torrent_recheck` |
-| #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ⬜ | Variance: see Core/engine; the PeX key may be inert |
-| #24837 | `webtorrent_stun_server` key | ⬜ | Inert key for clients (see Core/engine) |
+| #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ✅ | Stored, clamped to -7..7, imported from qBittorrent; passing the variance to SAM is the #24891 engine row |
+| #24837 | `webtorrent_stun_server` key | ✅ | Stored only |
 | #24842 | `rss/exportRules`, `rss/importRules` (POST) | ⬜ | Core already exports rules (`rssExportRules`, `apps/macos/Generated/qbt_core.swift:804`; UI `Features/RSS/Downloader/RulesExport.swift`); add the two endpoints in `webui/api/rss.rs` |
 | #24269 | `transfer/pauseSession`, `transfer/resumeSession`, `session_state` in `server_state` | ⬜ | Needs a core "session paused" state (stop all engine activity without changing torrent states) |
 | #24249 | Prefs `start_paused`, `shutdown_timeout` | ⬜ | `shutdown_timeout` exists (`prefs/model.rs:523`); add `start_paused` |
@@ -132,7 +132,7 @@ Things to know before reading:
 | #24246 | File `priority` in `torrents/fetchMetadata`/`parseMetadata` when excluded names apply | ⬜ | Check the handlers in `webui/api/torrents.rs` return priority 0 for excluded names (the excluded-names list is in the core) |
 | #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |
 | #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |
-| #24152 | `request_latency` in `sync/maindata` | ⬜ | Emit (0 if not measured) in `server_state` |
+| #24152 | `request_latency` in `sync/maindata` | ✅ | Always 0 |
 | #24084 | `queued_tracker_announces` in `sync/maindata` | ⬜ | See Core/engine |
 | #23838 | `mail_notification_encryption_type` | ⬜ | See Security |
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |

@@ -265,7 +265,7 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 226);
+        assert_eq!(prefs.as_object().unwrap().len(), 230);
         assert_eq!(prefs["web_ui_port"], h.port);
         assert!(prefs.get("web_ui_password").is_none());
 

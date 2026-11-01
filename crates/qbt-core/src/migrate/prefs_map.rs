@@ -103,10 +103,13 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("i2p_address", "BitTorrent/Session/I2P/Address", Str),
     ("i2p_port", "BitTorrent/Session/I2P/Port", Int),
     ("i2p_mixed_mode", "BitTorrent/Session/I2P/MixedMode", Bool),
+    ("i2p_pex_enabled", "BitTorrent/Session/I2P/PeXEnabled", Bool),
     ("i2p_inbound_quantity", "BitTorrent/Session/I2P/InboundQuantity", Int),
     ("i2p_outbound_quantity", "BitTorrent/Session/I2P/OutboundQuantity", Int),
     ("i2p_inbound_length", "BitTorrent/Session/I2P/InboundLength", Int),
     ("i2p_outbound_length", "BitTorrent/Session/I2P/OutboundLength", Int),
+    ("i2p_inbound_length_variance", "BitTorrent/Session/I2P/InboundLengthVariance", Int),
+    ("i2p_outbound_length_variance", "BitTorrent/Session/I2P/OutboundLengthVariance", Int),
     ("proxy_type", "Network/Proxy/Type", ProxyType),
     ("proxy_ip", "Network/Proxy/IP", Str),
     ("proxy_port", "Network/Proxy/Port", Int),
@@ -268,6 +271,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("peer_turnover_interval", "BitTorrent/Session/PeerTurnoverInterval", Int),
     ("request_queue_size", "BitTorrent/Session/RequestQueueSize", Int),
     ("dht_bootstrap_nodes", "BitTorrent/Session/DHTBootstrapNodes", Str),
+    ("webtorrent_stun_server", "BitTorrent/Session/WebTorrentSTUNServer", Str),
 ];
 
 /// ini keys holding the scheduler times (`QTime`).

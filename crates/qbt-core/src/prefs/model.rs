@@ -190,10 +190,15 @@ pub struct ConnectionPrefs {
     pub i2p_address: String,
     pub i2p_port: i64,
     pub i2p_mixed_mode: bool,
+    /// Stored for WebAPI clients; the engine has no I2P peer exchange.
+    pub i2p_pex_enabled: bool,
     pub i2p_inbound_quantity: i64,
     pub i2p_outbound_quantity: i64,
     pub i2p_inbound_length: i64,
     pub i2p_outbound_length: i64,
+    /// -7..=7, stored only (no I2P in the engine).
+    pub i2p_inbound_length_variance: i64,
+    pub i2p_outbound_length_variance: i64,
     pub proxy_type: ProxyType,
     pub proxy_ip: String,
     pub proxy_port: i64,
@@ -227,10 +232,13 @@ impl Default for ConnectionPrefs {
             i2p_address: "127.0.0.1".into(),
             i2p_port: 7656,
             i2p_mixed_mode: false,
+            i2p_pex_enabled: true,
             i2p_inbound_quantity: 3,
             i2p_outbound_quantity: 3,
             i2p_inbound_length: 3,
             i2p_outbound_length: 3,
+            i2p_inbound_length_variance: 0,
+            i2p_outbound_length_variance: 0,
             proxy_type: ProxyType::None,
             proxy_ip: String::new(),
             proxy_port: 8080,
@@ -588,6 +596,8 @@ pub struct AdvancedPrefs {
     pub request_queue_size: i64,
     /// Comma-separated `host:port`.
     pub dht_bootstrap_nodes: String,
+    /// Stored for WebAPI clients; the engine has no WebTorrent.
+    pub webtorrent_stun_server: String,
 }
 
 pub const DEFAULT_DHT_BOOTSTRAP_NODES: &str =
@@ -668,6 +678,7 @@ impl Default for AdvancedPrefs {
             peer_turnover_interval: 300,
             request_queue_size: 500,
             dht_bootstrap_nodes: DEFAULT_DHT_BOOTSTRAP_NODES.into(),
+            webtorrent_stun_server: "stun.l.google.com:19302".into(),
         }
     }
 }

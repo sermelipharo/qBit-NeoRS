@@ -182,7 +182,7 @@ pub fn to_json(p: &Preferences) -> Value {
     let subnets: Vec<String> =
         w.bypass_auth_subnet_whitelist.iter().filter_map(|x| Subnet::parse(x)).map(|x| x.to_string()).collect();
 
-    let mut m = Map::with_capacity(226);
+    let mut m = Map::with_capacity(230);
     let mut put = |k: &str, v: Value| {
         m.insert(k.to_owned(), v);
     };
@@ -248,10 +248,13 @@ pub fn to_json(p: &Preferences) -> Value {
     put("i2p_address", json!(c.i2p_address));
     put("i2p_port", json!(c.i2p_port));
     put("i2p_mixed_mode", json!(c.i2p_mixed_mode));
+    put("i2p_pex_enabled", json!(c.i2p_pex_enabled));
     put("i2p_inbound_quantity", json!(c.i2p_inbound_quantity));
     put("i2p_outbound_quantity", json!(c.i2p_outbound_quantity));
     put("i2p_inbound_length", json!(c.i2p_inbound_length));
     put("i2p_outbound_length", json!(c.i2p_outbound_length));
+    put("i2p_inbound_length_variance", json!(c.i2p_inbound_length_variance));
+    put("i2p_outbound_length_variance", json!(c.i2p_outbound_length_variance));
     put("proxy_type", json!(c.proxy_type.as_api_str()));
     put("proxy_ip", json!(c.proxy_ip));
     put("proxy_port", json!(c.proxy_port));
@@ -421,6 +424,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("peer_turnover_interval", json!(a.peer_turnover_interval));
     put("request_queue_size", json!(a.request_queue_size));
     put("dht_bootstrap_nodes", json!(a.dht_bootstrap_nodes));
+    put("webtorrent_stun_server", json!(a.webtorrent_stun_server));
     Value::Object(m)
 }
 
@@ -586,10 +590,19 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("i2p_address", c.i2p_address, to_str);
     set!("i2p_port", c.i2p_port, to_int);
     set!("i2p_mixed_mode", c.i2p_mixed_mode, to_bool);
+    set!("i2p_pex_enabled", c.i2p_pex_enabled, to_bool);
     set!("i2p_inbound_quantity", c.i2p_inbound_quantity, to_int);
     set!("i2p_outbound_quantity", c.i2p_outbound_quantity, to_int);
     set!("i2p_inbound_length", c.i2p_inbound_length, to_int);
     set!("i2p_outbound_length", c.i2p_outbound_length, to_int);
+    // Clamped like SessionImpl's settings.
+    for (key, field) in
+        [("i2p_inbound_length_variance", &mut c.i2p_inbound_length_variance), ("i2p_outbound_length_variance", &mut c.i2p_outbound_length_variance)]
+    {
+        if let Some(v) = get(key) {
+            *field = to_int(v).clamp(-7, 7);
+        }
+    }
     if let Some(v) = get("proxy_type") {
         c.proxy_type = ProxyType::from_api(v);
     }
@@ -902,6 +915,7 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
         a.dht_bootstrap_nodes =
             if nodes.trim().is_empty() { DEFAULT_DHT_BOOTSTRAP_NODES.to_owned() } else { nodes };
     }
+    set!("webtorrent_stun_server", a.webtorrent_stun_server, to_str);
     Ok(())
 }
 
@@ -923,8 +937,9 @@ mod tests {
         "mail_notification_username", "mail_notification_password", "autorun_on_torrent_added_enabled",
         "autorun_on_torrent_added_program", "autorun_enabled", "autorun_program", "listen_port", "ssl_enabled",
         "ssl_listen_port", "random_port", "upnp", "max_connec", "max_connec_per_torrent", "max_uploads",
-        "max_uploads_per_torrent", "i2p_enabled", "i2p_address", "i2p_port", "i2p_mixed_mode", "i2p_inbound_quantity",
-        "i2p_outbound_quantity", "i2p_inbound_length", "i2p_outbound_length", "proxy_type", "proxy_ip", "proxy_port",
+        "max_uploads_per_torrent", "i2p_enabled", "i2p_address", "i2p_port", "i2p_mixed_mode", "i2p_pex_enabled", "i2p_inbound_quantity",
+        "i2p_outbound_quantity", "i2p_inbound_length", "i2p_outbound_length", "i2p_inbound_length_variance",
+        "i2p_outbound_length_variance", "proxy_type", "proxy_ip", "proxy_port",
         "proxy_auth_enabled", "proxy_username", "proxy_password", "proxy_hostname_lookup", "proxy_bittorrent",
         "proxy_peer_connections", "proxy_rss", "proxy_misc", "ip_filter_enabled", "ip_filter_path",
         "ip_filter_trackers", "banned_IPs", "dl_limit", "up_limit", "alt_dl_limit", "alt_up_limit",
@@ -964,7 +979,7 @@ mod tests {
         "block_peers_on_privileged_ports", "upload_slots_behavior", "upload_choking_algorithm",
         "announce_to_all_trackers", "announce_to_all_tiers", "announce_ip", "announce_port",
         "max_concurrent_http_announces", "stop_tracker_timeout", "peer_turnover", "peer_turnover_cutoff",
-        "peer_turnover_interval", "request_queue_size", "dht_bootstrap_nodes",
+        "peer_turnover_interval", "request_queue_size", "dht_bootstrap_nodes", "webtorrent_stun_server",
     ];
 
     fn obj(v: Value) -> Map<String, Value> {
@@ -973,15 +988,15 @@ mod tests {
 
     #[test]
     fn get_has_exact_key_order() {
-        // 5.2.4's 223 keys plus the ones added for 5.3 (web_ui_sessions_count_limit).
-        assert_eq!(APPENDIX_A.len(), 226);
+        // 5.2.4's 223 keys plus the ones added for 5.3.
+        assert_eq!(APPENDIX_A.len(), 230);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);
         // Serialized text keeps the order too.
         let text = v.to_string();
         assert!(text.starts_with("{\"locale\":"));
-        assert!(text.ends_with(&format!("\"dht_bootstrap_nodes\":\"{}\"}}", DEFAULT_DHT_BOOTSTRAP_NODES)));
+        assert!(text.ends_with("\"webtorrent_stun_server\":\"stun.l.google.com:19302\"}"));
     }
 
     #[test]

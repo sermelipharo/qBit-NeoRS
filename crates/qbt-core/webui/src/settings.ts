@@ -161,6 +161,10 @@ const PANES: Pane[] = [
       ["alternative_webui_enabled", "Use an alternative Web UI"],
       ["alternative_webui_path", "Files location", "text"],
     ]],
+    ["Confirmations", [
+      ["confirm_torrent_recheck", "Ask before rechecking torrents"],
+      ["confirm_remove_all_tags", "Ask before removing all tags"],
+    ]],
   ]],
 ];
 

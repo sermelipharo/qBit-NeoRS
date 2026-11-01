@@ -60,8 +60,6 @@ const GUI_KEYS: &[(&str, Kind)] = &[
     ("Preferences/Advanced/DisableRecursiveDownload", Bool),
     ("GUI/Notifications/Enabled", Bool),
     ("Application/GUI/Notifications/TorrentAdded", Bool),
-    ("Preferences/Advanced/confirmRemoveAllTags", Bool),
-    ("GUI/ConfirmActions/RemoveTrackerFromAllTorrents", Bool),
     ("GUI/DownloadTrackerFavicon", Bool),
     ("AddNewTorrentDialog/SavePathHistoryLength", Int),
     ("SpeedWidget/Enabled", Bool),

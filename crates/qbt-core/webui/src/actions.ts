@@ -41,10 +41,25 @@ export async function remove(list = selected()): Promise<void> {
   }
 }
 
+/** Whether a confirmation preference asks first (true unless turned off, or when unreadable). */
+async function asks(key: string): Promise<boolean> {
+  const p = await prefs().catch(() => ({}) as Record<string, any>);
+  return p[key] !== false;
+}
+
 export async function recheck(): Promise<void> {
   const list = selected();
-  if (list.length && (await confirmSheet("Recheck torrents", `Recheck ${list.length === 1 ? "this torrent" : list.length + " torrents"}? Their data will be verified again.`, "Recheck"))) {
+  if (!list.length) return;
+  const what = list.length === 1 ? "this torrent" : list.length + " torrents";
+  if (!(await asks("confirm_torrent_recheck")) || (await confirmSheet("Recheck torrents", `Recheck ${what}? Their data will be verified again.`, "Recheck"))) {
     run("recheck", {}, list);
+  }
+}
+
+async function removeAllTags(list: Torrent[]): Promise<void> {
+  const what = list.length === 1 ? "this torrent" : list.length + " torrents";
+  if (!(await asks("confirm_remove_all_tags")) || (await confirmSheet("Remove all tags", `Remove all tags from ${what}?`, "Remove All", true))) {
+    run("removeTags", { tags: "" }, list);
   }
 }
 
@@ -138,7 +153,7 @@ function tagMenu(list: Torrent[]): MenuEntry[] {
   const names = [...tags].sort(collator.compare);
   return [
     { label: "New…", icon: "plus", run: () => newTag(true) },
-    { label: "Remove all", disabled: !list.some((t) => t.tags), run: () => run("removeTags", { tags: "" }, list) },
+    { label: "Remove all", disabled: !list.some((t) => t.tags), run: () => removeAllTags(list) },
     "-",
     ...names.map((n) => {
       const all = list.every((t) => tagList(t).includes(n));

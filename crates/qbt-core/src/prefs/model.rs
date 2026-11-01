@@ -507,6 +507,8 @@ pub struct AdvancedPrefs {
     /// Bytes.
     pub torrent_file_size_limit: i64,
     pub confirm_torrent_recheck: bool,
+    pub confirm_remove_all_tags: bool,
+    pub confirm_remove_tracker_from_all_torrents: bool,
     pub recheck_completed_torrents: bool,
     pub app_instance_name: String,
     /// Milliseconds.
@@ -604,6 +606,8 @@ impl Default for AdvancedPrefs {
             save_statistics_interval: 15,
             torrent_file_size_limit: 100 * 1024 * 1024,
             confirm_torrent_recheck: true,
+            confirm_remove_all_tags: true,
+            confirm_remove_tracker_from_all_torrents: true,
             recheck_completed_torrents: false,
             app_instance_name: String::new(),
             refresh_interval: 1500,

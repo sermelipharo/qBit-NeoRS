@@ -1138,8 +1138,8 @@ Keys qBittorrent keeps outside the WebAPI that have a Settings control, plus the
 | `watched_folders.json` | Automatically add torrents from: | Downloads › Watched folders | Transfers › Adding › Watched Folders | B | kept |
 | `GUI/Notifications/Enabled` | Display notifications | Advanced › qBittorrent Section | General › Notifications | B | kept |
 | `Application/GUI/Notifications/TorrentAdded` | Display notifications for added torrents | Advanced › qBittorrent Section | General › Notifications | R | new: "Also when a torrent is added" |
-| `Preferences/Advanced/confirmRemoveAllTags` | Confirm removal of all tags | Advanced › qBittorrent Section | General › Confirmations | D | new: "Ask before removing all tags" |
-| `GUI/ConfirmActions/RemoveTrackerFromAllTorrents` | Confirm removal of tracker from all torrents | Advanced › qBittorrent Section | General › Confirmations | D | new: "Ask before removing a tracker from all torrents" |
+| `confirm_remove_all_tags` (`Preferences/Advanced/confirmRemoveAllTags`; a GUI-only key before 5.3) | Confirm removal of all tags | Advanced › qBittorrent Section | General › Confirmations | D | new: "Ask before removing all tags" |
+| `confirm_remove_tracker_from_all_torrents` (`GUI/ConfirmActions/RemoveTrackerFromAllTorrents`; a GUI-only key before 5.3) | Confirm removal of tracker from all torrents | Advanced › qBittorrent Section | General › Confirmations | D | new: "Ask before removing a tracker from all torrents" |
 | `GUI/DownloadTrackerFavicon` | Download tracker's favicon | Advanced › qBittorrent Section | Interface › Sidebar | B | new: "Show tracker icons" |
 | `AddNewTorrentDialog/SavePathHistoryLength` | Save path history length | Advanced › qBittorrent Section | Transfers › Adding › Adding Torrents | A | new: "Remember recent save locations:" |
 | `SpeedWidget/Enabled` | Enable speed graphs | Advanced › qBittorrent Section | Interface › Torrent Details | B | new: "Show speed graphs" |

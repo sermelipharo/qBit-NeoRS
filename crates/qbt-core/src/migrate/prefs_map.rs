@@ -200,6 +200,8 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("save_statistics_interval", "BitTorrent/Session/SaveStatisticsInterval", Int),
     ("torrent_file_size_limit", "BitTorrent/TorrentFileSizeLimit", Int),
     ("confirm_torrent_recheck", "Preferences/Advanced/confirmTorrentRecheck", Bool),
+    ("confirm_remove_all_tags", "Preferences/Advanced/confirmRemoveAllTags", Bool),
+    ("confirm_remove_tracker_from_all_torrents", "GUI/ConfirmActions/RemoveTrackerFromAllTorrents", Bool),
     ("recheck_completed_torrents", "Preferences/Advanced/RecheckOnCompletion", Bool),
     ("app_instance_name", "Application/InstanceName", Str),
     ("refresh_interval", "BitTorrent/Session/RefreshInterval", Int),

@@ -444,8 +444,8 @@ The section header row reads `"qBittorrent Section"` and links `"Open documentat
 | 16 | `"Display notifications"` | checkbox | — (GUI only) | bool | `true` | Desktop notifications, e.g. download finished or I/O error. · `GUI/Notifications/Enabled` |
 | 17 | `"Display notifications for added torrents"` | checkbox | — (GUI only) | bool | `false` | A notification each time a torrent is added. · `Application/GUI/Notifications/TorrentAdded` |
 | 18 [DBus] | `"Notification timeout [0: infinite, -1: system default]"` | spin −1…, suffix `" (infinite)"` / `" (system default)"` / `" ms"` | — | int ms | `-1` | · `GUI/Notifications/Timeout` |
-| 19 | `"Confirm removal of all tags"` | checkbox | — (GUI only) | bool | `true` | Asks before "Remove All" tags. · `Preferences/Advanced/confirmRemoveAllTags` |
-| 20 | `"Confirm removal of tracker from all torrents"` | checkbox | — (GUI only) | bool | `true` | Asks before removing a tracker from the Trackers filter context menu. · `GUI/ConfirmActions/RemoveTrackerFromAllTorrents` |
+| 19 | `"Confirm removal of all tags"` | checkbox | `confirm_remove_all_tags` (5.3) | bool | `true` | Asks before "Remove All" tags. · `Preferences/Advanced/confirmRemoveAllTags` |
+| 20 | `"Confirm removal of tracker from all torrents"` | checkbox | `confirm_remove_tracker_from_all_torrents` (5.3) | bool | `true` | Asks before removing a tracker from the Trackers filter context menu. · `GUI/ConfirmActions/RemoveTrackerFromAllTorrents` |
 | 21 | `"Reannounce to all trackers when IP or port changed"` | checkbox | `reannounce_when_address_changed` (171) | bool | `false` | · `BitTorrent/Session/ReannounceWhenAddressChanged` |
 | 22 | `"Download tracker's favicon"` | checkbox | — (GUI only) | bool | `false` | The Trackers sidebar filter downloads `http(s)://<tracker host>/favicon.ico` for each tracker host. · `GUI/DownloadTrackerFavicon` |
 | 23 | `"Save path history length"` | spin 0–99 | — (GUI only) | int | `8` (clamped 0–99) | Number of entries in the Add-dialog save-path and download-path history combos. · `AddNewTorrentDialog/SavePathHistoryLength` |

@@ -131,6 +131,7 @@ final class AppModel {
             }
         }
         corePreferences = client.preferences()
+        moveLegacyConfirmations()
         status.isPaused = client.isSessionPaused()
         log.append(contentsOf: client.mainLog(lastKnownId: -1, levels: []))
         names.pushToCore(after: .zero)

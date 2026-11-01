@@ -182,7 +182,7 @@ pub fn to_json(p: &Preferences) -> Value {
     let subnets: Vec<String> =
         w.bypass_auth_subnet_whitelist.iter().filter_map(|x| Subnet::parse(x)).map(|x| x.to_string()).collect();
 
-    let mut m = Map::with_capacity(224);
+    let mut m = Map::with_capacity(226);
     let mut put = |k: &str, v: Value| {
         m.insert(k.to_owned(), v);
     };
@@ -360,6 +360,8 @@ pub fn to_json(p: &Preferences) -> Value {
     put("save_statistics_interval", json!(a.save_statistics_interval));
     put("torrent_file_size_limit", json!(a.torrent_file_size_limit));
     put("confirm_torrent_recheck", json!(a.confirm_torrent_recheck));
+    put("confirm_remove_all_tags", json!(a.confirm_remove_all_tags));
+    put("confirm_remove_tracker_from_all_torrents", json!(a.confirm_remove_tracker_from_all_torrents));
     put("recheck_completed_torrents", json!(a.recheck_completed_torrents));
     put("app_instance_name", json!(a.app_instance_name));
     put("refresh_interval", json!(a.refresh_interval));
@@ -816,6 +818,8 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("save_statistics_interval", a.save_statistics_interval, to_int);
     set!("torrent_file_size_limit", a.torrent_file_size_limit, to_i64);
     set!("confirm_torrent_recheck", a.confirm_torrent_recheck, to_bool);
+    set!("confirm_remove_all_tags", a.confirm_remove_all_tags, to_bool);
+    set!("confirm_remove_tracker_from_all_torrents", a.confirm_remove_tracker_from_all_torrents, to_bool);
     set!("recheck_completed_torrents", a.recheck_completed_torrents, to_bool);
     set!("app_instance_name", a.app_instance_name, to_str);
     set!("refresh_interval", a.refresh_interval, to_int);
@@ -945,7 +949,8 @@ mod tests {
         "rss_download_repack_proper_episodes", "rss_smart_episode_filters", "resume_data_storage_type",
         "torrent_content_remove_option", "memory_working_set_limit", "current_network_interface",
         "current_interface_name", "current_interface_address", "save_resume_data_interval", "save_statistics_interval",
-        "torrent_file_size_limit", "confirm_torrent_recheck", "recheck_completed_torrents", "app_instance_name",
+        "torrent_file_size_limit", "confirm_torrent_recheck", "confirm_remove_all_tags",
+        "confirm_remove_tracker_from_all_torrents", "recheck_completed_torrents", "app_instance_name",
         "refresh_interval", "resolve_peer_host_names", "resolve_peer_countries", "reannounce_when_address_changed",
         "enable_embedded_tracker", "embedded_tracker_port", "embedded_tracker_port_forwarding", "mark_of_the_web",
         "ignore_ssl_errors", "python_executable_path", "bdecode_depth_limit", "bdecode_token_limit",
@@ -969,7 +974,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3 (web_ui_sessions_count_limit).
-        assert_eq!(APPENDIX_A.len(), 224);
+        assert_eq!(APPENDIX_A.len(), 226);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);

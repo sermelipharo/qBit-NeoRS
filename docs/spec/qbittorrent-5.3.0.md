@@ -116,7 +116,7 @@ Things to know before reading:
 |---|---|---|---|
 | #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | 🟡 | Done except `shareLimitsMode` (comes with #24043): limits parsed and validated in `apply_share_limit_params`; `torrents/categories` now reports the stored limits instead of -2 |
 | #24798 | `editCategory` must not overwrite unrelated options | ✅ | Edits start from the stored category; `savePath` optional; empty `downloadPathEnabled` = default (`webui/api/torrents.rs` `edit_category`, e2e `edit_category_keeps_what_the_call_leaves_out`) |
-| #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ⬜ | Add to prefs and `prefs/api_json.rs`; the Swift app already confirms, wire it to the keys |
+| #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ✅ | Core preferences (`advanced`), imported from qBittorrent's ini; the Mac app moved its own stored values into them once and reads them from the core; the Web UI honours `confirm_remove_all_tags` and `confirm_torrent_recheck` |
 | #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ⬜ | Variance: see Core/engine; the PeX key may be inert |
 | #24837 | `webtorrent_stun_server` key | ⬜ | Inert key for clients (see Core/engine) |
 | #24842 | `rss/exportRules`, `rss/importRules` (POST) | ⬜ | Core already exports rules (`rssExportRules`, `apps/macos/Generated/qbt_core.swift:804`; UI `Features/RSS/Downloader/RulesExport.swift`); add the two endpoints in `webui/api/rss.rs` |

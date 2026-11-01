@@ -819,3 +819,48 @@ fn add_options_in_multipart_and_urlencoded_bodies() {
         assert!(t["state"].as_str().unwrap().starts_with("stopped"), "{t}");
     });
 }
+
+#[test]
+fn edit_category_keeps_what_the_call_leaves_out() {
+    let h = Harness::new(|_| {});
+    h.block(async {
+        let c = h.login().await;
+        let create = [
+            ("category", "films"),
+            ("savePath", "/films"),
+            ("downloadPathEnabled", "true"),
+            ("downloadPath", "/incoming"),
+            ("ratioLimit", "2.5"),
+            ("seedingTimeLimit", "90"),
+            ("shareLimitAction", "Remove"),
+        ];
+        assert_eq!(h.post("/api/v2/torrents/createCategory", &create, Some(&c)).await.status(), 200);
+        let films = |v: Value| v["films"].clone();
+
+        // savePath is optional now; nothing else is reset.
+        let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), ("inactiveSeedingTimeLimit", "30")], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let cat = films(h.get("/api/v2/torrents/categories", Some(&c)).await.json().await.unwrap());
+        assert_eq!(cat["savePath"], "/films");
+        assert_eq!(cat["download_path"], "/incoming");
+        assert_eq!(cat["ratio_limit"], 2.5);
+        assert_eq!(cat["seeding_time_limit"], 90);
+        assert_eq!(cat["inactive_seeding_time_limit"], 30);
+        assert_eq!(cat["share_limit_action"], "Remove");
+
+        // An empty downloadPathEnabled goes back to the default.
+        let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), ("downloadPathEnabled", "")], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let cat = films(h.get("/api/v2/torrents/categories", Some(&c)).await.json().await.unwrap());
+        assert!(cat["download_path"].is_null(), "{cat}");
+        assert_eq!(cat["ratio_limit"], 2.5);
+
+        // Bad values are refused instead of resetting the option.
+        for bad in [("ratioLimit", "-3"), ("seedingTimeLimit", "x"), ("shareLimitAction", "Explode"), ("downloadPathEnabled", "maybe")] {
+            let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), bad], Some(&c)).await;
+            assert_eq!(r.status(), 400, "{bad:?}");
+        }
+        let r = h.post("/api/v2/torrents/editCategory", &[("category", "nope"), ("savePath", "/x")], Some(&c)).await;
+        assert_eq!(r.status(), 404);
+    });
+}

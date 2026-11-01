@@ -114,8 +114,8 @@ Things to know before reading:
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | ⬜ | `edit_category` (`webui/api/torrents.rs:1084-1111`) reads only the paths and requires `savePath` |
-| #24798 | `editCategory` must not overwrite unrelated options | ⬜ | Bug today: the handler builds a `Category` with defaults and `Session::edit_category` replaces the whole record (`bittorrent/session.rs:1383`), so share limits reset. Merge only the given fields |
+| #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | 🟡 | Done except `shareLimitsMode` (comes with #24043): limits parsed and validated in `apply_share_limit_params`; `torrents/categories` now reports the stored limits instead of -2 |
+| #24798 | `editCategory` must not overwrite unrelated options | ✅ | Edits start from the stored category; `savePath` optional; empty `downloadPathEnabled` = default (`webui/api/torrents.rs` `edit_category`, e2e `edit_category_keeps_what_the_call_leaves_out`) |
 | #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ⬜ | Add to prefs and `prefs/api_json.rs`; the Swift app already confirms, wire it to the keys |
 | #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ⬜ | Variance: see Core/engine; the PeX key may be inert |
 | #24837 | `webtorrent_stun_server` key | ⬜ | Inert key for clients (see Core/engine) |

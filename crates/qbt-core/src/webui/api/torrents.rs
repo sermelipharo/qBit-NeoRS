@@ -10,7 +10,7 @@ use super::{
 };
 use crate::QbtError;
 use crate::model::*;
-use crate::webui::http::{parse_int32, percent_decode_str};
+use crate::webui::http::{parse_bool, parse_f64, parse_int_str, parse_int32, percent_decode_str};
 use crate::webui::security::sanitize_for_log;
 
 /// How long a background metadata fetch / URL download may run.
@@ -1082,7 +1082,7 @@ pub fn is_valid_category_name(name: &str) -> bool {
 }
 
 fn edit_category(c: &mut Call<'_>, create: bool) -> ApiResult {
-    c.params.require(if create { &["category"] } else { &["category", "savePath"] })?;
+    c.params.require(&["category"])?;
     let name = c.params.str("category").to_owned();
     if name.is_empty() {
         return Err(ApiError::bad_params("Category cannot be empty"));
@@ -1090,12 +1090,29 @@ fn edit_category(c: &mut Call<'_>, create: bool) -> ApiResult {
     if create && !is_valid_category_name(&name) {
         return Err(ApiError::conflict("Incorrect category name"));
     }
-    let download_path = match c.params.bool_opt("downloadPathEnabled") {
-        None => CategoryDownloadPath::Default,
-        Some(false) => CategoryDownloadPath::Disabled,
-        Some(true) => CategoryDownloadPath::Path { path: c.params.str("downloadPath").to_owned() },
+    // Editing starts from the stored category: options the call leaves out
+    // keep their values (qBittorrent 5.3, #24798).
+    let mut cat = if create {
+        Category { name: name.clone(), ..Default::default() }
+    } else {
+        c.app
+            .categories()
+            .into_iter()
+            .find(|k| k.name == name)
+            .ok_or_else(|| ApiError::not_found_msg("Category does not exist"))?
     };
-    let cat = Category { name, save_path: c.params.str("savePath").to_owned(), download_path, ..Default::default() };
+    if let Some(path) = c.params.get("savePath") {
+        cat.save_path = path.to_owned();
+    }
+    if let Some(enabled) = c.params.get("downloadPathEnabled") {
+        cat.download_path = match (enabled, parse_bool(enabled)) {
+            ("", _) => CategoryDownloadPath::Default,
+            (_, Some(false)) => CategoryDownloadPath::Disabled,
+            (_, Some(true)) => CategoryDownloadPath::Path { path: c.params.str("downloadPath").to_owned() },
+            (_, None) => return Err(ApiError::bad_params("'downloadPathEnabled' parameter has invalid value")),
+        };
+    }
+    apply_share_limit_params(c, &mut cat)?;
     if create {
         c.app.create_category(cat).map_err(|e| match e {
             QbtError::Unsupported { .. } => e.into(),
@@ -1108,6 +1125,35 @@ fn edit_category(c: &mut Call<'_>, create: bool) -> ApiResult {
         })?;
     }
     Ok(Reply::ok())
+}
+
+/// qBittorrent 5.3's `applyShareLimitsParams` for categories (WebAPI 2.16.2):
+/// each limit is optional, -2 inherits, -1 is unlimited, anything else
+/// negative or unparsable is refused rather than silently reset.
+fn apply_share_limit_params(c: &Call<'_>, cat: &mut Category) -> Result<(), ApiError> {
+    let invalid = |key: &str| ApiError::bad_params(format!("'{key}' parameter has invalid value"));
+    if let Some(v) = c.params.get("ratioLimit") {
+        let ratio = parse_f64(v).filter(|r| *r >= 0.0 || *r == -1.0 || *r == -2.0).ok_or_else(|| invalid("ratioLimit"))?;
+        cat.ratio_limit = ratio;
+    }
+    for (key, field) in [
+        ("seedingTimeLimit", &mut cat.seeding_time_limit),
+        ("inactiveSeedingTimeLimit", &mut cat.inactive_seeding_time_limit),
+    ] {
+        if let Some(v) = c.params.get(key) {
+            *field = parse_int_str(v).filter(|m| *m >= -2).ok_or_else(|| invalid(key))?;
+        }
+    }
+    if let Some(v) = c.params.get("shareLimitAction") {
+        cat.share_limit_action = match v {
+            "Default" => ShareLimitAction::Default,
+            other => match share_limit_action(other) {
+                ShareLimitAction::Default => return Err(invalid("shareLimitAction")),
+                action => action,
+            },
+        };
+    }
+    Ok(())
 }
 
 /// `Utils::Fs::isValidName` (non-Windows rules).

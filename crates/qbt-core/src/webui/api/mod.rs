@@ -390,12 +390,10 @@ pub fn category_json(c: &Category) -> Value {
         "name": c.name,
         "savePath": c.save_path,
         "download_path": download_path,
-        // The core's category model has no per-category share limits yet;
-        // report "use global" like a default category.
-        "ratio_limit": -2,
-        "seeding_time_limit": -2,
-        "inactive_seeding_time_limit": -2,
-        "share_limit_action": "Default",
+        "ratio_limit": c.ratio_limit,
+        "seeding_time_limit": c.seeding_time_limit,
+        "inactive_seeding_time_limit": c.inactive_seeding_time_limit,
+        "share_limit_action": c.share_limit_action,
     })
 }
 

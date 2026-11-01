@@ -142,7 +142,7 @@ Things to know before reading:
 | #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ⬜ | See Core/engine |
 | #23856 (2.15.2) | `app/getFreeSpaceAtPath` | ✅ | `webui/api/app.rs:92`, route `webui/api/mod.rs:173` (the changelog line's `Action` suffix is the C++ method name; the real route is `getFreeSpaceAtPath`) |
 | #23784 (2.16.1) | `search/status` has `pattern`, `category`, `plugins`; prefs `store_search_jobs`, `store_search_job_results` | ⬜ | Add the fields in `webui/api/search.rs` and two prefs; Swift already restores tabs (`Features/Search/SearchSessionStore.swift`) |
-| #24341 | Use torrent names for exported .torrent files | ⬜ | `webui/api/torrents.rs:560,608` names the download after the hash (`safe_file_stem`); use `to_valid_file_name(name)` (`bittorrent/paths.rs:212`) |
+| #24341 | Use torrent names for exported .torrent files | ✅ | `torrents/export` names the file after the torrent (`to_valid_file_name`), the hash as fallback; `Content-Disposition` carries an ASCII `filename` plus RFC 5987 `filename*` (`webui/webapp.rs` `content_disposition`) |
 | #24875 | Correct sync data when the client missed the last response | ✅ | `webui/sync.rs:257-265` keeps the change buffer until the client acknowledges the last `rid`; the peers sync (`:443`, `generate_sync_data`) has its own logic, verify it the same way |
 | #24700 | Construct controllers on demand | ➖ | Internal C++ optimisation; NeoRS routes by table |
 

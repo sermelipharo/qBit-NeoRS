@@ -557,7 +557,10 @@ fn export(c: &mut Call<'_>) -> ApiResult {
         QbtError::Unsupported { .. } => e.into(),
         other => ApiError::conflict(format!("Unable to export torrent file. Error: {}", super::error_message(&other))),
     })?;
-    Ok(Reply::Bytes { data, mime: "application/x-bittorrent", filename: Some(format!("{}.torrent", safe_file_stem(&h))) })
+    // Named after the torrent like qBittorrent 5.3 (#24341), the hash when the name is unusable.
+    let name = c.app.torrent(h.clone()).map(|t| crate::bittorrent::paths::to_valid_file_name(&t.name)).unwrap_or_default();
+    let stem = if name.is_empty() || name == "torrent" { safe_file_stem(&h) } else { name };
+    Ok(Reply::Bytes { data, mime: "application/x-bittorrent", filename: Some(format!("{stem}.torrent")) })
 }
 
 fn set_ssl(c: &mut Call<'_>) -> ApiResult {

@@ -193,11 +193,10 @@ impl Out {
                 let mut o = Self::new(StatusCode::OK);
                 o.content_type = Some(mime);
                 o.body = Bytes::from(data);
-                if let Some(f) = filename {
-                    let safe: String = f.chars().filter(|c| !c.is_control() && *c != '"' && *c != '\\').collect();
-                    if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{safe}\"")) {
-                        o.headers.push((header::CONTENT_DISPOSITION, v));
-                    }
+                if let Some(f) = filename
+                    && let Ok(v) = HeaderValue::from_str(&content_disposition(&f))
+                {
+                    o.headers.push((header::CONTENT_DISPOSITION, v));
                 }
                 o
             }
@@ -937,9 +936,39 @@ impl Drop for AttemptGuard<'_> {
     }
 }
 
+/// `attachment` with an ASCII `filename` (quotes, backslashes, controls and
+/// non-ASCII replaced by `_`) plus the exact name as RFC 5987 `filename*`
+/// (percent-encoded UTF-8): a torrent name can neither break the header nor
+/// lose its letters.
+fn content_disposition(name: &str) -> String {
+    let ascii: String =
+        name.chars().map(|c| if (c.is_ascii_graphic() && c != '"' && c != '\\') || c == ' ' { c } else { '_' }).collect();
+    let mut encoded = String::new();
+    for b in name.bytes() {
+        if b.is_ascii_alphanumeric() || b"!#$&+-.^_`|~".contains(&b) {
+            encoded.push(b as char);
+        } else {
+            encoded.push_str(&format!("%{b:02X}"));
+        }
+    }
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_names_cannot_break_the_header() {
+        let v = content_disposition("Фильм \"x\"\r\nSet-Cookie: a=b\\.torrent");
+        assert!(HeaderValue::from_str(&v).is_ok());
+        assert!(!v.contains('\r') && !v.contains('\n'));
+        assert_eq!(
+            v,
+            "attachment; filename=\"_____ _x___Set-Cookie: a=b_.torrent\"; \
+             filename*=UTF-8''%D0%A4%D0%B8%D0%BB%D1%8C%D0%BC%20%22x%22%0D%0ASet-Cookie%3A%20a%3Db%5C.torrent"
+        );
+    }
 
     #[test]
     fn api_paths() {

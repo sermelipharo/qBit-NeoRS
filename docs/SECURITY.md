@@ -304,7 +304,9 @@ Mitigations:
   localhost) it decides alone, and only `same-origin` and `none` pass: a
   page cannot suppress or change it, so `Referrer-Policy: no-referrer` no
   longer slips past. Otherwise Origin/Referer must match the target host and
-  port (qBittorrent rules; missing both is allowed for non-browser clients);
+  port (qBittorrent rules; missing both is allowed for non-browser clients).
+  Only a GET of the start page (`/`, `/index.html`) skips the check, so a link
+  from another site opens the Web UI (qBittorrent 5.3); that page is static;
   Host header validation checks the port and the local address or the
   "Server domains" list. Domain patterns are matched against the whole host
   name (upstream searches unanchored, so `example.com` also matched

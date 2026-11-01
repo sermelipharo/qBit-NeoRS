@@ -37,7 +37,7 @@ Things to know before reading:
 | #24805 | HTTPS DynDNS, no https-to-http redirects | ✅ | Handled earlier |
 | #24869 | Unauthenticated announce created a torrent entry | ✅ | Handled earlier |
 | #24720 | WebUI sessions count limit | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
-| #24379 | Allow cross-origin links to the webroot | ⬜ | Skip the CSRF check for `/` and `/index.html` only (`webui/webapp.rs:451`); today a cross-site link gets 401 |
+| #24379 | Allow cross-origin links to the webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |
 | #23838 | Fix STARTTLS; replace the SSL checkbox by an encryption type (None / STARTTLS / SMTPS) | ⬜ | Replace `mail_notification_ssl_enabled` (`prefs/api_json.rs:229,542`) with `mail_notification_encryption_type`, migrate the old value, adjust `net/smtp.rs` (its header comment describes the old rule), Swift picker. WebAPI 2.16.0 |
 | #24512 | Drop unsupported tracker URLs from magnets | ⬜ | `parse_magnet` (`bittorrent/metainfo.rs:525`) keeps any `tr`; keep only `http`, `https`, `udp` with a host. Unit test |
 | #24087 | Do not load a zero-size GeoIP database | ✅ | `net/geoip.rs:95-110` turns a failed open into a warning; add a test with an empty file to be sure |
@@ -176,7 +176,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24848 | Cap path autocompletion at 25 | ⬜ | Cap server side in `app/getDirectoryContent` (`webui/api/app.rs`), not only in the client |
 | #24920 | Missing Options page settings | ⬜ | `settings.ts` is a subset of the prefs; add the new keys together with the ones above |
 | #24984 | Shared download window for RSS articles | ⬜ | Low; `rss.ts` downloads one article at a time |
-| #24379 | Cross-origin links to webroot | ⬜ | Server side, see Security |
+| #24379 | Cross-origin links to webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |
 | #24210 | Creator dates as epoch seconds | ⬜ | See WebAPI |
 | #23878, #23837, #23818, #24708, #24710, #24804, #24816, #24879, #24686 | Folder collapse, in-place array filtering, set-rows speed, disabled instead of hidden menu items, header click errors, category indentation, version table layout, sortable properties panel, RSS refresh back-off | ➖ | Behaviour of upstream's MooTools/Mocha code; the NeoRS UI is different code. Spot-check folder collapse and disabled-vs-hidden menu items when touching `details.ts` |
 

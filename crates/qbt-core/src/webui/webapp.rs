@@ -450,8 +450,11 @@ impl WebApp {
         let bearer = hdr(headers, header::AUTHORIZATION).and_then(|h| authorization(h, "Bearer")).map(str::to_owned);
         let peer_trusted = cfg.trusted_proxies.as_ref().is_some_and(|t| any_contains(t, conn.peer));
 
-        // Block suspicious requests.
-        if bearer.is_none() && cfg.csrf {
+        // Block suspicious requests. A plain link from another site to the
+        // Web UI's start page is fine: that page is static and the GET has no
+        // effect (qBittorrent 5.3, #24379).
+        let web_root = is_get && (path == "/" || path == "/index.html");
+        if bearer.is_none() && cfg.csrf && !web_root {
             let host = hdr(headers, header::HOST).unwrap_or("");
             let target = if peer_trusted { hdr(headers, "x-forwarded-host").unwrap_or(host) } else { host };
             let origin = hdr(headers, header::ORIGIN);

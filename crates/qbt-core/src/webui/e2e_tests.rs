@@ -479,7 +479,16 @@ fn csrf_and_host_validation() {
         // Cross-site Origin / Referer.
         let r = h.client.post(h.url("/api/v2/auth/login")).header("Origin", "http://evil.com").form(&[("username", "admin"), ("password", PASSWORD)]).send().await.unwrap();
         assert_eq!(r.status(), 401);
+        // A link from another site to the start page works; anything else from there does not.
         let r = h.client.get(h.url("/")).header("Referer", "http://evil.com/x").send().await.unwrap();
+        assert_eq!(r.status(), 200);
+        let r = h.client.get(h.url("/")).header("Sec-Fetch-Site", "cross-site").send().await.unwrap();
+        assert_eq!(r.status(), 200);
+        let r = h.client.post(h.url("/")).header("Sec-Fetch-Site", "cross-site").send().await.unwrap();
+        assert_eq!(r.status(), 401);
+        let r = h.client.get(h.url("/api/v2/app/version")).header("Referer", "http://evil.com/x").send().await.unwrap();
+        assert_eq!(r.status(), 401);
+        let r = h.client.get(h.url("/scripts/x.js")).header("Sec-Fetch-Site", "cross-site").send().await.unwrap();
         assert_eq!(r.status(), 401);
         let r = h.client.get(h.url("/")).header("Origin", format!("http://{host}")).send().await.unwrap();
         assert_eq!(r.status(), 200);

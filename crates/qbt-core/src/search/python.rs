@@ -155,6 +155,11 @@ pub(crate) async fn test_installation(path: &Path) -> Option<PythonInfo> {
     Some(PythonInfo { path: path.to_path_buf(), version })
 }
 
+/// The path inside a matching pair of surrounding quotes (qBittorrent 5.3, #24740), if any.
+fn strip_quotes(p: &str) -> Option<&str> {
+    ['"', '\''].into_iter().find_map(|q| p.strip_prefix(q)?.strip_suffix(q)).map(str::trim)
+}
+
 fn expand_tilde(p: &str) -> PathBuf {
     match (p.strip_prefix("~/"), std::env::var_os("HOME")) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
@@ -183,7 +188,13 @@ pub(crate) async fn detect(preferred: &str, logger: &Logger, quiet: bool) -> Opt
     };
 
     let path_var = std::env::var_os("PATH");
-    let preferred = preferred.trim();
+    let preferred = match strip_quotes(preferred.trim()) {
+        Some(inner) => {
+            logger.warning(format!("Python executable path has unnecessary leading and trailing quotes: {preferred}. Using it without them."));
+            inner
+        }
+        None => preferred.trim(),
+    };
     if !preferred.is_empty() {
         let candidate = if preferred.contains('/') {
             Some(expand_tilde(preferred))
@@ -265,6 +276,14 @@ pub(crate) async fn detect(preferred: &str, logger: &Logger, quiet: bool) -> Opt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn surrounding_quotes() {
+        assert_eq!(strip_quotes("\"/opt/py 3/bin/python3\""), Some("/opt/py 3/bin/python3"));
+        assert_eq!(strip_quotes("'python3'"), Some("python3"));
+        assert_eq!(strip_quotes("\"python3'"), None, "unmatched quotes are left alone");
+        assert_eq!(strip_quotes("/usr/bin/python3"), None);
+    }
 
     #[test]
     fn version_parsing() {

@@ -93,8 +93,8 @@ Things to know before reading:
 | #24117 | Better "Deletion confirmation" dialog | ⬜ | Trivial: confirm button says "Remove torrent" / "Remove torrent and content" and the text states the count; check the sheet behind `AppModel+Actions.swift:66` |
 | #24084, #24152 | Statistics rows for the new metrics | ⬜ | After the core metrics: `Features/Statistics/StatisticsWindow.swift:23` (queued announces; latency only if measured) |
 | #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
-| #24740 | Detect redundant quotes in the Python path | ⬜ | Small: strip surrounding quotes from the configured path and warn (`search/python.rs`, Search prefs) |
-| #24279 | Python minimum becomes 3.13 | ⬜ | Trivial decision: `PythonVersion::MINIMUM` is 3.9 (`search/python.rs:31`); follow upstream or keep 3.9 on purpose |
+| #24740 | Detect redundant quotes in the Python path | ✅ | Settings drops a matching pair of surrounding quotes as you type; the core uses a quoted path without them and logs a warning (5.3 refuses it in the Web UI form) |
+| #24279 | Python minimum becomes 3.13 | ⬜ | Decided (2026-11-01): bundle a stripped Python 3.13 so search works without Homebrew; then raise `PythonVersion::MINIMUM` and take the 5.3 nova3 scripts (they need 3.11+). Until then the minimum stays 3.9, which macOS's own Python meets |
 | #23825 | "North Macedonia" instead of FYR Macedonia | ✅ | `net/geoip/countries.rs` |
 | #25037 | Re-sort when Remaining changes | ⬜ | Verify: `TransferSort.swift:51` compares `amountLeft`; make sure the table re-sorts as the value changes |
 | #23949 | E-mail examples as placeholder text | ⬜ | Trivial: prompts in the Downloads prefs e-mail fields |

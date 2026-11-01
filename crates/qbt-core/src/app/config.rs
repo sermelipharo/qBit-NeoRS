@@ -13,6 +13,9 @@ pub struct AppConfig {
     pub webui_port_override: u16,
     /// Front end name for logs/User-Agent ("macOS", "nox").
     pub front_end: String,
+    /// Python interpreter shipped with the front end, tried for search after
+    /// `python_executable_path` and before `PATH`. Empty = none.
+    pub bundled_python: String,
 }
 
 /// Resolved profile folders. Mirrors qBittorrent's layout so concepts map

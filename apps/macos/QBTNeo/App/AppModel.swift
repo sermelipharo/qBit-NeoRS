@@ -147,8 +147,18 @@ final class AppModel {
         if launch.usesDemoData {
             return DemoClient(large: launch.demoLarge, animated: !launch.isSnapshot)
         }
-        let config = AppConfig(profileDir: launch.profileDirectory, logToStderr: false, webuiPortOverride: 0, frontEnd: "macOS")
+        let config = AppConfig(
+            profileDir: launch.profileDirectory, logToStderr: false, webuiPortOverride: 0, frontEnd: "macOS",
+            bundledPython: Self.bundledPython
+        )
         return try App(config: config)
+    }
+
+    /// The trimmed Python 3.13 in the app's resources (`scripts/embed-python.sh`), or "" when the build has none.
+    nonisolated private static var bundledPython: String {
+        guard let url = Bundle.main.resourceURL?.appending(path: "python/bin/python3.13"),
+              FileManager.default.isExecutableFile(atPath: url.path(percentEncoded: false)) else { return "" }
+        return url.path(percentEncoded: false)
     }
 
     /// Saves resume data and stops the core (blocks up to ~10 s); call once.

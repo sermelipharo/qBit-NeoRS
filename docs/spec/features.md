@@ -1909,7 +1909,7 @@ Desktop notifications (not dialogs, listed for completeness): `Torrent added` / 
 
 ### 3.36 Search tab (`search/searchwidget.ui/.cpp`, `searchjobwidget.ui/.cpp`)
 
-(Main-window tab `Search`; toggled by View › `Search &Engine`; requires Python ≥ 3.9.0.)
+(Main-window tab `Search`; toggled by View › `Search &Engine`; requires Python ≥ 3.9.0. qBit NeoRS bundles Python 3.13 and uses it when Settings names no interpreter; one found on PATH is the last resort.)
 - Top row: pattern line edit with completer from search history (tooltip: `A phrase to search for.` / `Spaces in a search term may be protected by double quotes.` / `Example:` / `<b>foo bar</b>: search for <b>foo</b> and <b>bar</b>` / `<b>&quot;foo bar&quot;</b>: search for <b>foo bar</b>`), category combo (`All categories`, separator, then categories supported by the selected plugins, localized: `Anime`, `Books`, `Games`, `Movies`, `Music`, `Pictures`, `Software`, `TV shows`), plugin combo (`Only enabled`, `All plugins`, `Select...` (opens Search plugins dialog), separator, each enabled plugin by full name), `Search` / `Stop` button (toggle). Shortcuts: `Ctrl+F` / `Ctrl+E` toggle focus between pattern and results filter; `Ctrl+W` (Close) closes current tab.
 - Empty state: `There aren't any search plugins installed.\nClick the "Search plugins..." button at the bottom right of the window to install some.`; bottom-right button `Search plugins...`.
 - Each search opens a tab (icon by status; tooltip = status text: `Searching...`, `Search has finished`, `Search aborted`, `An error occurred during search...`, `Search returned no results`). Tab context menu: `Refresh tab` (when not running) or `Stop search`, separator, `Close tab`, `Close all tabs`.

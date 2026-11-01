@@ -162,7 +162,7 @@ impl SearchManager {
         let config_file = ctx.profile.config_dir.join("search.json");
         let disabled = load_config(&config_file, ctx);
         let preferred = ctx.prefs.current().advanced.python_executable_path.clone();
-        let info = python::detect(&preferred, &ctx.logger, true).await;
+        let info = python::detect(&preferred, &ctx.config.bundled_python, &ctx.logger, true).await;
 
         let (ops, ops_rx) = mpsc::unbounded_channel();
         let (shutdown, _) = watch::channel(false);
@@ -528,7 +528,7 @@ impl Inner {
 
     async fn redetect(&self, quiet: bool) {
         let preferred = self.ctx.prefs.current().advanced.python_executable_path.clone();
-        let info = python::detect(&preferred, &self.ctx.logger, quiet).await;
+        let info = python::detect(&preferred, &self.ctx.config.bundled_python, &self.ctx.logger, quiet).await;
         let changed = {
             let mut st = self.python.write();
             let changed = st.info != info;

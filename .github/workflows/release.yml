@@ -66,6 +66,8 @@ jobs:
           test "$(defaults read "$APP/Contents/Info" CFBundleShortVersionString)" = "$VERSION"
           codesign --verify --deep --strict "$APP"
           codesign -dv "$APP" 2>&1 | grep -q '^Signature=adhoc$'
+          # Search runs on the bundled Python.
+          "$APP/Contents/Resources/python/bin/python3.13" -I -B -c 'import concurrent.futures, html.parser, json, ssl, typing, urllib.request; typing.NotRequired'
           # Only the demo mode's made-up paths may name a home folder.
           if find "$APP" -type f -print0 | xargs -0 strings -a | grep -E '/Users/|/home/runner|/private/var/folders/' | grep -v '^/Users/demo/' | sort -u | head -20 | grep .; then
             echo "::error::build machine paths in the bundle"

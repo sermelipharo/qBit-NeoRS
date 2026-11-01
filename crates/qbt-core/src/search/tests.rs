@@ -24,7 +24,13 @@ struct Harness {
 impl Harness {
     async fn new(options: Options) -> Option<Self> {
         let tmp = tempfile::tempdir().unwrap();
-        let config = AppConfig { profile_dir: tmp.path().join("profile").to_string_lossy().into_owned(), ..Default::default() };
+        // QBT_TEST_PYTHON runs the tests on a given interpreter, such as the
+        // one scripts/embed-python.sh puts into the app.
+        let config = AppConfig {
+            profile_dir: tmp.path().join("profile").to_string_lossy().into_owned(),
+            bundled_python: std::env::var("QBT_TEST_PYTHON").unwrap_or_default(),
+            ..Default::default()
+        };
         let profile = Arc::new(Profile::resolve(&config));
         for d in [&profile.config_dir, &profile.data_dir, &profile.cache_dir] {
             std::fs::create_dir_all(d).unwrap();
@@ -47,6 +53,9 @@ impl Harness {
             Box::pin(async { Ok("0123456789abcdef0123456789abcdef01234567".to_string()) })
         });
         let mgr = SearchManager::launch_with(&ctx, adder, options).await.unwrap();
+        if let Ok(python) = std::env::var("QBT_TEST_PYTHON") {
+            assert_eq!(mgr.status().python_path, python, "QBT_TEST_PYTHON was not used");
+        }
         if !mgr.status().python_found {
             eprintln!("skipping search integration test: no Python 3.9+ found");
             mgr.shutdown().await;

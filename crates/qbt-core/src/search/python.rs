@@ -169,9 +169,10 @@ fn expand_tilde(p: &str) -> PathBuf {
 
 /// `Utils::ForeignApps::pythonInfo()`. `preferred` is the
 /// `python_executable_path` preference: when set, only it is tested.
+/// Otherwise `bundled` (the front end's own interpreter) comes first, then `PATH`.
 /// Returns the interpreter found (possibly too old), or `None`.
 /// `quiet` logs the final "not found" at info level (start-up probe).
-pub(crate) async fn detect(preferred: &str, logger: &Logger, quiet: bool) -> Option<PythonInfo> {
+pub(crate) async fn detect(preferred: &str, bundled: &str, logger: &Logger, quiet: bool) -> Option<PythonInfo> {
     let too_old = |info: &PythonInfo, level: LogLevel| {
         logger.log(
             level,
@@ -215,6 +216,17 @@ pub(crate) async fn detect(preferred: &str, logger: &Logger, quiet: bool) -> Opt
             None => logger.warning(format!("Failed to find Python executable. Path: \"{preferred}\".")),
         }
         return None;
+    }
+
+    if !bundled.is_empty() {
+        match test_installation(Path::new(bundled)).await {
+            Some(info) if info.is_supported() => {
+                found(&info);
+                return Some(info);
+            }
+            Some(info) => too_old(&info, LogLevel::Warning),
+            None => logger.warning(format!("Failed to run the bundled Python. Path: \"{bundled}\".")),
+        }
     }
 
     let mut best_old: Option<PythonInfo> = None;

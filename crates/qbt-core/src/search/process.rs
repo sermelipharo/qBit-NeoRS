@@ -13,7 +13,8 @@ use tokio::process::{Child, Command};
 use super::proxy::ProxyEnv;
 
 /// `PYTHON_ISOLATE_MODE_FLAG`, `PYTHON_UTF8_MODE_FLAG`.
-pub(crate) const PYTHON_FLAGS: [&str; 2] = ["-I", "-Xutf8=1"];
+/// `-B`: a bundled interpreter must not write bytecode into the signed app.
+pub(crate) const PYTHON_FLAGS: [&str; 3] = ["-I", "-B", "-Xutf8=1"];
 
 /// Grace period between SIGTERM and SIGKILL.
 const TERM_GRACE: Duration = Duration::from_secs(3);

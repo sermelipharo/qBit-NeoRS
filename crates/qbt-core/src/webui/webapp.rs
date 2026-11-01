@@ -452,8 +452,18 @@ impl WebApp {
             let target = if peer_trusted { hdr(headers, "x-forwarded-host").unwrap_or(host) } else { host };
             let origin = hdr(headers, header::ORIGIN);
             let referer = hdr(headers, header::REFERER);
-            match security::check_csrf(target, origin, referer) {
+            let fetch_site = hdr(headers, "sec-fetch-site");
+            match security::check_csrf(target, fetch_site, origin, referer) {
                 CsrfVerdict::SameSite => {}
+                CsrfVerdict::FetchSiteMismatch => {
+                    self.log_warning(format!(
+                        "WebUI: Cross-site request blocked. Source IP: '{}'. Sec-Fetch-Site header: '{}'. Target origin: '{}'",
+                        conn.peer,
+                        sanitize_for_log(fetch_site.unwrap_or("")),
+                        sanitize_for_log(target)
+                    ));
+                    return Out::error(ApiError::unauthorized());
+                }
                 verdict => {
                     let (name, value) = match verdict {
                         CsrfVerdict::OriginMismatch => ("Origin", origin.unwrap_or("")),

@@ -312,3 +312,12 @@ fn user_agent_versions() {
     // 2026-10-14: 29 whole (average) months later.
     assert!(browser_user_agent_at(1_791_936_000).contains("Firefox/154.0"));
 }
+
+#[test]
+fn refuses_downgrading_redirects() {
+    let u = |s: &str| Url::parse(s).unwrap();
+    assert!(is_downgrade(&u("https://a.example/x"), &u("http://a.example/x")));
+    assert!(!is_downgrade(&u("https://a.example/x"), &u("https://b.example/y")));
+    assert!(!is_downgrade(&u("http://a.example/x"), &u("https://a.example/x")));
+    assert!(!is_downgrade(&u("http://a.example/x"), &u("http://b.example/x")));
+}

@@ -2,7 +2,7 @@
 //!
 //! Active while both the WebUI and "Update my dynamic domain name" are
 //! enabled. Every 30 minutes the external IP is read from
-//! `http://checkip.dyndns.org`; when it changed, the DynDNS or No-IP update
+//! `https://checkip.dyndns.org`; when it changed, the DynDNS or No-IP update
 //! URL is called with HTTP basic authentication. Response codes are handled
 //! like qBittorrent: `good`/`nochg` succeed, `911`/`dnserr` retry in 30
 //! minutes, `nohost`/`badauth` stop until the credentials change, and
@@ -25,7 +25,7 @@ use crate::model::LogLevel;
 use crate::prefs::{DynDnsService, WebUiPrefs};
 
 pub const IP_CHECK_INTERVAL_SECS: i64 = 30 * 60;
-const CHECK_IP_URL: &str = "http://checkip.dyndns.org";
+const CHECK_IP_URL: &str = "https://checkip.dyndns.org";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UpdaterState {

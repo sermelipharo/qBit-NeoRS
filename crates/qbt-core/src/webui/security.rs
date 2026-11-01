@@ -73,14 +73,25 @@ fn origin_of(value: &str) -> HostPort {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CsrfVerdict {
     SameSite,
+    /// `Sec-Fetch-Site` is neither `same-origin` nor `none`.
+    FetchSiteMismatch,
     OriginMismatch,
     RefererMismatch,
 }
 
-/// qBittorrent's `isCrossSiteRequest`: no Origin and no Referer is allowed;
-/// otherwise the Origin (or, if absent, the Referer) must have the same host
-/// and port as the target origin (the scheme is not compared).
-pub fn check_csrf(target: &str, origin: Option<&str>, referer: Option<&str>) -> CsrfVerdict {
+/// qBittorrent's `isCrossSiteRequest`. `Sec-Fetch-Site`, when the browser
+/// sends it (HTTPS or localhost), decides alone: the browser sets it from the
+/// URL it actually requested and a page cannot suppress or change it, so it
+/// also holds behind a proxy that rewrites `Host`. Only `same-origin` and
+/// `none` (typed URL, bookmark) pass. Without it, no Origin and no Referer is
+/// allowed (Web API clients send neither); otherwise the Origin (or, if
+/// absent, the Referer) must have the same host and port as the target origin
+/// (the scheme is not compared).
+pub fn check_csrf(target: &str, fetch_site: Option<&str>, origin: Option<&str>, referer: Option<&str>) -> CsrfVerdict {
+    if let Some(site) = fetch_site.map(str::trim).filter(|s| !s.is_empty()) {
+        let ok = site.eq_ignore_ascii_case("same-origin") || site.eq_ignore_ascii_case("none");
+        return if ok { CsrfVerdict::SameSite } else { CsrfVerdict::FetchSiteMismatch };
+    }
     let origin = origin.filter(|s| !s.is_empty());
     let referer = referer.filter(|s| !s.is_empty());
     let target = origin_of(target);
@@ -378,18 +389,26 @@ mod tests {
     #[test]
     fn csrf() {
         use CsrfVerdict::*;
-        assert_eq!(check_csrf("127.0.0.1:8080", None, None), SameSite);
-        assert_eq!(check_csrf("127.0.0.1:8080", Some("http://127.0.0.1:8080"), None), SameSite);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, None, None), SameSite);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, Some("http://127.0.0.1:8080"), None), SameSite);
         // Scheme is not compared.
-        assert_eq!(check_csrf("127.0.0.1:8080", Some("https://127.0.0.1:8080"), None), SameSite);
-        assert_eq!(check_csrf("127.0.0.1:8080", Some("http://evil.com"), None), OriginMismatch);
-        assert_eq!(check_csrf("127.0.0.1:8080", Some("http://127.0.0.1:8081"), None), OriginMismatch);
-        assert_eq!(check_csrf("127.0.0.1:8080", Some("null"), None), OriginMismatch);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, Some("https://127.0.0.1:8080"), None), SameSite);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, Some("http://evil.com"), None), OriginMismatch);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, Some("http://127.0.0.1:8081"), None), OriginMismatch);
+        assert_eq!(check_csrf("127.0.0.1:8080", None, Some("null"), None), OriginMismatch);
         // Origin wins over Referer.
-        assert_eq!(check_csrf("h:1", Some("http://h:1"), Some("http://evil:1/")), SameSite);
-        assert_eq!(check_csrf("h:1", None, Some("http://h:1/index.html")), SameSite);
-        assert_eq!(check_csrf("h:1", None, Some("http://evil:1/index.html")), RefererMismatch);
-        assert_eq!(check_csrf("Example.com", Some("http://EXAMPLE.com"), None), SameSite);
+        assert_eq!(check_csrf("h:1", None, Some("http://h:1"), Some("http://evil:1/")), SameSite);
+        assert_eq!(check_csrf("h:1", None, None, Some("http://h:1/index.html")), SameSite);
+        assert_eq!(check_csrf("h:1", None, None, Some("http://evil:1/index.html")), RefererMismatch);
+        assert_eq!(check_csrf("Example.com", None, Some("http://EXAMPLE.com"), None), SameSite);
+        // Sec-Fetch-Site decides when present, whatever Origin says.
+        assert_eq!(check_csrf("h:1", Some("same-origin"), Some("http://proxy-host"), None), SameSite);
+        assert_eq!(check_csrf("h:1", Some("None"), None, None), SameSite);
+        assert_eq!(check_csrf("h:1", Some("cross-site"), Some("http://h:1"), None), FetchSiteMismatch);
+        assert_eq!(check_csrf("h:1", Some("same-site"), None, None), FetchSiteMismatch);
+        // A page that suppresses Origin and Referer is still caught.
+        assert_eq!(check_csrf("h:1", Some("cross-site"), None, None), FetchSiteMismatch);
+        assert_eq!(check_csrf("h:1", Some(""), None, None), SameSite);
     }
 
     #[test]

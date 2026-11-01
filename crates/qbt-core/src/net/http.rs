@@ -273,6 +273,13 @@ pub fn app_user_agent() -> String {
 // ---- requests ----------------------------------------------------------------------------
 
 /// URL without user info, for messages.
+/// A redirect from https to a non-https URL: following it would expose the
+/// response (and anything the next hop is sent) to an on-path attacker, so it
+/// fails like Qt's `NoLessSafeRedirectPolicy`.
+fn is_downgrade(from: &Url, to: &Url) -> bool {
+    from.scheme() == "https" && to.scheme() != "https"
+}
+
 fn redact(url: &Url) -> String {
     let mut u = url.clone();
     let _ = u.set_username("");
@@ -510,6 +517,12 @@ async fn run(
             if next.scheme() != "http" && next.scheme() != "https" {
                 return Err(QbtError::network(format!(
                     "Redirect to unsupported or dangerous protocol: '{}'.",
+                    next.scheme()
+                )));
+            }
+            if is_downgrade(&url, &next) {
+                return Err(QbtError::network(format!(
+                    "Redirect from a secure to an insecure protocol: '{}'.",
                     next.scheme()
                 )));
             }

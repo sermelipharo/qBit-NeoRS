@@ -149,7 +149,7 @@ see "Open").
 | Timing-unsafe comparisons | safe | constant-time username, PBKDF2 output, API key (`password.rs:80`, `webapp.rs`) |
 | Weak password hashing | safe (upstream parity) | PBKDF2-HMAC-SHA512, 100 000 iterations, 16-byte salt (`password.rs:13`); OWASP suggests 210 000 for SHA-512 (Info) |
 | Session fixation, ID entropy, cookie flags | safe | 192-bit ids created only by the server, stored hashed; `HttpOnly`, `SameSite=Strict`, `Secure` on HTTPS |
-| CSRF (qBittorrent CVE-2017-6503 era), cross-site GET | **fixed** #5 | Origin/Referer check (`security.rs:83`), POST-only matrix plus the two GET actions, HEAD refused (`webapp.rs:443`) |
+| CSRF (qBittorrent CVE-2017-6503 era), cross-site GET | **fixed** #5 | `Sec-Fetch-Site`, then Origin/Referer check (`security.rs`), POST-only matrix plus the two GET actions, HEAD refused (`webapp.rs:443`) |
 | Transmission CVE-2018-5702 / uTorrent DNS rebinding | safe | Host validation; the bypass is only granted for IP-literal / `localhost` / configured-domain Hosts (`security.rs:243`) |
 | Clickjacking (qBittorrent CVE-2017-6504) | safe | `X-Frame-Options` + CSP `frame-ancestors` |
 | XSS through torrent/tracker names | safe | API answers are JSON/plain text with `nosniff`; the UI is qBittorrent's own escaping JS; `Content-Disposition` names sanitised |

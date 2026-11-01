@@ -483,6 +483,11 @@ fn csrf_and_host_validation() {
         assert_eq!(r.status(), 401);
         let r = h.client.get(h.url("/")).header("Origin", format!("http://{host}")).send().await.unwrap();
         assert_eq!(r.status(), 200);
+        // A page that suppresses Origin and Referer: the browser still says cross-site.
+        let r = h.client.post(h.url("/api/v2/auth/login")).header("Sec-Fetch-Site", "cross-site").form(&[("username", "admin"), ("password", PASSWORD)]).send().await.unwrap();
+        assert_eq!(r.status(), 401);
+        let r = h.client.get(h.url("/")).header("Sec-Fetch-Site", "same-origin").send().await.unwrap();
+        assert_eq!(r.status(), 200);
     });
 }
 

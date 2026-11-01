@@ -388,7 +388,7 @@ Note: the `.ui` file gives the spin boxes defaults of 5 min and 100 articles. Th
 | 134 | `alternative_webui_enabled` | bool | `false` | | Checkable group `"Use alternative WebUI"` + link `"List of alternative WebUI"` → `https://github.com/qbittorrent/qBittorrent/wiki/List-of-known-alternate-WebUIs` | · `Preferences/WebUI/AlternativeUIEnabled` |
 | 135 | `alternative_webui_path` | string path | `""` | directory; caption `"Choose Alternative UI files location"` | `"Files location:"` | Must not be empty when enabled (GUI). · `Preferences/WebUI/RootFolder` |
 | 136 | `web_ui_clickjacking_protection_enabled` | bool | `true` | | Group `"Security"` → `"Enable clickjacking protection"` | Adds `X-Frame-Options: SAMEORIGIN` and a CSP `frame-ancestors 'self'` header. · `Preferences/WebUI/ClickjackingProtection` |
-| 137 | `web_ui_csrf_protection_enabled` | bool | `true` | | `"Enable Cross-Site Request Forgery (CSRF) protection"` | Checks Origin/Referer. · `Preferences/WebUI/CSRFProtection` |
+| 137 | `web_ui_csrf_protection_enabled` | bool | `true` | | `"Enable Cross-Site Request Forgery (CSRF) protection"` | Checks Sec-Fetch-Site, else Origin/Referer. · `Preferences/WebUI/CSRFProtection` |
 | 138 | `web_ui_secure_cookie_enabled` | bool | `true` | | `"Enable cookie Secure flag (requires HTTPS or localhost connection)"` | · `Preferences/WebUI/SecureCookie` |
 | 139 | `web_ui_host_header_validation_enabled` | bool | `true` | | Checkable group `"Enable Host header validation"` | · `Preferences/WebUI/HostHeaderValidation` |
 | 140 | `web_ui_use_custom_http_headers_enabled` | bool | `false` | | Checkable group `"Add custom HTTP headers"` | · `Preferences/WebUI/CustomHTTPHeadersEnabled` |

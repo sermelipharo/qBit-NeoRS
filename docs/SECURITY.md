@@ -300,8 +300,11 @@ Mitigations:
   the request. A reverse proxy on the same host that adds none of these
   headers is indistinguishable from a local client: do not enable the
   localhost bypass behind such a proxy.
-* CSRF and DNS rebinding: Origin/Referer must match the target host and port
-  (qBittorrent rules; missing both is allowed for non-browser clients);
+* CSRF and DNS rebinding: when the browser sends `Sec-Fetch-Site` (HTTPS or
+  localhost) it decides alone, and only `same-origin` and `none` pass: a
+  page cannot suppress or change it, so `Referrer-Policy: no-referrer` no
+  longer slips past. Otherwise Origin/Referer must match the target host and
+  port (qBittorrent rules; missing both is allowed for non-browser clients);
   Host header validation checks the port and the local address or the
   "Server domains" list. Domain patterns are matched against the whole host
   name (upstream searches unanchored, so `example.com` also matched
@@ -377,8 +380,10 @@ local attackers racing on predictable temporary files.
 Mitigations — HTTP client (`net/http.rs`):
 * Only `http`/`https` URLs. Redirects are followed manually, at most 10
   (qBittorrent: 20); a redirect to any other scheme fails ("Redirect to
-  unsupported or dangerous protocol"), a redirect to `magnet:` ends the
-  request and returns the URI to the caller.
+  unsupported or dangerous protocol"), so does an https→http downgrade
+  ("Redirect from a secure to an insecure protocol", as in qBittorrent 5.3),
+  and a redirect to `magnet:` ends the request and returns the URI to the
+  caller.
 * `max_size` (default 64 MiB) is enforced up front from `Content-Length`
   and again while streaming, counting decompressed bytes (gzip is decoded
   by the client), so neither a lying length nor a zip bomb can exceed it.
@@ -418,7 +423,9 @@ secure connection" the client uses implicit TLS (465) or mandatory
 STARTTLS, otherwise opportunistic STARTTLS; certificates are always
 verified. Passwords are only handed to the SMTP library and never logged.
 
-Mitigations — DynDNS (`net/dyndns.rs`): fixed update hosts over https,
+Mitigations — DynDNS (`net/dyndns.rs`): the public address is read from
+`https://checkip.dyndns.org` (over http an on-path attacker could repoint
+the hostname with the user's credentials) and fixed update hosts are https,
 domain validated with qBittorrent's rule, query values percent-encoded,
 credentials only in the `Authorization` header (never in the URL or logs);
 replies are capped at 64 KiB; fatal service answers stop updates for the

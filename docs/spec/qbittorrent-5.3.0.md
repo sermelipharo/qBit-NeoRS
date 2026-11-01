@@ -173,7 +173,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #23784 | Keep search tabs across restarts and sessions | ⬜ | Port in `search.ts` after the WebAPI/pref change |
 | #24249, #24269 | Start paused, shutdown timeout, pause/resume session | ⬜ | Port after the core state exists |
 | #24842 | Export/import RSS rules | ⬜ | Port in `rss.ts` after the endpoints exist |
-| #24848 | Cap path autocompletion at 25 | ⬜ | Cap server side in `app/getDirectoryContent` (`webui/api/app.rs`), not only in the client |
+| #24848 | Cap path autocompletion at 25 | ➖ | Upstream caps the client-side suggestion list only (the API still returns every entry). The NeoRS Web UI has no path autocompletion yet, so there is nothing to cap |
 | #24920 | Missing Options page settings | ⬜ | `settings.ts` is a subset of the prefs; add the new keys together with the ones above |
 | #24984 | Shared download window for RSS articles | ⬜ | Low; `rss.ts` downloads one article at a time |
 | #24379 | Cross-origin links to webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |

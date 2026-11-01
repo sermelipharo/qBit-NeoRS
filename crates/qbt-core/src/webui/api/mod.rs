@@ -185,6 +185,8 @@ pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("transfer", "downloadLimit", GP),
     ("transfer", "setUploadLimit", P),
     ("transfer", "setDownloadLimit", P),
+    ("transfer", "getSpeedLimits", GP),
+    ("transfer", "setSpeedLimits", P),
     ("transfer", "banPeers", P),
     ("torrents", "count", GP),
     ("torrents", "info", GP),
@@ -495,11 +497,11 @@ mod tests {
 
     #[test]
     fn endpoint_table() {
-        assert_eq!(ENDPOINTS.len(), 125);
+        assert_eq!(ENDPOINTS.len(), 127);
         let post = ENDPOINTS.iter().filter(|e| e.2 == Methods::PostOnly).count();
         let get = ENDPOINTS.len() - post;
-        assert_eq!(post, 80);
-        assert_eq!(get, 45);
+        assert_eq!(post, 81);
+        assert_eq!(get, 46);
         assert_eq!(method_filter("torrents", "SSLParameters"), Some(Methods::GetPost));
         assert_eq!(method_filter("torrents", "ssLParameters"), None);
         assert_eq!(method_filter("rss", "setFeedRefreshInterval"), Some(Methods::PostOnly));

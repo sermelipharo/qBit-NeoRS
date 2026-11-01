@@ -43,13 +43,27 @@ async function toggleAlt(): Promise<void> {
 
 async function speedLimits(): Promise<void> {
   const kib = (v: number) => (v > 0 ? Math.round(v / 1024) : 0);
+  type Limits = { up_limit: number; dl_limit: number; alt_up_limit: number; alt_dl_limit: number };
+  let cur: Limits;
+  try {
+    cur = await get<Limits>("transfer/getSpeedLimits");
+  } catch (e) {
+    toast((e as Error).message, true);
+    return;
+  }
+  const field = (key: keyof Limits, label: string) =>
+    ({ key, label, type: "number" as const, value: kib(cur[key]), min: 0, hint: "KiB/s, 0 = unlimited" });
   const v = await formSheet("Speed limits", [
-    { key: "dl", label: "Download", type: "number", value: kib(server.dl_rate_limit), min: 0, hint: "KiB/s, 0 = unlimited" },
-    { key: "up", label: "Upload", type: "number", value: kib(server.up_rate_limit), min: 0, hint: "KiB/s, 0 = unlimited" },
-  ], "Apply", h("p", { class: "muted pad" }, server.use_alt_speed_limits ? "Alternative limits are in effect." : "Global limits."));
+    field("dl_limit", "Download"),
+    field("up_limit", "Upload"),
+    field("alt_dl_limit", "Alternative download"),
+    field("alt_up_limit", "Alternative upload"),
+  ], "Apply", h("p", { class: "muted pad" }, server.use_alt_speed_limits ? "Alternative limits are in effect." : "Global limits are in effect."));
   if (!v) return;
-  await post("transfer/setDownloadLimit", { limit: Math.max(0, v.dl) * 1024 }).catch((e) => toast(e.message, true));
-  await post("transfer/setUploadLimit", { limit: Math.max(0, v.up) * 1024 }).catch((e) => toast(e.message, true));
+  const bytes = (k: keyof Limits) => String(Math.max(0, Number(v[k]) || 0) * 1024);
+  await post("transfer/setSpeedLimits", {
+    up_limit: bytes("up_limit"), dl_limit: bytes("dl_limit"), alt_up_limit: bytes("alt_up_limit"), alt_dl_limit: bytes("alt_dl_limit"),
+  }).catch((e) => toast(e.message, true));
   poke();
 }
 

@@ -135,7 +135,7 @@ Things to know before reading:
 | #24152 | `request_latency` in `sync/maindata` | ⬜ | Emit (0 if not measured) in `server_state` |
 | #24084 | `queued_tracker_announces` in `sync/maindata` | ⬜ | See Core/engine |
 | #23838 | `mail_notification_encryption_type` | ⬜ | See Security |
-| #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ⬜ | Not in the route table (`webui/api/mod.rs:182` has only the mode toggles and the single limits); read/write `up_limit`, `dl_limit`, `alt_up_limit`, `alt_dl_limit` |
+| #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
 | #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ⬜ | Serve a completed file from torrent content. Security: resolve against the torrent's content root only, reject `..` and symlink escape, require the file complete, stream with `Content-Disposition` |
 | #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ⬜ | Not in `webui/api/mod.rs`; see RSS |
@@ -160,7 +160,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #23975 | "Select all" and "Invert selection" | ⬜ | Port: there is a select mode but no select-all or invert (`transfers.ts:219`) |
 | #23856 | Free disk space in the add-torrent window | ⬜ | Port in `add.ts`; the endpoint exists |
 | #24109 | "Pread/pwrite" disk IO type option | ⬜ | The core enum has it (`prefs/enums.rs:64`); `settings.ts` has no `disk_io_type` row |
-| #24134 | Unified global speed limit window | ⬜ | `speedLimits()` exists (`main.ts:33`); switch it to the new endpoints when added |
+| #24134 | Unified global speed limit window | ✅ | The status bar's speed sheet edits the normal and alternative limits together |
 | #24135 | Download completed files | ⬜ | Port after `torrents/downloadFile` exists (`details.ts` file menu) |
 | #24246 | Respect excluded file names in Add torrent | ⬜ | Port after the WebAPI priority field |
 | #24283 | Test e-mail notice instead of alerts | ⬜ | Endpoint exists (`webui/api/app.rs:49`); `settings.ts` has no e-mail test button, add one with an inline notice |

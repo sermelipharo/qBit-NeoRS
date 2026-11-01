@@ -307,6 +307,25 @@ fn preferences_round_trip() {
 }
 
 #[test]
+fn speed_limits_of_both_modes_in_one_call() {
+    let h = Harness::new(|_| {});
+    h.block(async {
+        let c = h.login().await;
+        let get = || async { h.get("/api/v2/transfer/getSpeedLimits", Some(&c)).await.json::<Value>().await.unwrap() };
+        let v = get().await;
+        assert_eq!(v["alt_up_limit"], 10240, "{v}");
+        let partial = h.post("/api/v2/transfer/setSpeedLimits", &[("up_limit", "2048")], Some(&c)).await;
+        assert_eq!(partial.status(), 400, "all four limits are required");
+        let form = [("up_limit", "3000"), ("dl_limit", "-5"), ("alt_up_limit", "500"), ("alt_dl_limit", "nope")];
+        assert_eq!(h.post("/api/v2/transfer/setSpeedLimits", &form, Some(&c)).await.status(), 200);
+        assert_eq!(get().await, json!({"up_limit": 2048, "dl_limit": 0, "alt_up_limit": 1024, "alt_dl_limit": 0}));
+        // The single-mode endpoints see the same values.
+        assert_eq!(h.get("/api/v2/transfer/uploadLimit", Some(&c)).await.text().await.unwrap(), "2048");
+        assert_eq!(h.get("/api/v2/transfer/getSpeedLimits", None).await.status(), 403);
+    });
+}
+
+#[test]
 fn transfer_info_and_maindata_rid_flow() {
     let h = Harness::new(|_| {});
     h.block(async {

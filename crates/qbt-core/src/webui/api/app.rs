@@ -334,6 +334,24 @@ pub fn transfer(c: &mut Call<'_>, action: &str) -> ApiResult {
         }
         "uploadLimit" => Ok(Reply::Text(c.app.global_upload_limit().max(0).to_string())),
         "downloadLimit" => Ok(Reply::Text(c.app.global_download_limit().max(0).to_string())),
+        // qBittorrent 5.3: both modes' limits at once, bytes/s, 0 = unlimited.
+        "getSpeedLimits" => {
+            let prefs = c.web.preferences_json();
+            let pick = |k: &str| prefs.get(k).cloned().unwrap_or(json!(0));
+            Ok(Reply::Json(json!({
+                "up_limit": pick("up_limit"),
+                "dl_limit": pick("dl_limit"),
+                "alt_up_limit": pick("alt_up_limit"),
+                "alt_dl_limit": pick("alt_dl_limit"),
+            })))
+        }
+        "setSpeedLimits" => {
+            const KEYS: [&str; 4] = ["up_limit", "dl_limit", "alt_up_limit", "alt_dl_limit"];
+            c.params.require(&KEYS)?;
+            let limits: Map<String, Value> = KEYS.iter().map(|&k| (k.to_owned(), json!(c.params.i64(k)))).collect();
+            c.app.set_preferences_json(Value::Object(limits).to_string())?;
+            Ok(Reply::ok())
+        }
         "setUploadLimit" | "setDownloadLimit" => {
             c.params.require(&["limit"])?;
             // 0 / negative = unlimited (stored as 0).

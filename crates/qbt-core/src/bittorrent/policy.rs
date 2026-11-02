@@ -4,7 +4,6 @@
 //! cadence, free disk space, trackers from URL, watched folders — plus the
 //! preferences watcher and engine (re)starts.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1017,11 +1016,14 @@ impl Session {
         }
         let backup = self.backup.clone();
         let logger = self.ctx.logger.clone();
-        let known: HashSet<String> = self.state.read().torrents.keys().cloned().collect();
+        let Some(me) = self.arc() else { return };
         let _ = tokio::task::spawn_blocking(move || {
             for r in &records {
-                // Skip torrents removed meanwhile.
-                if !known.contains(&r.info_hash) {
+                // Torrents removed meanwhile are skipped. The check and the
+                // write happen under the lock that removal takes to delete
+                // the files, so a removal can't slip in between.
+                let _io = backup.io_lock();
+                if !me.state.read().torrents.contains_key(&r.info_hash) {
                     continue;
                 }
                 if let Err(e) = backup.save_resume(r) {

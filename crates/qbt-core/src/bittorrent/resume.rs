@@ -220,11 +220,20 @@ pub struct BackupDir {
     /// Hash of the last record written per torrent in this run, so that a
     /// periodic save-all does not rewrite (and fsync) unchanged files.
     written: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, u64>>>,
+    /// Orders deleting a torrent's files against background saves: a save
+    /// checks under it that the torrent still exists, so a record written
+    /// for a torrent removed meanwhile can't bring it back at the next start.
+    io: std::sync::Arc<std::sync::Mutex<()>>,
 }
 
 impl BackupDir {
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir, written: Default::default() }
+        Self { dir, written: Default::default(), io: Default::default() }
+    }
+
+    /// Held while a background save checks the torrent and writes it.
+    pub fn io_lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.io.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn torrent_path(&self, id: &str) -> PathBuf {
@@ -266,6 +275,7 @@ impl BackupDir {
     }
 
     pub fn delete(&self, id: &str) {
+        let _io = self.io_lock();
         if let Ok(mut w) = self.written.lock() {
             w.remove(id);
         }

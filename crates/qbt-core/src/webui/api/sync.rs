@@ -47,7 +47,12 @@ pub async fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
                 categories: snap.categories.iter().map(|cat| (cat.name.clone(), category_json(cat))).collect(),
                 tags: snap.tags,
                 trackers: snap.trackers,
-                server_state: server_state_json(&snap.server_state, &prefs),
+                server_state: {
+                    let mut s = server_state_json(&snap.server_state, &prefs);
+                    // qBittorrent 5.3: whether the session is paused.
+                    s.insert("session_state".into(), json!(c.app.is_session_paused()));
+                    s
+                },
             };
             let mut data = c.session.data.lock().await;
             Ok(Reply::Json(data.maindata.poll(rid, input)))

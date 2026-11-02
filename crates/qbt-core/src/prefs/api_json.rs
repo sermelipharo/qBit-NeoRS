@@ -56,6 +56,16 @@ fn to_int(v: &Value) -> i64 {
     if i32::try_from(n).is_ok() { n } else { 0 }
 }
 
+/// `QVariant::toInt(&ok)`: `None` when not a 32-bit integer.
+fn to_int_checked(v: &Value) -> Option<i64> {
+    let n = match v {
+        Value::Number(n) => n.as_i64()?,
+        Value::String(s) => parse_int_str(s)?,
+        _ => return None,
+    };
+    i32::try_from(n).is_ok().then_some(n)
+}
+
 /// An empty .torrent backup folder means the default one
 /// (`SessionImpl::torrentBackupDirectory`).
 fn backup_dir_or_default(dir: &str) -> &str {
@@ -388,6 +398,9 @@ pub fn to_json(p: &Preferences) -> Value {
     put("mark_of_the_web", json!(a.mark_of_the_web));
     put("ignore_ssl_errors", json!(a.ignore_ssl_errors));
     put("python_executable_path", json!(a.python_executable_path));
+    // qBittorrent 5.3.
+    put("start_paused", json!(a.start_paused));
+    put("shutdown_timeout", json!(a.shutdown_timeout));
     // Advanced: libtorrent section
     put("bdecode_depth_limit", json!(a.bdecode_depth_limit));
     put("bdecode_token_limit", json!(a.bdecode_token_limit));
@@ -872,6 +885,13 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("mark_of_the_web", a.mark_of_the_web, to_bool);
     set!("ignore_ssl_errors", a.ignore_ssl_errors, to_bool);
     set!("python_executable_path", a.python_executable_path, to_str);
+    set!("start_paused", a.start_paused, to_bool);
+    // -1 (unlimited) or more seconds; anything else is ignored.
+    if let Some(v) = get("shutdown_timeout")
+        && let Some(t) = to_int_checked(v).filter(|t| *t >= -1)
+    {
+        a.shutdown_timeout = t;
+    }
     set!("bdecode_depth_limit", a.bdecode_depth_limit, to_int);
     set!("bdecode_token_limit", a.bdecode_token_limit, to_int);
     set!("async_io_threads", a.async_io_threads, to_int);
@@ -997,8 +1017,8 @@ mod tests {
         "confirm_remove_tracker_from_all_torrents", "recheck_completed_torrents", "app_instance_name",
         "refresh_interval", "resolve_peer_host_names", "resolve_peer_countries", "reannounce_when_address_changed",
         "enable_embedded_tracker", "embedded_tracker_port", "embedded_tracker_port_forwarding", "mark_of_the_web",
-        "ignore_ssl_errors", "python_executable_path", "bdecode_depth_limit",
-        "bdecode_token_limit",
+        "ignore_ssl_errors", "python_executable_path", "start_paused", "shutdown_timeout",
+        "bdecode_depth_limit", "bdecode_token_limit",
         "async_io_threads", "hashing_threads", "file_pool_size", "checking_memory_use", "disk_cache", "disk_cache_ttl",
         "disk_queue_size", "disk_io_type", "disk_io_read_mode", "disk_io_write_mode", "enable_coalesce_read_write",
         "enable_piece_extent_affinity", "enable_upload_suggestions", "send_buffer_watermark",
@@ -1019,7 +1039,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3.
-        assert_eq!(APPENDIX_A.len(), 234);
+        assert_eq!(APPENDIX_A.len(), 236);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);
@@ -1143,6 +1163,23 @@ mod tests {
         let d = &p.downloads;
         assert!(d.torrent_files_backup_enabled && d.torrent_files_finished_backup_dir_enabled && d.remove_torrent_file_backup);
         assert_eq!((d.torrent_files_backup_dir.as_str(), d.torrent_files_finished_backup_dir.as_str()), ("/b", "backup"));
+    }
+
+    #[test]
+    fn start_paused_and_shutdown_timeout() {
+        let mut p = Preferences::default();
+        let v = to_json(&p);
+        assert_eq!((v["start_paused"].clone(), v["shutdown_timeout"].clone()), (json!(false), json!(-1)));
+        apply(&mut p, &obj(json!({"start_paused": true, "shutdown_timeout": "30"}))).unwrap();
+        assert!(p.advanced.start_paused);
+        assert_eq!(p.advanced.shutdown_timeout, 30);
+        // Below -1 or not a 32-bit integer: ignored (`toInt(&ok)`).
+        for bad in [json!(-2), json!("x"), json!(1.5), json!(5_000_000_000_i64), json!(null)] {
+            apply(&mut p, &obj(json!({ "shutdown_timeout": bad }))).unwrap();
+            assert_eq!(p.advanced.shutdown_timeout, 30);
+        }
+        apply(&mut p, &obj(json!({"shutdown_timeout": -1, "start_paused": false}))).unwrap();
+        assert_eq!((p.advanced.shutdown_timeout, p.advanced.start_paused), (-1, false));
     }
 
     #[test]

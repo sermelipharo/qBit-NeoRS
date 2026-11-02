@@ -245,7 +245,7 @@ extension UIScenarios {
         }
 
         // Show advanced settings: hidden rows appear.
-        let startPaused = SettingsCatalog.title("BitTorrent/Session/StartPaused")
+        let startPaused = SettingsCatalog.title("start_paused")
         // The switch persists in the profile, and a profile used by an earlier run starts with it on: turn it off first.
         _ = await openPane(d, window, .advanced)
         await d.pause(0.5)

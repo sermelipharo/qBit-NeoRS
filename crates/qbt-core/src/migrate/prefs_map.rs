@@ -230,6 +230,8 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("mark_of_the_web", "Preferences/Advanced/markOfTheWeb", Bool),
     ("ignore_ssl_errors", "Preferences/Advanced/IgnoreSSLErrors", Bool),
     ("python_executable_path", "Preferences/Search/pythonExecutablePath", Str),
+    ("start_paused", "BitTorrent/Session/StartPaused", Bool),
+    ("shutdown_timeout", "BitTorrent/Session/ShutdownTimeout", Int),
     ("bdecode_depth_limit", "BitTorrent/BdecodeDepthLimit", Int),
     ("bdecode_token_limit", "BitTorrent/BdecodeTokenLimit", Int),
     ("async_io_threads", "BitTorrent/Session/AsyncIOThreadsCount", Int),
@@ -296,9 +298,7 @@ pub const EXTRA_KEYS: &[&str] = &[
     "Preferences/WebUI/Enabled",
     "Preferences/WebUI/Password_PBKDF2",
     "Preferences/WebUI/APIKey",
-    "BitTorrent/Session/StartPaused",
     "BitTorrent/Session/SubcategoriesEnabled",
-    "BitTorrent/Session/ShutdownTimeout",
     "BitTorrent/Session/InterfaceName",
 ];
 
@@ -499,14 +499,8 @@ pub fn build(api: &Map<String, Value>, ini: &IniFile, watched: Option<Vec<Watche
             notes.push("WebUI API key has an unexpected format; not copied".into());
         }
     }
-    if let Some(v) = ini.bool("BitTorrent/Session/StartPaused") {
-        p.advanced.start_paused = v;
-    }
     if let Some(v) = ini.bool("BitTorrent/Session/SubcategoriesEnabled") {
         p.downloads.use_subcategories = v;
-    }
-    if let Some(v) = ini.int("BitTorrent/Session/ShutdownTimeout") {
-        p.advanced.shutdown_timeout = v;
     }
     if let Some(v) = ini.string("BitTorrent/Session/InterfaceName") {
         p.advanced.current_interface_name = v;

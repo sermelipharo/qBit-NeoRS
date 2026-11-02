@@ -464,8 +464,8 @@ The section header row reads `"qBittorrent Section"` and links `"Open documentat
 | 30 [mac/Win] | macOS: `"Enable quarantine for downloaded files"`; Windows: `"Enable Mark-of-the-Web (MOTW) for downloaded files"` | checkbox | `mark_of_the_web` (175) | bool | `true` | macOS: sets the `com.apple.quarantine` xattr on downloaded content (and on files fetched by URL). · `Preferences/Advanced/markOfTheWeb` |
 | 31 | `"Ignore SSL errors"` (tooltip `"Affects certificate validation and non-torrent protocol activities (e.g. RSS feeds, program updates, torrent files, geoip db, etc)"`) | checkbox | `ignore_ssl_errors` (176) | bool | `false` | For non-torrent HTTP downloads (`Net::DownloadManager`). · `Preferences/Advanced/IgnoreSSLErrors` |
 | 32 | `"Python executable path (may require restart)"` | line edit, placeholder `"(Auto detect if empty)"` | `python_executable_path` (177) | string path | `""` | Python used for search plugins (trimmed). · `Preferences/Search/pythonExecutablePath` |
-| 33 | `"Start BitTorrent session in paused state"` | checkbox | — (GUI only) | bool | `false` | The libtorrent session starts paused: nothing transfers until it is resumed. · `BitTorrent/Session/StartPaused` |
-| 34 | `"BitTorrent session shutdown timeout [-1: unlimited]"` (tooltip: `Sets the timeout for the session to be shut down gracefully, at which point it will be forcibly terminated.<br>Note that this does not apply to the saving resume data time.`) | spin −1…, `" sec"`, special `"-1 (unlimited)"` | — (GUI only) | int s | `-1` | · `BitTorrent/Session/ShutdownTimeout` |
+| 33 | `"Start BitTorrent session in paused state"` | checkbox | `start_paused` (5.3, after `python_executable_path`; before 5.3 GUI only) | bool | `false` | The libtorrent session starts paused: nothing transfers until it is resumed. · `BitTorrent/Session/StartPaused` |
+| 34 | `"BitTorrent session shutdown timeout [-1: unlimited]"` (tooltip: `Sets the timeout for the session to be shut down gracefully, at which point it will be forcibly terminated.<br>Note that this does not apply to the saving resume data time.`) | spin −1…, `" sec"`, special `"-1 (unlimited)"` | `shutdown_timeout` (5.3, after `start_paused`; SET ignores values below −1 or not an int) | int s | `-1` | · `BitTorrent/Session/ShutdownTimeout` |
 
 ### 9.2 "libtorrent Section"
 
@@ -755,7 +755,7 @@ These are not in the WebAPI. A native client still has to implement them for par
 223 dht_bootstrap_nodes
 ```
 
-qBittorrent 5.3 changes this list (234 keys; `APPENDIX_A` in
+qBittorrent 5.3 changes this list (236 keys; `APPENDIX_A` in
 `crates/qbt-core/src/prefs/api_json.rs` is the exact order): 39 is
 `mail_notification_encryption_type` instead of `mail_notification_ssl_enabled`;
 30–31 (`export_dir`, `export_dir_fin`) are replaced by
@@ -768,6 +768,7 @@ added are `i2p_pex_enabled` (after `i2p_mixed_mode`),
 `max_inactive_seeding_time` and `max_ratio_act`), `web_ui_sessions_count_limit`
 (after `web_ui_session_timeout`), `confirm_remove_all_tags` and
 `confirm_remove_tracker_from_all_torrents` (after `confirm_torrent_recheck`),
+`start_paused` and `shutdown_timeout` (after `python_executable_path`),
 and `webtorrent_stun_server` (last).
 
 ## Appendix B — SET vs GET differences

@@ -188,6 +188,8 @@ pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("transfer", "getSpeedLimits", GP),
     ("transfer", "setSpeedLimits", P),
     ("transfer", "banPeers", P),
+    ("transfer", "pauseSession", P),
+    ("transfer", "resumeSession", P),
     ("torrents", "count", GP),
     ("torrents", "info", GP),
     ("torrents", "properties", GP),
@@ -371,7 +373,7 @@ pub async fn dispatch(c: &mut Call<'_>, scope: &str, action: &str) -> ApiResult 
         "app" => app::app(c, action).await,
         "clientdata" => app::clientdata(c, action),
         "log" => app::log(c, action),
-        "transfer" => app::transfer(c, action),
+        "transfer" => app::transfer(c, action).await,
         "sync" => sync::dispatch(c, action).await,
         "torrents" => torrents::dispatch(c, action).await,
         "rss" => rss::dispatch(c, action),
@@ -501,10 +503,10 @@ mod tests {
 
     #[test]
     fn endpoint_table() {
-        assert_eq!(ENDPOINTS.len(), 130);
+        assert_eq!(ENDPOINTS.len(), 132);
         let post = ENDPOINTS.iter().filter(|e| e.2 == Methods::PostOnly).count();
         let get = ENDPOINTS.len() - post;
-        assert_eq!(post, 83);
+        assert_eq!(post, 85);
         assert_eq!(get, 47);
         assert_eq!(method_filter("torrents", "SSLParameters"), Some(Methods::GetPost));
         assert_eq!(method_filter("torrents", "ssLParameters"), None);

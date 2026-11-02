@@ -265,7 +265,7 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 234);
+        assert_eq!(prefs.as_object().unwrap().len(), 236);
         assert_eq!(prefs["web_ui_port"], h.port);
         assert!(prefs.get("web_ui_password").is_none());
 
@@ -957,6 +957,56 @@ fn torrent_share_limits_mode() {
         assert_eq!(h.post("/api/v2/app/setPreferences", &[("json", json)], Some(&c)).await.status(), 200);
         let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
         assert_eq!(prefs["share_limits_mode"], "MatchAll");
+    });
+}
+
+/// qBittorrent 5.3's `transfer/pauseSession` / `resumeSession` (POST only),
+/// `session_state` in `sync/maindata`'s `server_state`, and the
+/// `start_paused` / `shutdown_timeout` preferences.
+#[test]
+fn pause_and_resume_session() {
+    let h = Harness::new(|_| {});
+    h.block(async {
+        let c = h.login().await;
+        let maindata = |rid: i64| {
+            let (h, c) = (&h, c.clone());
+            async move {
+                let v: Value = h.get(&format!("/api/v2/sync/maindata?rid={rid}"), Some(&c)).await.json().await.unwrap();
+                v
+            }
+        };
+        let first = maindata(0).await;
+        assert_eq!(first["server_state"]["session_state"], false);
+        let rid = first["rid"].as_i64().unwrap();
+
+        assert_eq!(h.get("/api/v2/transfer/pauseSession", Some(&c)).await.status(), 405);
+        assert!(!h.app.is_session_paused());
+        assert_eq!(h.post("/api/v2/transfer/pauseSession", &[], Some(&c)).await.status(), 200);
+        assert!(h.app.is_session_paused());
+        // Pausing twice is harmless; the change arrives as a diff.
+        assert_eq!(h.post("/api/v2/transfer/pauseSession", &[], Some(&c)).await.status(), 200);
+        let diff = maindata(rid).await;
+        assert_eq!(diff["server_state"]["session_state"], true);
+        // Not part of transfer/info (as upstream).
+        let info: Value = h.get("/api/v2/transfer/info", Some(&c)).await.json().await.unwrap();
+        assert!(info.get("session_state").is_none());
+
+        assert_eq!(h.post("/api/v2/transfer/resumeSession", &[], Some(&c)).await.status(), 200);
+        assert!(!h.app.is_session_paused());
+        assert_eq!(maindata(0).await["server_state"]["session_state"], false);
+        assert_eq!(h.post("/api/v2/transfer/resumeSession", &[], None).await.status(), 403);
+
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!((prefs["start_paused"].clone(), prefs["shutdown_timeout"].clone()), (json!(false), json!(-1)));
+        let json = r#"{"start_paused":true,"shutdown_timeout":45}"#;
+        assert_eq!(h.post("/api/v2/app/setPreferences", &[("json", json)], Some(&c)).await.status(), 200);
+        assert!(h.app.preferences().advanced.start_paused);
+        assert_eq!(h.app.preferences().advanced.shutdown_timeout, 45);
+        // Only a later start is paused.
+        assert!(!h.app.is_session_paused());
+        let json = r#"{"shutdown_timeout":-5}"#;
+        assert_eq!(h.post("/api/v2/app/setPreferences", &[("json", json)], Some(&c)).await.status(), 200);
+        assert_eq!(h.app.preferences().advanced.shutdown_timeout, 45);
     });
 }
 

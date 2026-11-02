@@ -46,6 +46,7 @@ enum SettingsCatalogCheck {
         "confirm_remove_tracker_from_all_torrents", "recheck_completed_torrents", "app_instance_name", "refresh_interval",
         "resolve_peer_host_names", "resolve_peer_countries", "reannounce_when_address_changed", "enable_embedded_tracker",
         "embedded_tracker_port", "embedded_tracker_port_forwarding", "mark_of_the_web", "ignore_ssl_errors", "python_executable_path",
+        "start_paused", "shutdown_timeout",
         "bdecode_depth_limit", "bdecode_token_limit", "async_io_threads", "hashing_threads", "file_pool_size", "checking_memory_use",
         "disk_cache", "disk_cache_ttl", "disk_queue_size", "disk_io_type", "disk_io_read_mode", "disk_io_write_mode",
         "enable_coalesce_read_write", "enable_piece_extent_affinity", "enable_upload_suggestions", "send_buffer_watermark",
@@ -75,7 +76,6 @@ enum SettingsCatalogCheck {
         return gui.map(\.rawValue) + [
             FeatureDefaults.storeSearchTabs, FeatureDefaults.storeSearchResults, FeatureDefaults.searchHistoryLength,
             SettingsNavigator.showAdvancedKey, "watched_folders.json", "Preferences/WebUI/Enabled",
-            "BitTorrent/Session/StartPaused", "BitTorrent/Session/ShutdownTimeout",
             "LaunchServices (.torrent)", "LaunchServices (magnet:)",
         ]
     }

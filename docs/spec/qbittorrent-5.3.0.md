@@ -120,8 +120,8 @@ Things to know before reading:
 | #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ✅ | Stored, clamped to -7..7, imported from qBittorrent; passing the variance to SAM is the #24891 engine row |
 | #24837 | `webtorrent_stun_server` key | ✅ | Stored only |
 | #24842 | `rss/exportRules`, `rss/importRules` (POST) | ✅ | `webui/api/rss.rs`; export GET/POST as an attachment, import exactly one JSON file (400 otherwise); e2e test `rss_rules_export_and_import` |
-| #24269 | `transfer/pauseSession`, `transfer/resumeSession`, `session_state` in `server_state` | ⬜ | Needs a core "session paused" state (stop all engine activity without changing torrent states) |
-| #24249 | Prefs `start_paused`, `shutdown_timeout` | ⬜ | `shutdown_timeout` exists (`prefs/model.rs:523`); add `start_paused` |
+| #24269 | `transfer/pauseSession`, `transfer/resumeSession`, `session_state` in `server_state` | ✅ | POST endpoints on the existing core session pause (`Session::pause_session`/`resume_session`: torrents keep their states, the engine holds them; not persisted); `session_state` (bool) in `sync/maindata`'s `server_state` only, as upstream; e2e `pause_and_resume_session` |
+| #24249 | Prefs `start_paused`, `shutdown_timeout` | ✅ | Both already existed as GUI-only settings (`advanced.start_paused`, `advanced.shutdown_timeout`); now WebAPI keys after `python_executable_path` (SET ignores a timeout below -1 or not an int) and imported through the ini map. The Mac app's settings catalog uses the WebAPI keys |
 | #24791 | POST-only endpoints | ✅ | See Security |
 | #24724 | `seedMode` replaces `skip_checking` | ✅ | See Core/engine |
 | #24720 | `web_ui_sessions_count_limit` | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
@@ -171,7 +171,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24692 | Non-torrent RSS link handling | ⬜ | Port in `rss.ts`; mirror `RSSLinkPolicy.swift` (only http(s), magnet and hashes are downloadable) |
 | #24720 | Sessions limit setting | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #23784 | Keep search tabs across restarts and sessions | ⬜ | Port in `search.ts` after the WebAPI/pref change |
-| #24249, #24269 | Start paused, shutdown timeout, pause/resume session | ⬜ | Port after the core state exists |
+| #24249, #24269 | Start paused, shutdown timeout, pause/resume session | ✅ | Status bar button (pause icon, "Pause Session" / "Resume Session", highlighted while paused) from `server_state.session_state`; the two prefs are in All Settings |
 | #24842 | Export/import RSS rules | ⬜ | Port in `rss.ts` after the endpoints exist |
 | #24848 | Cap path autocompletion at 25 | ➖ | Upstream caps the client-side suggestion list only (the API still returns every entry). The NeoRS Web UI has no path autocompletion yet, so there is nothing to cap |
 | #24920 | Missing Options page settings | ⬜ | `settings.ts` is a subset of the prefs; add the new keys together with the ones above |

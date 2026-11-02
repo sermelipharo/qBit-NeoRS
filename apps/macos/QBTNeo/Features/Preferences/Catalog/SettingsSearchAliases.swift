@@ -311,7 +311,8 @@ enum SettingsSearchAliases {
         "GUI/DownloadTrackerFavicon": ["Download tracker's favicon"],
         "AddNewTorrentDialog/SavePathHistoryLength": ["Save path history length"],
         "SpeedWidget/Enabled": ["Enable speed graphs"],
-        "BitTorrent/Session/StartPaused": ["Start BitTorrent session in paused state"],
+        "start_paused": ["BitTorrent/Session/StartPaused", "Start BitTorrent session in paused state"],
+        "shutdown_timeout": ["BitTorrent/Session/ShutdownTimeout"],
         "Locking/password_PBKDF2": ["Lock qBittorrent"],
         "GUI/TransferList/ViewMode": ["as List", "as Cards"],
         "GUI/TransferList/StateColorScope": [

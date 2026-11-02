@@ -33,11 +33,18 @@ const free = h("span", null);
 const dl = h("button", { class: "sb-speed", title: "Download speed and limit", onclick: () => speedLimits() }, icon("down"), h("span", null));
 const ul = h("button", { class: "sb-speed", title: "Upload speed and limit", onclick: () => speedLimits() }, icon("up"), h("span", null));
 const alt = h("button", { class: "sb-alt", title: "Alternative speed limits", "aria-label": "Alternative speed limits", onclick: toggleAlt }, icon("gauge"));
-const statusbar = h("footer", { class: "statusbar" }, conn, dht, free, h("span", { class: "spacer" }), dl, ul, alt);
+// qBittorrent 5.3: pause/resume the whole session (torrents keep their states).
+const session = h("button", { class: "sb-alt sb-session", onclick: toggleSession }, icon("stopped"));
+const statusbar = h("footer", { class: "statusbar" }, conn, dht, free, h("span", { class: "spacer" }), dl, ul, session, alt);
 const mini = h("span", { class: "mini-speed narrow-only" });
 
 async function toggleAlt(): Promise<void> {
   await post("transfer/toggleSpeedLimitsMode").catch((e) => toast(e.message, true));
+  poke();
+}
+
+async function toggleSession(): Promise<void> {
+  await post(server.session_state ? "transfer/resumeSession" : "transfer/pauseSession").catch((e) => toast(e.message, true));
   poke();
 }
 
@@ -77,6 +84,11 @@ function renderStatus(): void {
   const lim = (v: number) => (v > 0 ? ` (${speed(v)})` : "");
   setText(dl.lastElementChild!, (speed(s.dl_info_speed) === "–" ? "0 B/s" : speed(s.dl_info_speed)) + lim(s.dl_rate_limit));
   setText(ul.lastElementChild!, (speed(s.up_info_speed) === "–" ? "0 B/s" : speed(s.up_info_speed)) + lim(s.up_rate_limit));
+  const paused = !!s.session_state;
+  toggle(session, "on", paused);
+  session.title = paused ? "Resume Session" : "Pause Session";
+  session.setAttribute("aria-label", session.title);
+  session.setAttribute("aria-pressed", String(paused));
   toggle(alt, "on", !!s.use_alt_speed_limits);
   alt.setAttribute("aria-pressed", String(!!s.use_alt_speed_limits));
   setText(mini, `↓ ${speed(s.dl_info_speed)}   ↑ ${speed(s.up_info_speed)}`);

@@ -298,7 +298,7 @@ pub fn parse_peer_address(s: &str) -> Option<SocketAddr> {
     (sa.port() != 0).then(|| SocketAddr::new(sa.ip().to_canonical(), sa.port()))
 }
 
-pub fn transfer(c: &mut Call<'_>, action: &str) -> ApiResult {
+pub async fn transfer(c: &mut Call<'_>, action: &str) -> ApiResult {
     match action {
         "info" => {
             let full = server_state_json(&c.app.server_state(), &c.app.preferences());
@@ -361,6 +361,16 @@ pub fn transfer(c: &mut Call<'_>, action: &str) -> ApiResult {
             } else {
                 c.app.set_global_download_limit(limit)?;
             }
+            Ok(Reply::ok())
+        }
+        // qBittorrent 5.3: `Session::pause()` / `resume()`; torrents keep
+        // their own states.
+        "pauseSession" => {
+            c.app.pause_session().await?;
+            Ok(Reply::ok())
+        }
+        "resumeSession" => {
+            c.app.resume_session().await?;
             Ok(Reply::ok())
         }
         "banPeers" => {

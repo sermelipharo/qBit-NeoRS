@@ -410,7 +410,7 @@ text.
 2. **Startup**
    * Open qBit NeoRS at login `[B]` (SMAppService)
    * *At startup, show window:* Normal / Minimized `[B]` (`GUI/StartUpWindowState`)
-   * *Start with all transfers paused* `[A]` (`BitTorrent/Session/StartPaused`)
+   * *Start with all transfers paused* `[A]` (`start_paused`, `BitTorrent/Session/StartPaused`)
      ↳ *Nothing downloads or uploads until you resume.*
 3. **Default App**. Two rows, each a checkmark status or a "Make Default"
    button:
@@ -1145,8 +1145,8 @@ Keys qBittorrent keeps outside the WebAPI that have a Settings control, plus the
 | `GUI/DownloadTrackerFavicon` | Download tracker's favicon | Advanced › qBittorrent Section | Interface › Sidebar | B | new: "Show tracker icons" |
 | `AddNewTorrentDialog/SavePathHistoryLength` | Save path history length | Advanced › qBittorrent Section | Transfers › Adding › Adding Torrents | A | new: "Remember recent save locations:" |
 | `SpeedWidget/Enabled` | Enable speed graphs | Advanced › qBittorrent Section | Interface › Torrent Details | B | new: "Show speed graphs" |
-| `BitTorrent/Session/StartPaused` | Start BitTorrent session in paused state | Advanced › qBittorrent Section | General › Startup | A | new: "Start with all transfers paused" |
-| `BitTorrent/Session/ShutdownTimeout` | BitTorrent session shutdown timeout [-1: unlimited] | Advanced › qBittorrent Section | Advanced › Data & Recovery | X | kept |
+| `start_paused` (5.3 WebAPI; `BitTorrent/Session/StartPaused`) | Start BitTorrent session in paused state | Advanced › qBittorrent Section | General › Startup | A | new: "Start with all transfers paused" |
+| `shutdown_timeout` (5.3 WebAPI; `BitTorrent/Session/ShutdownTimeout`) | BitTorrent session shutdown timeout [-1: unlimited] | Advanced › qBittorrent Section | Advanced › Data & Recovery | X | kept |
 | `Search/StoreOpenedSearchTabs` | Store opened tabs | Search › Search UI | Search & RSS › Search Tabs | B | new: "Reopen search tabs at launch" |
 | `Search/StoreOpenedSearchTabResults` | Also store search results | Search › Search UI | Search & RSS › Search Tabs | R | kept |
 | `Search/HistoryLength` | History length | Search › Search UI | Search & RSS › Search Tabs | A | kept |

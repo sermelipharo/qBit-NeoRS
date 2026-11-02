@@ -36,6 +36,8 @@ pub(crate) struct Peer {
     pub sources: PeerSources,
     // Set by an explicit disconnect: the peer isn't reconnected when it dies.
     pub disconnect_requested: bool,
+    // Hash check record of the pieces it sent (automatic bans).
+    pub trust: crate::torrent_state::peer_bans::PeerTrust,
 }
 
 impl Peer {
@@ -63,6 +65,7 @@ impl Peer {
             outgoing_address: None,
             sources: PeerSources::from_source(PeerSource::Incoming),
             disconnect_requested: false,
+            trust: Default::default(),
         }
     }
 
@@ -74,6 +77,7 @@ impl Peer {
             state: Default::default(),
             sources: PeerSources::from_source(source),
             disconnect_requested: false,
+            trust: Default::default(),
         }
     }
 

@@ -205,6 +205,8 @@ pub enum AddIncomingPeerResult {
     /// The peer id is already connected to the torrent from another address
     /// (`allow_multiple_connections_per_pid` off).
     DuplicatePeerId,
+    /// The torrent banned the peer for sending corrupt data.
+    Banned,
 }
 
 /// libtorrent's rule for two connections from the same peer id: the peer
@@ -605,6 +607,57 @@ impl TorrentStateLive {
             .unwrap_or(false)
     }
 
+    /// A piece `addr` sent failed the hash check (`sole_source`: nobody
+    /// else sent blocks of it). Bans the peer for the torrent when it is no
+    /// longer trusted (see `peer_bans`) and returns whether it was banned.
+    fn on_piece_hash_failed(&self, addr: PeerHandle, incoming: bool, sole_source: bool) -> bool {
+        let ban = self
+            .peers
+            .with_peer_mut(addr, "on_piece_hash_failed", |p| {
+                let ban = p.trust.on_piece_failed(sole_source);
+                if ban {
+                    // Not reconnected when the connection closes.
+                    p.disconnect_requested = true;
+                }
+                ban
+            })
+            .unwrap_or(false);
+        if !ban {
+            return false;
+        }
+        if !self.shared.auto_bans.ban(addr, incoming) {
+            return true;
+        }
+        warn!(
+            id = self.shared.id,
+            info_hash = ?self.shared.info_hash,
+            ?addr,
+            "banning peer: too many corrupt pieces"
+        );
+        // Other connections from the peer that the ban covers.
+        let others: Vec<PeerHandle> = self
+            .peers
+            .states
+            .iter()
+            .filter(|e| *e.key() != addr && e.key().ip() == addr.ip())
+            .filter(|e| match e.value().get_state() {
+                PeerState::Live(l) => l.incoming || self.shared.auto_bans.blocks_outgoing(*e.key()),
+                PeerState::Connecting(_) => self.shared.auto_bans.blocks_outgoing(*e.key()),
+                _ => false,
+            })
+            .map(|e| *e.key())
+            .collect();
+        for other in others {
+            self.kick_peer(other, true);
+        }
+        if let Some(session) = self.shared.session.upgrade() {
+            session
+                .peer_filter
+                .report(addr, crate::net::PeerBlockReason::CorruptData, incoming);
+        }
+        true
+    }
+
     fn add_wasted(&self, failed: u64, redundant: u64) {
         let runtime = &self.shared.runtime;
         let counters = &self.session_stats.counters;
@@ -649,6 +702,16 @@ impl TorrentStateLive {
         checked_peer: CheckedIncomingConnection,
     ) -> anyhow::Result<AddIncomingPeerResult> {
         use dashmap::mapref::entry::Entry;
+        // Banned for sending corrupt data: libtorrent closes it with
+        // `peer_banned` and posts no alert.
+        if self
+            .shared
+            .auto_bans
+            .blocks_incoming(checked_peer.addr.ip())
+        {
+            debug!(addr = %checked_peer.addr, "refusing incoming connection: banned peer");
+            return Ok(AddIncomingPeerResult::Banned);
+        }
         if !self.admit_peer_id(checked_peer.addr, checked_peer.handshake.peer_id, false) {
             return Ok(AddIncomingPeerResult::DuplicatePeerId);
         }
@@ -942,6 +1005,17 @@ impl TorrentStateLive {
                 continue;
             }
 
+            // Banned for sending corrupt data (revived or re-queued since).
+            if state.shared.auto_bans.blocks_outgoing(addr) {
+                debug!(?addr, "not connecting: banned peer");
+                state.peers.with_peer_mut(addr, "banned_no_outgoing", |p| {
+                    if matches!(p.get_state(), PeerState::Queued) {
+                        p.set_not_needed(&state.peers);
+                    }
+                });
+                continue;
+            }
+
             if session.blocklist.has(crate::net::filter::canonical_ip(addr.ip())) {
                 session
                     .stats
@@ -1163,6 +1237,9 @@ impl TorrentStateLive {
         addr: SocketAddr,
         source: PeerSource,
     ) -> crate::Result<bool> {
+        if self.shared.auto_bans.blocks_outgoing(addr) {
+            return Ok(false);
+        }
         match self.peers.add_if_not_seen(addr, source) {
             Some(handle) => handle,
             None => return Ok(false),
@@ -2801,6 +2878,7 @@ impl PeerHandler {
         fn write_to_disk(
             state: &TorrentStateLive,
             addr: PeerHandle,
+            incoming: bool,
             counters: &AtomicPeerCounters,
             piece: &Piece<ByteBuf<'_>>,
             chunk_info: &ChunkInfo,
@@ -2890,7 +2968,7 @@ impl PeerHandler {
             // It shouldn't impact perf anyway, but dropping just in case.
             drop(ppl_guard);
 
-            let full_piece_download_time = match full_piece_download_time {
+            let (full_piece_download_time, stolen) = match full_piece_download_time {
                 Some(t) => t,
                 None => return Ok(()),
             };
@@ -2933,7 +3011,7 @@ impl PeerHandler {
 
                     // Per-peer piece counters.
                     counters.on_piece_completed(piece_len, full_piece_download_time);
-                    state.peers.reset_peer_backoff(addr);
+                    state.peers.on_piece_passed(addr);
 
                     trace!(piece = index, "successfully downloaded and verified");
 
@@ -2957,6 +3035,11 @@ impl PeerHandler {
                         0,
                     );
                     state.new_pieces_notify.notify_waiters();
+                    // A piece that wasn't stolen came from this peer alone
+                    // (libtorrent's `known_bad_peer`).
+                    if state.on_piece_hash_failed(addr, incoming, !stolen) {
+                        anyhow::bail!("banned: too many corrupt pieces");
+                    }
                     anyhow::bail!("i am probably a bogus peer. dying.")
                 }
             };
@@ -2967,7 +3050,14 @@ impl PeerHandler {
             .shared
             .spawner
             .block_in_place_with_semaphore(|| {
-                write_to_disk(&self.state, self.addr, &self.counters, &piece, &chunk_info)
+                write_to_disk(
+                    &self.state,
+                    self.addr,
+                    self.incoming,
+                    &self.counters,
+                    &piece,
+                    &chunk_info,
+                )
             })
             .await
             .with_context(|| format!("error processing received chunk {chunk_info:?}"))?;

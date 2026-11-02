@@ -29,6 +29,8 @@ use crate::{
 pub struct InflightPiece {
     pub peer: PeerHandle,
     pub started: Instant,
+    /// The piece changed owners: blocks of the previous owner may be in it.
+    pub stolen: bool,
 }
 
 /// Result of attempting to acquire a piece.
@@ -188,6 +190,7 @@ impl PieceTracker {
             InflightPiece {
                 peer,
                 started: Instant::now(),
+                stolen: false,
             },
         );
         AcquireResult::Reserved(piece)
@@ -228,6 +231,7 @@ impl PieceTracker {
         let info = self.inflight.get_mut(&piece)?;
         info.peer = req.peer;
         info.started = Instant::now();
+        info.stolen = true;
 
         Some(AcquireResult::Stolen {
             piece,
@@ -239,12 +243,13 @@ impl PieceTracker {
 
     /// Remove piece from inflight tracking (e.g., after all chunks received).
     ///
-    /// Returns download duration if piece was in-flight.
+    /// Returns the download duration and whether the piece was stolen (it
+    /// may hold blocks from another peer) if piece was in-flight.
     /// Note: Does NOT mark the piece as downloaded - caller should do hash check
     /// and then call `mark_piece_hash_ok` or `mark_piece_hash_failed`.
-    pub fn take_inflight(&mut self, piece: ValidPieceIndex) -> Option<Duration> {
+    pub fn take_inflight(&mut self, piece: ValidPieceIndex) -> Option<(Duration, bool)> {
         let inflight = self.inflight.remove(&piece)?;
-        Some(inflight.started.elapsed())
+        Some((inflight.started.elapsed(), inflight.stolen))
     }
 
     /// Mark piece as downloaded after successful hash verification.
@@ -809,5 +814,10 @@ mod tests {
             }
             _ => panic!("Expected Stolen, got {:?}", result),
         }
+
+        // A stolen piece may mix blocks of both peers: the hash check
+        // can't blame one of them alone.
+        assert!(tracker.take_inflight(piece_1).unwrap().1);
+        assert!(!tracker.take_inflight(piece_0).unwrap().1);
     }
 }

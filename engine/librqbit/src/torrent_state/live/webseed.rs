@@ -343,7 +343,7 @@ impl TorrentStateLive {
             }
         }
         drop(ppl_guard);
-        let Some(download_time) = download_time else {
+        let Some((download_time, _)) = download_time else {
             anyhow::bail!("web seed piece {piece} incomplete after writing all blocks");
         };
 

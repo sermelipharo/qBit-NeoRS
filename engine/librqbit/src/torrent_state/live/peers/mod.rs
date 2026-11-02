@@ -362,9 +362,11 @@ impl PeerStates {
         Ok(rx)
     }
 
-    pub fn reset_peer_backoff(&self, handle: PeerHandle) {
-        self.with_peer_mut(handle, "reset_peer_backoff", |p| {
+    /// A piece the peer sent passed the hash check.
+    pub fn on_piece_passed(&self, handle: PeerHandle) {
+        self.with_peer_mut(handle, "on_piece_passed", |p| {
             p.stats.reset_backoff();
+            p.trust.on_piece_passed();
         });
     }
 

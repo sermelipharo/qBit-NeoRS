@@ -740,7 +740,7 @@ pub fn banned_ips(&self) -> Vec<IpAddr>;
 pub fn set_blocked_peer_callback(&self, Option<BlockedPeerCallback>); // Arc<dyn Fn(BlockedPeer)>
 pub fn disconnect_blocked_peers(&self) -> usize;
 // BlockedPeer { addr, reason: PeerBlockReason, incoming }
-// PeerBlockReason: IpFilter | Banned | I2pMixedMode (non_exhaustive)
+// PeerBlockReason: IpFilter | Banned | I2pMixedMode | CorruptData (non_exhaustive)
 ```
 
 * Checked for incoming connections right after accept (before any
@@ -753,6 +753,53 @@ pub fn disconnect_blocked_peers(&self) -> usize;
   the connection direction; they are not reconnected.
 * The filter is separate from `set_tracker_ip_filter` (the core sets both
   when "Apply to trackers" is on) and from the URL block/allow lists.
+* `CorruptData`: a torrent banned a peer on its own (below); reported once,
+  when the ban is made (libtorrent `peer_ban_alert`, which qBittorrent logs
+  as "was banned", `blocked` false). The connections the ban refuses later
+  are not reported (libtorrent closes them with `peer_banned`, no alert).
+
+#### Automatic bans for corrupt data (`torrent_state/peer_bans.rs`)
+
+Upstream only disconnected a peer whose piece failed the hash check; an
+outgoing peer was dialled again after its backoff and could keep sending
+garbage. Now, as libtorrent's `piece_failed` / `penalize_peers`:
+
+* Every peer entry keeps `trust_points` in [-7, 8] and a saturating
+  `hashfails` count (`PeerTrust`, 2 bytes in `Peer`): +1 for each piece of
+  the peer that passes, -2 for each that fails. The peer is banned for the
+  torrent when it reaches -7 (four failures from a fresh entry), or at the
+  first failure of a piece it sent alone (libtorrent's `known_bad_peer`).
+* A piece is downloaded from one peer unless it was stolen from a slow peer
+  (`InflightPiece::stolen`, returned by `take_inflight`); a stolen piece may
+  hold blocks of both, so its failure costs trust but doesn't ban at once.
+  Simplification: only the peer that completed the piece is penalized
+  (libtorrent penalizes every peer that sent a block of it; we don't track
+  the previous owner). libtorrent's smart-ban plugin (block hashes compared
+  after a later pass, banning silently, without `peer_ban_alert`) is not
+  implemented. A failing peer that isn't banned is still disconnected (and
+  redialled after its backoff), as before.
+* The ban (`ManagedTorrentShared::auto_bans`, at most 256 per torrent, the
+  oldest forgotten) lasts as long as the torrent, across pause/resume, like
+  libtorrent's peer list; it is not saved across restarts (libtorrent's
+  resume data keeps `banned_peers`). Our engine allows several connections
+  per IP (libtorrent's `allow_multiple_connections_per_ip`, where a ban is
+  per `ip:port`): a dialled peer is banned by its listen address, so other
+  peers behind the same IP can still be dialled, while incoming connections
+  from a banned IP are all refused (their port says nothing; libtorrent's
+  default one-peer-per-IP mode bans the IP). A peer banned on an incoming
+  connection bans its whole IP both ways.
+* Enforced in `add_peer_with_source` (trackers, DHT, PeX, LSD, manual adds
+  are ignored), in the peer adder (a re-queued or revived entry becomes "not
+  needed") and in `add_incoming_peer` (`AddIncomingPeerResult::Banned`).
+  The banned connection isn't reconnected (`disconnect_requested`); other
+  connections the ban covers are closed.
+
+Tests: unit tests in `peer_bans.rs` (thresholds, clamping, bounds,
+per-address vs per-IP) and `piece_tracker.rs` (stolen flag);
+`e2e_peer_settings::test_e2e_corrupt_peer_is_banned` (a seeder whose files
+are overwritten after its check is banned at its first piece and reported
+once, not redialled even after pause/resume, its incoming connection
+refused, while a good seeder completes the download).
 
 ### Port mapping (UPnP + NAT-PMP)
 

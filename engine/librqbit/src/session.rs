@@ -1940,6 +1940,7 @@ impl Session {
                 fetch_budget: self.fetch_budget.clone(),
                 v2_layers_unsaved: Default::default(),
                 v2_unverified: Default::default(),
+                auto_bans: Default::default(),
             });
 
             let initializing = Arc::new(TorrentStateInitializing::new(

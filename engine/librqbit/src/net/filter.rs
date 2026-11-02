@@ -23,6 +23,10 @@ pub enum PeerBlockReason {
     /// A non-I2P peer of an I2P torrent while mixed mode is off
     /// (libtorrent `i2p_mixed`).
     I2pMixedMode,
+    /// The torrent banned the peer itself for sending corrupt data
+    /// (libtorrent `peer_ban_alert`). Reported once, when the ban is made;
+    /// the connections it refuses afterwards are not reported.
+    CorruptData,
 }
 
 /// One blocked connection attempt (or a connection closed because the filter

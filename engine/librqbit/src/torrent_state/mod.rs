@@ -3,6 +3,7 @@ pub(crate) mod dht_pacing;
 pub mod initializing;
 pub mod live;
 pub(crate) mod missing_layers;
+pub(crate) mod peer_bans;
 pub(crate) mod resume_stats;
 pub mod paused;
 pub(crate) mod runtime;
@@ -257,6 +258,9 @@ pub struct ManagedTorrentShared {
     pub(crate) v2_unverified: parking_lot::Mutex<Option<crate::type_aliases::BF>>,
     /// The session's budget for piece layers being fetched.
     pub(crate) fetch_budget: Arc<crate::peer_info_reader::budget::FetchBudget>,
+    /// Peers banned for sending corrupt data (see `peer_bans`); kept across
+    /// pause/unpause.
+    pub(crate) auto_bans: peer_bans::AutoBans,
 }
 
 impl ManagedTorrentShared {

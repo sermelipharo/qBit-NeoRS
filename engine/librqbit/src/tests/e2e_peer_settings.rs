@@ -1,6 +1,7 @@
 // End-to-end checks of the session peer settings that mirror libtorrent's
 // `seeding_outgoing_connections`, `max_allowed_in_request_queue` and
-// `allow_multiple_connections_per_pid`, over local TCP connections.
+// `allow_multiple_connections_per_pid`, and of the automatic ban of peers
+// sending corrupt data, over local TCP connections.
 
 use std::{
     net::{Ipv4Addr, SocketAddr},
@@ -14,8 +15,8 @@ use bytes::Bytes;
 use librqbit_core::hash_id::Id20;
 
 use crate::{
-    AddTorrent, AddTorrentOptions, ListenerMode, ManagedTorrent, PeerPolicyOptions, Session,
-    SessionOptions, create_torrent,
+    AddTorrent, AddTorrentOptions, BlockedPeer, ListenerMode, ManagedTorrent, PeerBlockReason,
+    PeerPolicyOptions, Session, SessionOptions, create_torrent,
     limits::LimitsConfig,
     listen::ListenerOptions,
     spawn_utils::BlockingSpawner,
@@ -336,5 +337,117 @@ async fn duplicate_peer_id(drop_checks: &DropChecks) -> anyhow::Result<()> {
     drop(server_handle);
     drop(clients);
     drop(server);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_e2e_corrupt_peer_is_banned() {
+    run("corrupt_peer_is_banned", corrupt_peer_is_banned).await;
+}
+
+// Overwrites every file under `dir` with garbage of the same size, in place
+// (the seeder keeps serving them without checking).
+fn corrupt_files(dir: &Path) {
+    for entry in walkdir::WalkDir::new(dir) {
+        let entry = entry.unwrap();
+        if entry.file_type().is_file() {
+            let len = usize::try_from(entry.metadata().unwrap().len()).unwrap();
+            std::fs::write(entry.path(), vec![0xa5u8; len]).unwrap();
+        }
+    }
+}
+
+// A seeder serving corrupt data is banned at its first failed piece (it sent
+// the whole piece): reported once through the blocked-peer callback, not
+// dialled again (even after a pause), its incoming connections refused,
+// while a good seeder completes the download.
+async fn corrupt_peer_is_banned(drop_checks: &DropChecks) -> anyhow::Result<()> {
+    let (dir, torrent) = make_torrent(2, 300_000).await;
+    let bad_dir = tempfile::TempDir::with_prefix("rqbit_peerset_bad").unwrap();
+    for entry in walkdir::WalkDir::new(dir.path()).min_depth(1) {
+        let entry = entry.unwrap();
+        let to = bad_dir
+            .path()
+            .join(entry.path().strip_prefix(dir.path()).unwrap());
+        if entry.file_type().is_dir() {
+            std::fs::create_dir_all(&to).unwrap();
+        } else {
+            std::fs::copy(entry.path(), &to).unwrap();
+        }
+    }
+
+    let (good, good_handle, good_addr) =
+        start_seeder(torrent.clone(), dir.path(), None, Default::default()).await?;
+    drop_checks.add(&good, "good seeder session");
+    let (bad, bad_handle, bad_addr) =
+        start_seeder(torrent.clone(), bad_dir.path(), None, Default::default()).await?;
+    drop_checks.add(&bad, "bad seeder session");
+    // Checked and seeding: now it serves garbage.
+    corrupt_files(bad_dir.path());
+
+    let out = tempfile::TempDir::with_prefix("rqbit_peerset_ban").unwrap();
+    let (client, handle) = start_leecher(torrent, out.path(), true, None).await?;
+    drop_checks.add(&client, "client session");
+    let client_addr = client.listen_addr().context("no client listen addr")?;
+    let blocked: Arc<parking_lot::Mutex<Vec<BlockedPeer>>> = Default::default();
+    let b2 = blocked.clone();
+    client.set_blocked_peer_callback(Some(Arc::new(move |b| b2.lock().push(b))));
+
+    // Only the bad seeder at first: its first piece fails the hash check.
+    assert_eq!(handle.add_peers(vec![bad_addr]), 1);
+    wait_until(
+        || {
+            ensure!(!blocked.lock().is_empty(), "not banned yet");
+            Ok(())
+        },
+        Duration::from_secs(30),
+    )
+    .await?;
+    assert_eq!(
+        *blocked.lock(),
+        vec![BlockedPeer {
+            addr: bad_addr,
+            reason: PeerBlockReason::CorruptData,
+            incoming: false,
+        }]
+    );
+    assert!(handle.wasted_bytes() > 0, "the failed piece is wasted");
+
+    // Not dialled again, not even when added again after a pause.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(handle.connections(), 0);
+    assert_eq!(bad_handle.connections(), 0);
+    client.pause(&handle).await?;
+    client.unpause(&handle).await?;
+    wait_until(
+        || {
+            ensure!(handle.live().is_some(), "not live again");
+            Ok(())
+        },
+        Duration::from_secs(30),
+    )
+    .await?;
+    assert_eq!(handle.add_peers(vec![bad_addr]), 0, "banned peer was added");
+
+    // Its connections to us are refused.
+    assert_eq!(bad_handle.add_peers(vec![client_addr]), 1);
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(bad_handle.connections(), 0);
+        assert_eq!(handle.connections(), 0);
+    }
+
+    // The good seeder completes the download; the ban was reported once.
+    assert_eq!(handle.add_peers(vec![good_addr]), 1);
+    wait_finished(&handle, 60).await?;
+    assert_eq!(blocked.lock().len(), 1);
+    assert_eq!(bad_handle.connections(), 0);
+
+    drop(handle);
+    drop(good_handle);
+    drop(bad_handle);
+    drop(client);
+    drop(good);
+    drop(bad);
     Ok(())
 }

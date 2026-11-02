@@ -17,6 +17,7 @@ pub struct PieceTracker {
 pub struct InflightPiece {
     pub peer: PeerHandle,     // Which peer "owns" this piece
     pub started: Instant,     // When download started (for steal threshold)
+    pub stolen: bool,         // Changed owners (blocks of two peers; see peer_bans)
 }
 ```
 

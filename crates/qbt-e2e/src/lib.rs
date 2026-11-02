@@ -123,6 +123,7 @@ pub fn make_torrent_format(path: &Path, piece_length: u32, format: qbt_core::mod
         format,
         piece_size: i64::from(piece_length),
         optimize_alignment: false,
+        ignore_dotfiles: true,
         padding_file_limit: -1,
         private: false,
         trackers: &[],

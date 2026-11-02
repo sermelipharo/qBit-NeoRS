@@ -867,7 +867,15 @@ impl RawPeer {
         }
         hs.extend_from_slice(&reserved);
         hs.extend_from_slice(&info_hash);
-        hs.extend_from_slice(b"-XX0000-raw-peer-tst");
+        // A distinct peer id per connection: the engine refuses a second
+        // live connection from the same peer id (libtorrent's
+        // allow_multiple_connections_per_pid, off by default).
+        static NEXT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let mut id = *b"-XX0000-raw-peer-t00";
+        id[18] = b'0' + n / 10 % 10;
+        id[19] = b'0' + n % 10;
+        hs.extend_from_slice(&id);
         s.write_all(&hs).await.unwrap();
         let mut reply = [0u8; 68];
         s.read_exact(&mut reply).await.unwrap();

@@ -6,7 +6,9 @@
 //! mandatory STARTTLS on any other port; without it, STARTTLS is used when
 //! the server offers it. Certificates are always validated. Authentication
 //! (PLAIN or LOGIN) is used when enabled and both username and password are
-//! set. Addresses and subjects containing line breaks are refused (no header
+//! set. Recipients: `;` separates e-mails, `,` the addresses of one e-mail
+//! (qBittorrent 5.3), so `a@x;b@y,c@z` sends one mail to a@x and one to b@y
+//! and c@z together. Addresses and subjects containing line breaks are refused (no header
 //! injection); passwords never appear in logs or errors.
 
 use std::str::FromStr;
@@ -31,7 +33,8 @@ const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MailSettings {
     pub sender: Address,
-    pub recipients: Vec<Address>,
+    /// One e-mail per group, sent to all of the group's addresses.
+    pub recipients: Vec<Vec<Address>>,
     pub host: String,
     pub port: u16,
     pub ssl: bool,
@@ -88,10 +91,16 @@ pub fn settings_from_prefs(d: &DownloadsPrefs) -> QbtResult<MailSettings> {
     let sender = parse_address("sender", &d.mail_notification_sender)?;
     let recipients = d
         .mail_notification_email
-        .split([',', ';'])
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|r| parse_address("recipient", r))
+        .split(';')
+        .map(|group| {
+            group
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|r| parse_address("recipient", r))
+                .collect::<QbtResult<Vec<_>>>()
+        })
+        .filter(|group| !matches!(group, Ok(g) if g.is_empty()))
         .collect::<QbtResult<Vec<_>>>()?;
     if recipients.is_empty() {
         return Err(QbtError::invalid("no e-mail recipient is configured"));
@@ -104,9 +113,9 @@ pub fn settings_from_prefs(d: &DownloadsPrefs) -> QbtResult<MailSettings> {
     Ok(MailSettings { sender, recipients, host, port, ssl: d.mail_notification_ssl_enabled, credentials })
 }
 
-/// Builds the message: `From: qBit NeoRS <sender>`, UTF-8 plain text,
-/// base64 body (like qBittorrent).
-pub fn build_message(settings: &MailSettings, subject: &str, body: &str) -> QbtResult<Message> {
+/// Builds the message to one recipient group: `From: qBit NeoRS <sender>`,
+/// UTF-8 plain text, base64 body (like qBittorrent).
+pub fn build_message(settings: &MailSettings, to: &[Address], subject: &str, body: &str) -> QbtResult<Message> {
     if has_line_break(subject) {
         return Err(QbtError::invalid("the e-mail subject contains a line break"));
     }
@@ -115,7 +124,7 @@ pub fn build_message(settings: &MailSettings, subject: &str, body: &str) -> QbtR
         .subject(subject)
         .date_now()
         .header(ContentType::TEXT_PLAIN);
-    for r in &settings.recipients {
+    for r in to {
         builder = builder.to(Mailbox::new(None, r.clone()));
     }
     let body = Body::new_with_encoding(body.to_string(), ContentTransferEncoding::Base64)
@@ -151,13 +160,23 @@ pub async fn send_mail(ctx: &CoreContext, subject: &str, body: &str) -> QbtResul
     let prefs = ctx.prefs.current();
     let result = async {
         let settings = settings_from_prefs(&prefs.downloads)?;
-        let message = build_message(&settings, subject, body)?;
         let transport = transport(&settings)?;
-        match tokio::time::timeout(SMTP_TIMEOUT * 3, transport.send(message)).await {
-            Ok(Ok(_)) => Ok(()),
-            Ok(Err(e)) => Err(QbtError::network(e.to_string())),
-            Err(_) => Err(QbtError::network("the SMTP server did not answer in time")),
+        // Every group gets its mail even when an earlier one fails.
+        let mut first_error = None;
+        for group in &settings.recipients {
+            let sent = match build_message(&settings, group, subject, body) {
+                Ok(message) => match tokio::time::timeout(SMTP_TIMEOUT * 3, transport.send(message)).await {
+                    Ok(Ok(_)) => Ok(()),
+                    Ok(Err(e)) => Err(QbtError::network(e.to_string())),
+                    Err(_) => Err(QbtError::network("the SMTP server did not answer in time")),
+                },
+                Err(e) => Err(e),
+            };
+            if let Err(e) = sent {
+                first_error.get_or_insert(e);
+            }
         }
+        first_error.map_or(Ok(()), Err)
     }
     .await;
     if let Err(e) = &result {
@@ -244,7 +263,12 @@ mod tests {
         p.mail_notification_email = "a@x.org, b@y.org".into();
         let s = settings_from_prefs(&p).unwrap();
         assert_eq!(s.port, 587);
-        assert_eq!(s.recipients.len(), 2);
+        assert_eq!(s.recipients.iter().map(Vec::len).collect::<Vec<_>>(), [2]);
+        // `;` separates e-mails, `,` the addresses of one; empty parts are skipped.
+        p.mail_notification_email = "a@x.com; b@y.com,c@z.com ;;".into();
+        let groups = settings_from_prefs(&p).unwrap().recipients;
+        let groups: Vec<Vec<String>> = groups.iter().map(|g| g.iter().map(ToString::to_string).collect()).collect();
+        assert_eq!(groups, [vec!["a@x.com"], vec!["b@y.com", "c@z.com"]]);
         assert_eq!(s.credentials, Some(("u".into(), "secret".into())));
         p.mail_notification_smtp = "mail.example.com".into();
         assert_eq!(settings_from_prefs(&p).unwrap().port, 465);
@@ -277,7 +301,7 @@ mod tests {
         );
 
         let s = settings_from_prefs(&prefs("smtp.example.com")).unwrap();
-        let msg = build_message(&s, &subject, &body).unwrap();
+        let msg = build_message(&s, &s.recipients[0], &subject, &body).unwrap();
         let raw = String::from_utf8(msg.formatted()).unwrap();
         assert!(raw.contains("From: \"qBit NeoRS\" <from@example.com>") || raw.contains("From: qBit NeoRS <from@example.com>"), "{raw}");
         assert!(raw.contains("To: to@example.com"), "{raw}");
@@ -285,7 +309,7 @@ mod tests {
         assert!(raw.contains("Content-Type: text/plain; charset=utf-8"), "{raw}");
         assert!(raw.contains("Content-Transfer-Encoding: base64"), "{raw}");
         assert!(raw.contains("Date: "));
-        assert!(build_message(&s, "a\r\nBcc: x@y.z", "body").is_err());
+        assert!(build_message(&s, &s.recipients[0], "a\r\nBcc: x@y.z", "body").is_err());
     }
 
     /// Plain-text fake SMTP server; returns the transcript of client lines.
@@ -295,7 +319,16 @@ mod tests {
         let log: Arc<Mutex<Vec<String>>> = Arc::default();
         let log2 = log.clone();
         tokio::spawn(async move {
-            let (sock, _) = listener.accept().await.unwrap();
+            while let Ok((sock, _)) = listener.accept().await {
+                let log = log2.clone();
+                tokio::spawn(async move { fake_session(sock, log).await });
+            }
+        });
+        (port, log)
+    }
+
+    async fn fake_session(sock: tokio::net::TcpStream, log2: Arc<Mutex<Vec<String>>>) {
+        {
             let (r, mut w) = sock.into_split();
             let mut lines = BufReader::new(r).lines();
             w.write_all(b"220 fake ESMTP\r\n").await.unwrap();
@@ -327,8 +360,7 @@ mod tests {
                 };
                 w.write_all(reply).await.unwrap();
             }
-        });
-        (port, log)
+        }
     }
 
     #[test]
@@ -337,6 +369,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (port, log) = rt.block_on(fake_smtp());
         let mut p = Preferences { downloads: prefs(&format!("127.0.0.1:{port}")), ..Default::default() };
+        p.downloads.mail_notification_email = "to@example.com;b@y.com,c@z.com".into();
         p.downloads.mail_notification_auth_enabled = true;
         p.downloads.mail_notification_username = "user".into();
         p.downloads.mail_notification_password = "pa55".into();
@@ -347,6 +380,11 @@ mod tests {
         assert!(log.iter().any(|l| l.starts_with("RCPT TO:<to@example.com>")), "{log:?}");
         assert!(log.iter().any(|l| l.starts_with("AUTH ")), "{log:?}");
         assert!(log.iter().any(|l| l == "Subject: Test email"), "{log:?}");
+        // Two e-mails: one to the first group, one to the second.
+        assert_eq!(log.iter().filter(|l| l.starts_with("MAIL FROM:")).count(), 2, "{log:?}");
+        assert!(log.iter().any(|l| l.starts_with("RCPT TO:<c@z.com>")), "{log:?}");
+        assert!(log.iter().any(|l| l == "To: b@y.com, c@z.com"), "{log:?}");
+        assert!(!log.iter().any(|l| l.starts_with("To:") && l.contains("to@example.com") && l.contains("b@y.com")), "{log:?}");
 
         // Disabled notifications: the test mail is refused; failures are logged
         // without the password.

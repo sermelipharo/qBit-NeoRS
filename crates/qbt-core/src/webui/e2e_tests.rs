@@ -276,7 +276,7 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 238);
+        assert_eq!(prefs.as_object().unwrap().len(), 241);
         // qBittorrent 5.3 (WebAPI 2.16.1): search job storage, after confirm_torrent_deletion.
         let keys: Vec<&str> = prefs.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys[3..6], ["confirm_torrent_deletion", "store_search_jobs", "store_search_job_results"]);

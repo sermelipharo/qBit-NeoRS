@@ -53,9 +53,9 @@ Things to know before reading:
 | #24195 | IPv6 `/128` is a single IP | ✅ | `webui/subnet.rs:74` (mask math handles 128); `IPAddressParser.swift:29` |
 | #24680 | P2P filter parsing for IPv6 | ✅ | `ipfilter.rs:288-300` falls back to earlier colons |
 | #24734 | Log IP ban alerts | ⬜ | Small: log a line when the engine bans a peer on its own; check the engine reports automatic bans (only the manual path, `bittorrent/engine.rs:556`, was found) |
-| #24158 | `seeding_outgoing_connections` setting | ⬜ | Pref (default true); needs engine support to stop dialling peers while seeding (`engine/librqbit`), otherwise inert |
-| #24253 | `max_outstanding_block_requests` (libtorrent `max_allowed_in_request_queue`) | ⬜ | Low: pref + cap on queued incoming requests per peer in the engine. NeoRS only has `request_queue_size` (`prefs/model.rs:582`) |
-| #24684 | `allow_multiple_connections_per_pid` | ⬜ | Low: pref + engine check on duplicate peer IDs; only `enable_multi_connections_from_same_ip` exists (`prefs/api_json.rs:404`) |
+| #24158 | `seeding_outgoing_connections` setting | ✅ | Pref (default true, `BitTorrent/Session/SeedingOutgoingConnectionsEnabled`), applied live; the engine's peer adder skips dialling for finished torrents and re-queues them when turned back on (`PeerPolicyOptions::seeding_outgoing_connections`, docs/ENGINE.md; e2e `e2e_peer_settings`). Advanced › Network Tuning |
+| #24253 | `max_outstanding_block_requests` (libtorrent `max_allowed_in_request_queue`) | ✅ | Pref (default 2000, `BitTorrent/Session/MaxOutstandingBlockRequests`), applied live; replaces the engine's fixed cap of 500 on a peer's queued requests (advertised as `reqq`, excess dropped, engine clamps to 16384 to bound memory). Advanced › Peers & Uploading |
+| #24684 | `allow_multiple_connections_per_pid` | ✅ | Pref `enable_multi_connections_from_same_peer_id` (default false, `BitTorrent/Session/MultiConnectionsPerPeerID`), applied live; the engine closes one of two connections with the same peer id in a torrent using libtorrent's tie-break rule (docs/ENGINE.md; e2e `e2e_peer_settings`). Advanced › Network Tuning |
 | #24891 | I2P inbound/outbound length variance | ✅ | `SamOptions::{inbound,outbound}_length_variance` (-7..7), sent as `inbound.lengthVariance` / `outbound.lengthVariance` in SESSION CREATE like libtorrent |
 | #24870 | I2P PeX setting | ➖ | No I2P PeX in the engine (`docs/PARITY.md`, I2P row); `i2p_pex_enabled` is stored and returned for clients |
 | #24837 | WebTorrent STUN server setting | ➖ | No WebTorrent in the engine; `webtorrent_stun_server` is stored and returned for clients |
@@ -126,17 +126,17 @@ Things to know before reading:
 | #24724 | `seedMode` replaces `skip_checking` | ✅ | See Core/engine |
 | #24720 | `web_ui_sessions_count_limit` | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24641 | New backup prefs, `export_dir*` removed | ✅ | See Core/engine; e2e `torrent_file_backups` |
-| #24684 | `enable_multi_connections_from_same_peer_id` | ⬜ | See Core/engine |
+| #24684 | `enable_multi_connections_from_same_peer_id` | ✅ | See Core/engine; after `enable_multi_connections_from_same_ip` |
 | #23989 | `contribution` in `sync/torrentPeers` | ✅ | Serialized from `PeerInfo.contribution` |
 | #24346 | `ignoreDotfiles` in `torrentcreator/addTask` and `status` | ✅ | Default true; reported by `status` |
 | #24246 | File `priority` in `torrents/fetchMetadata`/`parseMetadata` when excluded names apply | ⬜ | Check the handlers in `webui/api/torrents.rs` return priority 0 for excluded names (the excluded-names list is in the core) |
 | #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |
-| #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |
+| #24158 | `seeding_outgoing_connections` key | ✅ | See Core/engine; after `connection_speed` |
 | #24152 | `request_latency` in `sync/maindata` | ✅ | Always 0 |
 | #24084 | `queued_tracker_announces` in `sync/maindata` | ✅ | In `server_state` (not in `transfer/info`, as upstream); e2e assertion |
 | #23838 | `mail_notification_encryption_type` | ✅ | Replaces `mail_notification_ssl_enabled` in `app/preferences` |
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
-| #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
+| #24253 | `max_outstanding_block_requests` | ✅ | See Core/engine; after `request_queue_size` |
 | #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ✅ | `Session::completed_file` (only files of the torrent, complete), `open_inside` (canonical path inside the torrent folder, `O_NOFOLLOW`, regular file), streamed `Reply::File` with Content-Length; e2e `download_completed_files` incl. a symlink swap and login check |
 | #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ✅ | `RssManager::clone_rule` |
 | #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ✅ | `torrents/info` and `sync/maindata` report the torrent's own mode; `app/preferences` `share_limits_mode` (unknown → MatchAny); `torrents/add` `shareLimitsMode`. Deviation: `setShareLimits` keeps `shareLimitsMode` optional (missing = Default) so clients written for 5.2 still work |
@@ -269,8 +269,7 @@ Small and valuable first.
    (needs the path-escape review above), #23784 search status fields and
    stored jobs, #23386 per-component name validation.
 9. Bigger UI and engine work: #24266 Manage content dialog, #24084 queued
-   announces metric, #24158 / #24253 / #24684 engine settings (need engine
-   work, low value), verify #24866, #24000, #23817, #24671.
+   announces metric, ~~#24158 / #24253 / #24684 engine settings~~ (done), verify #24866, #24000, #23817, #24671.
 10. Bundled Web UI ports for everything above, then the stragglers
     (#23975 select all/invert, #24376 secondary sort, #24984, #24404, #24427).
 11. Lua plugins (#24485): last, optional, with a separate design and security

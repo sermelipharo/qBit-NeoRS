@@ -593,6 +593,9 @@ pub struct AdvancedPrefs {
     pub send_buffer_watermark_factor: i64,
     /// Outgoing connections per second.
     pub connection_speed: i64,
+    /// Finished torrents make outgoing peer connections (libtorrent
+    /// `seeding_outgoing_connections`).
+    pub seeding_outgoing_connections: bool,
     /// Bytes, 0 = system default.
     pub socket_send_buffer_size: i64,
     pub socket_receive_buffer_size: i64,
@@ -606,6 +609,8 @@ pub struct AdvancedPrefs {
     pub hostname_cache_ttl: i64,
     pub idn_support_enabled: bool,
     pub enable_multi_connections_from_same_ip: bool,
+    /// libtorrent `allow_multiple_connections_per_pid`.
+    pub enable_multi_connections_from_same_peer_id: bool,
     pub validate_https_tracker_certificate: bool,
     pub ssrf_mitigation: bool,
     pub block_peers_on_privileged_ports: bool,
@@ -625,6 +630,9 @@ pub struct AdvancedPrefs {
     /// Seconds.
     pub peer_turnover_interval: i64,
     pub request_queue_size: i64,
+    /// Queued block requests accepted from one peer (libtorrent
+    /// `max_allowed_in_request_queue`).
+    pub max_outstanding_block_requests: i64,
     /// Comma-separated `host:port`.
     pub dht_bootstrap_nodes: String,
     /// Stored for WebAPI clients; the engine has no WebTorrent.
@@ -682,6 +690,7 @@ impl Default for AdvancedPrefs {
             send_buffer_low_watermark: 10,
             send_buffer_watermark_factor: 50,
             connection_speed: 30,
+            seeding_outgoing_connections: true,
             socket_send_buffer_size: 0,
             socket_receive_buffer_size: 0,
             socket_backlog_size: 30,
@@ -693,6 +702,7 @@ impl Default for AdvancedPrefs {
             hostname_cache_ttl: 1200,
             idn_support_enabled: false,
             enable_multi_connections_from_same_ip: false,
+            enable_multi_connections_from_same_peer_id: false,
             validate_https_tracker_certificate: true,
             ssrf_mitigation: true,
             block_peers_on_privileged_ports: false,
@@ -708,6 +718,7 @@ impl Default for AdvancedPrefs {
             peer_turnover_cutoff: 90,
             peer_turnover_interval: 300,
             request_queue_size: 500,
+            max_outstanding_block_requests: 2000,
             dht_bootstrap_nodes: DEFAULT_DHT_BOOTSTRAP_NODES.into(),
             webtorrent_stun_server: "stun.l.google.com:19302".into(),
         }

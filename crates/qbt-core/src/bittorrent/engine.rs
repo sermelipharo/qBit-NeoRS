@@ -243,7 +243,9 @@ impl LiveSettings {
                 UtpMixedMode::PreferTcp => MixedModeAlgorithm::PreferTcp,
                 UtpMixedMode::PeerProportional => MixedModeAlgorithm::PeerProportional,
             },
-            ..PeerPolicyOptions::default()
+            seeding_outgoing_connections: a.seeding_outgoing_connections,
+            max_allowed_in_request_queue: a.max_outstanding_block_requests.clamp(1, u32::MAX as i64) as u32,
+            allow_multiple_connections_per_pid: a.enable_multi_connections_from_same_peer_id,
         };
         let trackers = TrackerSettings {
             announce_ip: a.announce_ip.trim().parse().ok(),
@@ -485,6 +487,9 @@ impl Engine {
         self.session.set_rate_limit_utp(p.rate_limit_utp);
         self.session.set_rate_limit_lan(p.rate_limit_lan);
         self.session.set_mixed_mode_algorithm(p.mixed_mode);
+        self.session.set_seeding_outgoing_connections(p.seeding_outgoing_connections);
+        self.session.set_max_allowed_in_request_queue(p.max_allowed_in_request_queue);
+        self.session.set_allow_multiple_connections_per_pid(p.allow_multiple_connections_per_pid);
         let _ = self.session.set_tracker_settings(live.trackers.clone());
         self.apply_net(&live.net).await
     }
@@ -957,6 +962,22 @@ mod tests {
         assert_eq!(LiveSettings::from_prefs(&p).peer_policy.mixed_mode, MixedModeAlgorithm::PreferTcp);
         p.advanced.utp_tcp_mixed_mode = UtpMixedMode::PeerProportional;
         assert_eq!(LiveSettings::from_prefs(&p).peer_policy.mixed_mode, MixedModeAlgorithm::PeerProportional);
+    }
+
+    #[test]
+    fn live_settings_map_peer_connection_settings() {
+        let mut p = Preferences::default();
+        let pp = LiveSettings::from_prefs(&p).peer_policy;
+        assert!(pp.seeding_outgoing_connections && !pp.allow_multiple_connections_per_pid);
+        assert_eq!(pp.max_allowed_in_request_queue, 2000);
+        p.advanced.seeding_outgoing_connections = false;
+        p.advanced.enable_multi_connections_from_same_peer_id = true;
+        p.advanced.max_outstanding_block_requests = 0;
+        let pp = LiveSettings::from_prefs(&p).peer_policy;
+        assert!(!pp.seeding_outgoing_connections && pp.allow_multiple_connections_per_pid);
+        assert_eq!(pp.max_allowed_in_request_queue, 1);
+        p.advanced.max_outstanding_block_requests = i64::MAX;
+        assert_eq!(LiveSettings::from_prefs(&p).peer_policy.max_allowed_in_request_queue, u32::MAX);
     }
 
     #[test]

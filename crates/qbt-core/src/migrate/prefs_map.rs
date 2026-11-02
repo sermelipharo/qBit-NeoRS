@@ -260,6 +260,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("send_buffer_low_watermark", "BitTorrent/Session/SendBufferLowWatermark", Int),
     ("send_buffer_watermark_factor", "BitTorrent/Session/SendBufferWatermarkFactor", Int),
     ("connection_speed", "BitTorrent/Session/ConnectionSpeed", Int),
+    ("seeding_outgoing_connections", "BitTorrent/Session/SeedingOutgoingConnectionsEnabled", Bool),
     ("socket_send_buffer_size", "BitTorrent/Session/SocketSendBufferSize", Int),
     ("socket_receive_buffer_size", "BitTorrent/Session/SocketReceiveBufferSize", Int),
     ("socket_backlog_size", "BitTorrent/Session/SocketBacklogSize", Int),
@@ -271,6 +272,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("hostname_cache_ttl", "BitTorrent/Session/HostnameCacheTTL", Int),
     ("idn_support_enabled", "BitTorrent/Session/IDNSupportEnabled", Bool),
     ("enable_multi_connections_from_same_ip", "BitTorrent/Session/MultiConnectionsPerIp", Bool),
+    ("enable_multi_connections_from_same_peer_id", "BitTorrent/Session/MultiConnectionsPerPeerID", Bool),
     ("validate_https_tracker_certificate", "BitTorrent/Session/ValidateHTTPSTrackerCertificate", Bool),
     ("ssrf_mitigation", "BitTorrent/Session/SSRFMitigation", Bool),
     ("block_peers_on_privileged_ports", "BitTorrent/Session/BlockPeersOnPrivilegedPorts", Bool),
@@ -290,6 +292,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("peer_turnover_cutoff", "BitTorrent/Session/PeerTurnoverCutOff", Int),
     ("peer_turnover_interval", "BitTorrent/Session/PeerTurnoverInterval", Int),
     ("request_queue_size", "BitTorrent/Session/RequestQueueSize", Int),
+    ("max_outstanding_block_requests", "BitTorrent/Session/MaxOutstandingBlockRequests", Int),
     ("dht_bootstrap_nodes", "BitTorrent/Session/DHTBootstrapNodes", Str),
     ("webtorrent_stun_server", "BitTorrent/Session/WebTorrentSTUNServer", Str),
 ];
@@ -681,6 +684,25 @@ mod tests {
         assert_eq!(m["rss_smart_episode_filters"], json!("s(\\d+)e(\\d+)\n(\\d{1,2})"));
         assert!(!m.contains_key("upnp"), "absent keys keep our defaults");
         assert!(used.contains(&"BitTorrent/Session/Port".to_string()));
+    }
+
+    #[test]
+    fn imports_peer_connection_settings() {
+        // qBittorrent 5.3 advanced settings (#24158, #24253, #24684).
+        let f = ini(concat!(
+            "[BitTorrent]\nSession\\SeedingOutgoingConnectionsEnabled=false\n",
+            "Session\\MaxOutstandingBlockRequests=300\nSession\\MultiConnectionsPerPeerID=true\n",
+        ));
+        let (api, _) = api_json_from_ini(&f);
+        let a = build(&api, &f, None, "").unwrap().prefs.advanced;
+        assert!(!a.seeding_outgoing_connections);
+        assert_eq!(a.max_outstanding_block_requests, 300);
+        assert!(a.enable_multi_connections_from_same_peer_id);
+        // Absent: the defaults.
+        let (api, _) = api_json_from_ini(&ini(""));
+        let a = build(&api, &ini(""), None, "").unwrap().prefs.advanced;
+        assert!(a.seeding_outgoing_connections && !a.enable_multi_connections_from_same_peer_id);
+        assert_eq!(a.max_outstanding_block_requests, 2000);
     }
 
     #[test]

@@ -492,6 +492,7 @@ The section header row reads `"libtorrent Section"` and links `"Open documentati
 | 51 | `"Send buffer low watermark"` | spin 1…, `" KiB"` | `send_buffer_low_watermark` (194) | int KiB | `10` | · `BitTorrent/Session/SendBufferLowWatermark` |
 | 52 | `"Send buffer watermark factor"` | spin 1…, `" %"` | `send_buffer_watermark_factor` (195) | int % | `50` | · `BitTorrent/Session/SendBufferWatermarkFactor` |
 | 53 | `"Outgoing connections per second"` [connection_speed] | spin 0… | `connection_speed` (196) | int | `30` | · `BitTorrent/Session/ConnectionSpeed` |
+| 53a | `"Allow outgoing connections when seeding"` [seeding_outgoing_connections] | checkbox | `seeding_outgoing_connections` (5.3, after `connection_speed`, #24158) | bool | `true` | Off: finished torrents only accept incoming connections. · `BitTorrent/Session/SeedingOutgoingConnectionsEnabled` |
 | 54 | `"Socket send buffer size [0: system default]"` [send_socket_buffer_size] | spin 0…, `" KiB"`, special `"0 (system default)"` | `socket_send_buffer_size` (197) | int **bytes** | `0` | GUI shows /1024. · `BitTorrent/Session/SocketSendBufferSize` |
 | 55 | `"Socket receive buffer size [0: system default]"` [recv_socket_buffer_size] | same | `socket_receive_buffer_size` (198) | int bytes | `0` | · `BitTorrent/Session/SocketReceiveBufferSize` |
 | 56 | `"Socket backlog size"` [listen_queue_size] | spin 1… | `socket_backlog_size` (199) | int | `30` | · `BitTorrent/Session/SocketBacklogSize` |
@@ -503,6 +504,7 @@ The section header row reads `"libtorrent Section"` and links `"Open documentati
 | 62 | `"Internal hostname resolver cache expiry interval"` [resolver_cache_timeout] | spin 0…, `" s"` | `hostname_cache_ttl` (205) | int s | `1200` | · `BitTorrent/Session/HostnameCacheTTL` |
 | 63 | `"Support internationalized domain name (IDN)"` [allow_idna] | checkbox | `idn_support_enabled` (206) | bool | `false` | · `BitTorrent/Session/IDNSupportEnabled` |
 | 64 | `"Allow multiple connections from the same IP address"` [allow_multiple_connections_per_ip] | checkbox | `enable_multi_connections_from_same_ip` (207) | bool | `false` | · `BitTorrent/Session/MultiConnectionsPerIp` |
+| 64a [lt ≥ 2.0.13] | `"Allow multiple connections from the same Peer ID"` [allow_multiple_connections_per_pid] | checkbox | `enable_multi_connections_from_same_peer_id` (5.3, after `enable_multi_connections_from_same_ip`, #24684) | bool | `false` | · `BitTorrent/Session/MultiConnectionsPerPeerID` |
 | 65 | `"Validate HTTPS tracker certificates"` [validate_https_trackers] | checkbox | `validate_https_tracker_certificate` (208) | bool | `true` | · `BitTorrent/Session/ValidateHTTPSTrackerCertificate` |
 | 66 | `"Server-side request forgery (SSRF) mitigation"` [ssrf_mitigation] | checkbox | `ssrf_mitigation` (209) | bool | `true` | · `BitTorrent/Session/SSRFMitigation` |
 | 67 | `"Disallow connection to peers on privileged ports"` [no_connect_privileged_ports] | checkbox | `block_peers_on_privileged_ports` (210) | bool | `false` | · `BitTorrent/Session/BlockPeersOnPrivilegedPorts` |
@@ -518,6 +520,7 @@ The section header row reads `"libtorrent Section"` and links `"Open documentati
 | 77 | `"Peer turnover threshold percentage"` | spin 0–100, `" %"` | `peer_turnover_cutoff` (220) | int % | `90` | · `BitTorrent/Session/PeerTurnoverCutOff` |
 | 78 | `"Peer turnover disconnect interval"` | spin 30–3600, `" s"` | `peer_turnover_interval` (221) | int s | `300` | · `BitTorrent/Session/PeerTurnoverInterval` |
 | 79 | `"Maximum outstanding requests to a single peer"` [max_out_request_queue] | spin 1… | `request_queue_size` (222) | int | `500` | · `BitTorrent/Session/RequestQueueSize` |
+| 79a | `"Maximum outstanding block requests from a peer"` [max_allowed_in_request_queue] | spin 1…INT_MAX | `max_outstanding_block_requests` (5.3, after `request_queue_size`, #24253) | int | `2000` | Queued block requests accepted from one peer. NeoRS clamps the engine value to 16384. · `BitTorrent/Session/MaxOutstandingBlockRequests` |
 | 80 | `"DHT bootstrap nodes"` [dht_bootstrap_nodes] | line edit, placeholder `"Resets to default if empty"` | `dht_bootstrap_nodes` (223) | string | `"dht.libtorrent.org:25401, dht.transmissionbt.com:6881, router.bittorrent.com:6881"` | Comma-separated `host:port` entries. An empty value resets to the default. · `BitTorrent/Session/DHTBootstrapNodes` |
 | 81 [lt2+I2P] | `"I2P inbound quantity"` [i2p_inbound_quantity] | spin 1–16 | `i2p_inbound_quantity` (60) | int | `3` | · `BitTorrent/Session/I2P/InboundQuantity` |
 | 82 [lt2+I2P] | `"I2P outbound quantity"` | spin 1–16 | `i2p_outbound_quantity` (61) | int | `3` | · `BitTorrent/Session/I2P/OutboundQuantity` |
@@ -755,7 +758,7 @@ These are not in the WebAPI. A native client still has to implement them for par
 223 dht_bootstrap_nodes
 ```
 
-qBittorrent 5.3 changes this list (238 keys; `APPENDIX_A` in
+qBittorrent 5.3 changes this list (241 keys; `APPENDIX_A` in
 `crates/qbt-core/src/prefs/api_json.rs` is the exact order):
 `store_search_jobs` and `store_search_job_results` follow
 `confirm_torrent_deletion` (WebAPI 2.16.1, #23784); 39 is
@@ -771,6 +774,10 @@ added are `i2p_pex_enabled` (after `i2p_mixed_mode`),
 (after `web_ui_session_timeout`), `confirm_remove_all_tags` and
 `confirm_remove_tracker_from_all_torrents` (after `confirm_torrent_recheck`),
 `start_paused` and `shutdown_timeout` (after `python_executable_path`),
+`seeding_outgoing_connections` (after `connection_speed`, #24158),
+`enable_multi_connections_from_same_peer_id` (after
+`enable_multi_connections_from_same_ip`, #24684),
+`max_outstanding_block_requests` (after `request_queue_size`, #24253)
 and `webtorrent_stun_server` (last).
 
 ## Appendix B — SET vs GET differences

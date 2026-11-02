@@ -1147,6 +1147,9 @@ Keys qBittorrent keeps outside the WebAPI that have a Settings control, plus the
 | `SpeedWidget/Enabled` | Enable speed graphs | Advanced › qBittorrent Section | Interface › Torrent Details | B | new: "Show speed graphs" |
 | `start_paused` (5.3 WebAPI; `BitTorrent/Session/StartPaused`) | Start BitTorrent session in paused state | Advanced › qBittorrent Section | General › Startup | A | new: "Start with all transfers paused" |
 | `shutdown_timeout` (5.3 WebAPI; `BitTorrent/Session/ShutdownTimeout`) | BitTorrent session shutdown timeout [-1: unlimited] | Advanced › qBittorrent Section | Advanced › Data & Recovery | X | kept |
+| `seeding_outgoing_connections` (5.3 WebAPI; `BitTorrent/Session/SeedingOutgoingConnectionsEnabled`) | Allow outgoing connections when seeding | Advanced › libtorrent Section | Advanced › Network Tuning | X | kept |
+| `enable_multi_connections_from_same_peer_id` (5.3 WebAPI; `BitTorrent/Session/MultiConnectionsPerPeerID`) | Allow multiple connections from the same Peer ID | Advanced › libtorrent Section | Advanced › Network Tuning | X | kept |
+| `max_outstanding_block_requests` (5.3 WebAPI; `BitTorrent/Session/MaxOutstandingBlockRequests`) | Maximum outstanding block requests from a peer | Advanced › libtorrent Section | Advanced › Peers & Uploading | X | kept |
 | `store_search_jobs` (5.3 WebAPI; `Search/StoreSearchJobs`, was GUI-only `Search/StoreOpenedSearchTabs`) | Store opened tabs | Search › Search UI | Search & RSS › Search Tabs | B | new: "Reopen search tabs at launch" |
 | `store_search_job_results` (5.3 WebAPI; `Search/StoreSearchJobResults`, was `Search/StoreOpenedSearchTabResults`) | Also store search results | Search › Search UI | Search & RSS › Search Tabs | R | kept |
 | `Search/HistoryLength` | History length | Search › Search UI | Search & RSS › Search Tabs | A | kept |

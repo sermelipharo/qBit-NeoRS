@@ -423,6 +423,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("send_buffer_low_watermark", json!(a.send_buffer_low_watermark));
     put("send_buffer_watermark_factor", json!(a.send_buffer_watermark_factor));
     put("connection_speed", json!(a.connection_speed));
+    put("seeding_outgoing_connections", json!(a.seeding_outgoing_connections));
     put("socket_send_buffer_size", json!(a.socket_send_buffer_size));
     put("socket_receive_buffer_size", json!(a.socket_receive_buffer_size));
     put("socket_backlog_size", json!(a.socket_backlog_size));
@@ -434,6 +435,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("hostname_cache_ttl", json!(a.hostname_cache_ttl));
     put("idn_support_enabled", json!(a.idn_support_enabled));
     put("enable_multi_connections_from_same_ip", json!(a.enable_multi_connections_from_same_ip));
+    put("enable_multi_connections_from_same_peer_id", json!(a.enable_multi_connections_from_same_peer_id));
     put("validate_https_tracker_certificate", json!(a.validate_https_tracker_certificate));
     put("ssrf_mitigation", json!(a.ssrf_mitigation));
     put("block_peers_on_privileged_ports", json!(a.block_peers_on_privileged_ports));
@@ -449,6 +451,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("peer_turnover_cutoff", json!(a.peer_turnover_cutoff));
     put("peer_turnover_interval", json!(a.peer_turnover_interval));
     put("request_queue_size", json!(a.request_queue_size));
+    put("max_outstanding_block_requests", json!(a.max_outstanding_block_requests));
     put("dht_bootstrap_nodes", json!(a.dht_bootstrap_nodes));
     put("webtorrent_stun_server", json!(a.webtorrent_stun_server));
     Value::Object(m)
@@ -927,6 +930,7 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("send_buffer_low_watermark", a.send_buffer_low_watermark, to_int);
     set!("send_buffer_watermark_factor", a.send_buffer_watermark_factor, to_int);
     set!("connection_speed", a.connection_speed, to_int);
+    set!("seeding_outgoing_connections", a.seeding_outgoing_connections, to_bool);
     set!("socket_send_buffer_size", a.socket_send_buffer_size, to_int);
     set!("socket_receive_buffer_size", a.socket_receive_buffer_size, to_int);
     set!("socket_backlog_size", a.socket_backlog_size, to_int);
@@ -940,6 +944,7 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("hostname_cache_ttl", a.hostname_cache_ttl, to_int);
     set!("idn_support_enabled", a.idn_support_enabled, to_bool);
     set!("enable_multi_connections_from_same_ip", a.enable_multi_connections_from_same_ip, to_bool);
+    set!("enable_multi_connections_from_same_peer_id", a.enable_multi_connections_from_same_peer_id, to_bool);
     set!("validate_https_tracker_certificate", a.validate_https_tracker_certificate, to_bool);
     set!("ssrf_mitigation", a.ssrf_mitigation, to_bool);
     set!("block_peers_on_privileged_ports", a.block_peers_on_privileged_ports, to_bool);
@@ -961,6 +966,7 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("peer_turnover_cutoff", a.peer_turnover_cutoff, to_int);
     set!("peer_turnover_interval", a.peer_turnover_interval, to_int);
     set!("request_queue_size", a.request_queue_size, to_int);
+    set!("max_outstanding_block_requests", a.max_outstanding_block_requests, to_int);
     if let Some(v) = get("dht_bootstrap_nodes") {
         let nodes = to_str(v);
         a.dht_bootstrap_nodes =
@@ -1026,14 +1032,17 @@ mod tests {
         "async_io_threads", "hashing_threads", "file_pool_size", "checking_memory_use", "disk_cache", "disk_cache_ttl",
         "disk_queue_size", "disk_io_type", "disk_io_read_mode", "disk_io_write_mode", "enable_coalesce_read_write",
         "enable_piece_extent_affinity", "enable_upload_suggestions", "send_buffer_watermark",
-        "send_buffer_low_watermark", "send_buffer_watermark_factor", "connection_speed", "socket_send_buffer_size",
+        "send_buffer_low_watermark", "send_buffer_watermark_factor", "connection_speed", "seeding_outgoing_connections",
+        "socket_send_buffer_size",
         "socket_receive_buffer_size", "socket_backlog_size", "outgoing_ports_min", "outgoing_ports_max",
         "upnp_lease_duration", "peer_tos", "utp_tcp_mixed_mode", "hostname_cache_ttl", "idn_support_enabled",
-        "enable_multi_connections_from_same_ip", "validate_https_tracker_certificate", "ssrf_mitigation",
+        "enable_multi_connections_from_same_ip", "enable_multi_connections_from_same_peer_id",
+        "validate_https_tracker_certificate", "ssrf_mitigation",
         "block_peers_on_privileged_ports", "upload_slots_behavior", "upload_choking_algorithm",
         "announce_to_all_trackers", "announce_to_all_tiers", "announce_ip", "announce_port",
         "max_concurrent_http_announces", "stop_tracker_timeout", "peer_turnover", "peer_turnover_cutoff",
-        "peer_turnover_interval", "request_queue_size", "dht_bootstrap_nodes", "webtorrent_stun_server",
+        "peer_turnover_interval", "request_queue_size", "max_outstanding_block_requests", "dht_bootstrap_nodes",
+        "webtorrent_stun_server",
     ];
 
     fn obj(v: Value) -> Map<String, Value> {
@@ -1043,7 +1052,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3.
-        assert_eq!(APPENDIX_A.len(), 238);
+        assert_eq!(APPENDIX_A.len(), 241);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);

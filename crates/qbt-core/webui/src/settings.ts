@@ -3,20 +3,25 @@
 // Only changed keys are sent to app/setPreferences.
 
 import { get, post } from "./api";
-import { app, emit, prefs } from "./app";
+import { app, clientData, emit, prefs, setClientData } from "./app";
 import { icon } from "./icons";
 import { control, group, row, sheet, toast, valueOf } from "./ui";
 import { h, load, put, save } from "./util";
 
-type Kind = "bool" | "number" | "text" | "textarea" | "password" | "kib" | [string, string][];
+type Kind = "bool" | "number" | "text" | "textarea" | "password" | "kib" | "client" | [string, string][];
 type Spec = [key: string, label: string, kind?: Kind, hint?: string];
-type Pane = [id: string, title: string, icon: string, groups: [string, Spec[]][]];
+/** A row of its own (a button with its notice) instead of a preference. */
+type Custom = () => HTMLElement;
+type Pane = [id: string, title: string, icon: string, groups: [string, (Spec | Custom)[]][]];
 
 const ENCRYPTION: [string, string][] = [["0", "Allow encryption"], ["1", "Require encryption"], ["2", "Disable encryption"]];
 const LAYOUT: [string, string][] = [["Original", "Original"], ["Subfolder", "Create subfolder"], ["NoSubfolder", "Don’t create subfolder"]];
 const STOP: [string, string][] = [["None", "None"], ["MetadataReceived", "Metadata received"], ["FilesChecked", "Files checked"]];
 const PROXY: [string, string][] = [["None", "None"], ["HTTP", "HTTP"], ["SOCKS5", "SOCKS5"], ["SOCKS4", "SOCKS4"]];
 const SHARE_ACT: [string, string][] = [["0", "Stop torrent"], ["1", "Remove torrent"], ["3", "Remove torrent and files"], ["2", "Enable super seeding"]];
+const SMTP_ENC: [string, string][] = [["None", "None"], ["STARTTLS", "STARTTLS"], ["SMTPS", "SSL/TLS (SMTPS)"]];
+const SHARE_MODE: [string, string][] = [["MatchAny", "Any of the above"], ["MatchAll", "All the above"]];
+const DISK_IO: [string, string][] = [["0", "Default"], ["1", "Memory mapped files"], ["2", "POSIX-compliant"], ["3", "Simple pread/pwrite"]];
 const DAYS: [string, string][] = [["0", "Every day"], ["1", "Weekdays"], ["2", "Weekends"], ["3", "Monday"], ["4", "Tuesday"], ["5", "Wednesday"], ["6", "Thursday"], ["7", "Friday"], ["8", "Saturday"], ["9", "Sunday"]];
 
 const PANES: Pane[] = [
@@ -27,6 +32,7 @@ const PANES: Pane[] = [
       ["add_stopped_enabled", "Don’t start downloads automatically"],
       ["torrent_stop_condition", "Stop condition", STOP],
       ["merge_trackers", "Merge trackers of duplicate torrents"],
+      ["add_new_torrent_dialog_enabled", "Show options for dropped and pasted torrents", "client", "Off: dropped files and pasted or RSS links are added with these defaults"],
     ]],
     ["Saving", [
       ["auto_tmm_enabled", "Automatic torrent management by default"],
@@ -44,6 +50,23 @@ const PANES: Pane[] = [
     ["Excluded file names", [
       ["excluded_file_names_enabled", "Exclude files by name"],
       ["excluded_file_names", "Patterns", "textarea"],
+    ]],
+    ["Email notification", [
+      ["mail_notification_enabled", "Email when a download finishes"],
+      ["mail_notification_sender", "From", "text"],
+      ["mail_notification_email", "To", "text", "“;” separates e-mails, “,” the addresses of one e-mail"],
+      ["mail_notification_smtp", "SMTP server", "text", "host or host:port"],
+      ["mail_notification_encryption_type", "Encryption", SMTP_ENC],
+      ["mail_notification_auth_enabled", "Authentication"],
+      ["mail_notification_username", "Username", "text"],
+      ["mail_notification_password", "Password", "password", "leave empty to keep"],
+      testEmailRow,
+    ]],
+    ["Run external program", [
+      ["autorun_on_torrent_added_enabled", "Run on torrent added"],
+      ["autorun_on_torrent_added_program", "Command", "text"],
+      ["autorun_enabled", "Run on torrent finished"],
+      ["autorun_program", "Command", "text", "%N name, %L category, %G tags, %F content path, %R root path, %D save path, %C files, %Z size, %T tracker, %I/%J/%K info hashes"],
     ]],
   ]],
   ["connection", "Connection", "antenna", [
@@ -68,6 +91,13 @@ const PANES: Pane[] = [
       ["proxy_bittorrent", "Use for BitTorrent"],
       ["proxy_rss", "Use for RSS"],
       ["proxy_misc", "Use for other purposes"],
+    ]],
+    ["I2P (experimental)", [
+      ["i2p_enabled", "I2P"],
+      ["i2p_address", "Host", "text"],
+      ["i2p_port", "Port", "number"],
+      ["i2p_mixed_mode", "Mixed mode", undefined, "I2P torrents may also use regular peers (no anonymity)"],
+      ["i2p_pex_enabled", "I2P peer exchange", undefined, "requires restart"],
     ]],
     ["IP filtering", [
       ["ip_filter_enabled", "IP filter"],
@@ -117,6 +147,9 @@ const PANES: Pane[] = [
       ["max_ratio", "Ratio", "number"],
       ["max_seeding_time_enabled", "Stop after seeding time"],
       ["max_seeding_time", "Minutes", "number"],
+      ["max_inactive_seeding_time_enabled", "Stop after inactive seeding time"],
+      ["max_inactive_seeding_time", "Inactive minutes", "number"],
+      ["share_limits_mode", "When", SHARE_MODE, "which of the enabled limits must be reached"],
       ["max_ratio_act", "Then", SHARE_ACT],
     ]],
     ["Trackers", [
@@ -171,9 +204,59 @@ const PANES: Pane[] = [
     ["Confirmations", [
       ["confirm_torrent_recheck", "Ask before rechecking torrents"],
       ["confirm_remove_all_tags", "Ask before removing all tags"],
+      ["confirm_remove_tracker_from_all_torrents", "Ask before removing a tracker from all torrents"],
+    ]],
+  ]],
+  ["advanced", "Advanced", "chip", [
+    ["Session", [
+      ["start_paused", "Start the BitTorrent session paused"],
+      ["shutdown_timeout", "Shutdown timeout", "number", "seconds, −1 = unlimited"],
+      ["disk_io_type", "Disk IO type", DISK_IO, "requires restart"],
+    ]],
+    ["Peers", [
+      ["seeding_outgoing_connections", "Allow outgoing connections when seeding"],
+      ["enable_multi_connections_from_same_ip", "Allow multiple connections from the same IP address"],
+      ["enable_multi_connections_from_same_peer_id", "Allow multiple connections from the same peer ID"],
+      ["request_queue_size", "Maximum outstanding requests to a single peer", "number"],
+      ["max_outstanding_block_requests", "Maximum outstanding block requests from a peer", "number"],
+    ]],
+    ["I2P tunnels", [
+      ["i2p_inbound_quantity", "Inbound quantity", "number", "1–16"],
+      ["i2p_outbound_quantity", "Outbound quantity", "number", "1–16"],
+      ["i2p_inbound_length", "Inbound length", "number", "0–7"],
+      ["i2p_outbound_length", "Outbound length", "number", "0–7"],
+      ["i2p_inbound_length_variance", "Inbound length variance", "number", "−7–7"],
+      ["i2p_outbound_length_variance", "Outbound length variance", "number", "−7–7"],
     ]],
   ]],
 ];
+
+/**
+ * "Send test email" with an inline notice (qBittorrent 5.3 replaced its
+ * alerts). The core sends with the saved settings.
+ */
+function testEmailRow(): HTMLElement {
+  const notice = h("p", { class: "note", role: "status", "aria-live": "polite" }, "Uses the saved settings: save your changes first.");
+  const b = h("button", {
+    type: "button", class: "btn small",
+    onclick: async () => {
+      b.disabled = true;
+      notice.className = "note";
+      notice.textContent = "Sending…";
+      try {
+        await post("app/sendTestEmail");
+        notice.className = "note ok";
+        notice.textContent = "Attempted to send a test email. Check your inbox; errors are in the log.";
+      } catch (e) {
+        notice.className = "note err";
+        notice.textContent = "Could not send the test email: " + ((e as Error).message || "no answer from the server");
+      } finally {
+        b.disabled = false;
+      }
+    },
+  }, "Send test email");
+  return h("div", { class: "fr col" }, h("div", { class: "row-ctl" }, b), notice);
+}
 
 /** Keys never shown in "All Settings" (objects, secrets, read-only). */
 const HIDDEN = new Set(["scan_dirs", "web_ui_api_key", "web_ui_password", "locale"]);
@@ -224,8 +307,18 @@ export async function openSettings(): Promise<void> {
     toast((e as Error).message, true);
     return;
   }
+  const cd = await clientData();
   const ctls = new Map<string, [Kind | undefined, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement]>();
-  const field = ([key, label, kind, hint]: Spec): HTMLElement | null => {
+  const clientCtls = new Map<string, HTMLInputElement>();
+  const field = (spec: Spec | Custom): HTMLElement | null => {
+    if (typeof spec === "function") return spec();
+    const [key, label, kind, hint] = spec;
+    if (kind === "client") {
+      // Browser-side options shared with qBittorrent's own WebUI (clientdata).
+      const c = control({ key, label, type: "bool", value: cd[key] ?? true }) as HTMLInputElement;
+      clientCtls.set(key, c);
+      return row(label, c, hint);
+    }
     if (!(key in p) && key !== "web_ui_password") return null;
     const v = p[key];
     const k: Kind = kind ?? (typeof v === "boolean" ? "bool" : typeof v === "number" ? "number" : "text");
@@ -245,7 +338,7 @@ export async function openSettings(): Promise<void> {
   const panes: [string, string, string, () => HTMLElement][] = [
     ["appearance", "Appearance", "sliders", appearancePane],
     ...PANES.map(([id, title, ic, groups]) => {
-      for (const [, specs] of groups) for (const s of specs) known.add(s[0]);
+      for (const [, specs] of groups) for (const s of specs) if (typeof s !== "function") known.add(s[0]);
       return [id, title, ic, () => h("div", null, groups.map(([gt, specs]) => group(gt, specs.map(field))))] as [string, string, string, () => HTMLElement];
     }),
   ];
@@ -311,7 +404,13 @@ export async function openSettings(): Promise<void> {
             const before = Array.isArray(p[key]) ? JSON.stringify(p[key]) : p[key];
             if ((Array.isArray(v) ? JSON.stringify(v) : v) !== before) out[key] = v;
           }
-          if (!Object.keys(out).length) return;
+          const client: Record<string, boolean> = {};
+          for (const [key, c] of clientCtls) if (c.checked !== (cd[key] ?? true)) client[key] = c.checked;
+          if (Object.keys(client).length) await setClientData(client);
+          if (!Object.keys(out).length) {
+            if (Object.keys(client).length) toast("Settings saved");
+            return;
+          }
           await post("app/setPreferences", { json: JSON.stringify(out) });
           await prefs(true).catch(() => {});
           toast("Settings saved");

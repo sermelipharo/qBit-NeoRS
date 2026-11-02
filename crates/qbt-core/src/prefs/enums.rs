@@ -130,6 +130,49 @@ impl ProxyType {
     }
 }
 
+/// `mail_notification_encryption_type` (qBittorrent 5.3
+/// `Net::SMTPEncryptionType`); WebAPI names `None`, `STARTTLS`, `SMTPS`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
+pub enum SmtpEncryptionType {
+    /// Plain SMTP, port 25 by default.
+    None,
+    /// STARTTLS, required (the mail is not sent if the server doesn't offer
+    /// it), port 587 by default.
+    Starttls,
+    /// Implicit TLS, port 465 by default.
+    #[default]
+    Smtps,
+}
+
+impl SmtpEncryptionType {
+    pub fn as_api_str(self) -> &'static str {
+        match self {
+            SmtpEncryptionType::None => "None",
+            SmtpEncryptionType::Starttls => "STARTTLS",
+            SmtpEncryptionType::Smtps => "SMTPS",
+        }
+    }
+
+    /// `Utils::String::toEnum(value, SMTPS)`: unknown names give SMTPS.
+    pub fn from_api(v: &str) -> Self {
+        match v {
+            "None" => SmtpEncryptionType::None,
+            "STARTTLS" => SmtpEncryptionType::Starttls,
+            _ => SmtpEncryptionType::Smtps,
+        }
+    }
+
+    /// Port used when the server setting has none.
+    pub fn default_port(self) -> u16 {
+        match self {
+            SmtpEncryptionType::None => 25,
+            SmtpEncryptionType::Starttls => 587,
+            SmtpEncryptionType::Smtps => 465,
+        }
+    }
+}
+
 /// `resume_data_storage_type`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Enum))]

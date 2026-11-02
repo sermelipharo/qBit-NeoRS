@@ -26,6 +26,8 @@ enum Conv {
     Enum(&'static [(&'static str, i64)]),
     /// `Net::ProxyType` name (older versions: an integer).
     ProxyType,
+    /// `Net::SMTPEncryptionType` name or number (qBittorrent 5.3).
+    SmtpEncryption,
 }
 
 const SHARE_ACTIONS: &[(&str, i64)] = &[("Stop", 0), ("Remove", 1), ("EnableSuperSeeding", 2), ("RemoveWithContent", 3), ("Default", 0)];
@@ -83,7 +85,9 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("mail_notification_sender", "Preferences/MailNotification/sender", Str),
     ("mail_notification_email", "Preferences/MailNotification/email", Str),
     ("mail_notification_smtp", "Preferences/MailNotification/smtp_server", Str),
+    // Before qBittorrent 5.3; turned into the encryption type in `build`.
     ("mail_notification_ssl_enabled", "Preferences/MailNotification/req_ssl", Bool),
+    ("mail_notification_encryption_type", "Preferences/MailNotification/SMTPEncryptionType", SmtpEncryption),
     ("mail_notification_auth_enabled", "Preferences/MailNotification/req_auth", Bool),
     ("mail_notification_username", "Preferences/MailNotification/username", Str),
     ("mail_notification_password", "Preferences/MailNotification/password", Str),
@@ -319,6 +323,17 @@ fn proxy_type(v: &QValue) -> Option<String> {
     })
 }
 
+fn smtp_encryption(v: &QValue) -> Option<String> {
+    let s = v.to_string_value();
+    let name = match s.trim() {
+        "0" | "None" => "None",
+        "1" | "STARTTLS" => "STARTTLS",
+        "2" | "SMTPS" => "SMTPS",
+        _ => return None,
+    };
+    Some(name.into())
+}
+
 fn qtime(v: &QValue) -> Option<(i64, i64)> {
     match v {
         QValue::Variant(Variant::Time(Some(ms))) => Some((i64::from(ms / 3_600_000), i64::from((ms / 60_000) % 60))),
@@ -351,6 +366,7 @@ pub fn api_json_from_ini(ini: &IniFile) -> (Map<String, Value>, Vec<String>) {
             BytesToKib => v.to_int().map(|b| Value::from(b / 1024)),
             Enum(names) => enum_value(v, names).map(Value::from),
             ProxyType => proxy_type(v).map(Value::from),
+            SmtpEncryption => smtp_encryption(v).map(Value::from),
         };
         if let Some(value) = value {
             m.insert(api.to_owned(), value);
@@ -400,6 +416,14 @@ pub fn build(api: &Map<String, Value>, ini: &IniFile, watched: Option<Vec<Watche
     // GET-only or derived keys our setPreferences ignores (set below).
     for k in ["add_trackers_url_list", "web_ui_api_key", "current_interface_name"] {
         api.remove(k);
+    }
+    // qBittorrent before 5.3 (its `migrateSMTPEncryptionSetting`): SSL on =
+    // SMTPS, off = None.
+    if let Some(ssl) = api.remove("mail_notification_ssl_enabled")
+        && !api.contains_key("mail_notification_encryption_type")
+    {
+        let t = if ssl.as_bool().unwrap_or(false) { "SMTPS" } else { "None" };
+        api.insert("mail_notification_encryption_type".into(), json!(t));
     }
     let store = PreferencesStore::in_memory(Preferences::default());
     store.apply_json(&Value::Object(api.clone()).to_string()).map_err(|e| format!("preferences rejected: {e}"))?;
@@ -484,6 +508,7 @@ pub fn known_difference(key: &str) -> Option<&'static str> {
         "hashing_threads" => "clamped to 1..1024",
         "bypass_auth_subnet_whitelist" => "subnets are normalised (CIDR form)",
         "banned_IPs" => "addresses are normalised, sorted and de-duplicated",
+        "mail_notification_ssl_enabled" => "qBittorrent 5.3 replaced it by mail_notification_encryption_type (on = SMTPS, off = None)",
         _ => return None,
     })
 }
@@ -618,6 +643,20 @@ mod tests {
         assert_eq!(p.webui.web_ui_api_key, "qbt_0123456789abcdefghijklmnopqr");
         assert_eq!(p.behavior.file_log_path, "", "qBittorrent's own log folder is not reused");
         assert!(built.notes.iter().all(|n| !n.contains(&hash)), "no secrets in notes");
+
+        // SMTP encryption: qBittorrent 5.3's type, or 5.2's SSL switch.
+        use crate::prefs::SmtpEncryptionType as E;
+        let enc = |text: &str| {
+            let f = ini(text);
+            let (api, _) = api_json_from_ini(&f);
+            build(&api, &f, None, "").unwrap().prefs.downloads.mail_notification_encryption_type
+        };
+        assert_eq!(enc("[Preferences]\nMailNotification\\SMTPEncryptionType=STARTTLS\n"), E::Starttls);
+        assert_eq!(enc("[Preferences]\nMailNotification\\SMTPEncryptionType=0\n"), E::None);
+        assert_eq!(enc("[Preferences]\nMailNotification\\req_ssl=true\n"), E::Smtps);
+        assert_eq!(enc("[Preferences]\nMailNotification\\req_ssl=false\n"), E::None);
+        assert_eq!(enc("[Preferences]\nMailNotification\\req_ssl=false\nMailNotification\\SMTPEncryptionType=SMTPS\n"), E::Smtps);
+        assert_eq!(enc("[Preferences]\n"), E::Smtps, "default");
 
         // Malformed hashes are refused.
         let f = ini("[Preferences]\nWebUI\\Password_PBKDF2=\"@ByteArray(not a hash)\"\n");

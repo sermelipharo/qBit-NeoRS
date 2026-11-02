@@ -117,7 +117,10 @@ pub struct DownloadsPrefs {
     pub mail_notification_sender: String,
     pub mail_notification_email: String,
     pub mail_notification_smtp: String,
-    pub mail_notification_ssl_enabled: bool,
+    /// qBittorrent 5.3 replaced "requires a secure connection (SSL)" by an
+    /// encryption type; old files are migrated on load
+    /// (`PreferencesStore::load`).
+    pub mail_notification_encryption_type: SmtpEncryptionType,
     pub mail_notification_auth_enabled: bool,
     pub mail_notification_username: String,
     pub mail_notification_password: String,
@@ -157,7 +160,7 @@ impl Default for DownloadsPrefs {
             mail_notification_sender: "qBittorrent_notification@example.com".into(),
             mail_notification_email: String::new(),
             mail_notification_smtp: "smtp.changeme.com".into(),
-            mail_notification_ssl_enabled: false,
+            mail_notification_encryption_type: SmtpEncryptionType::Smtps,
             mail_notification_auth_enabled: false,
             mail_notification_username: String::new(),
             mail_notification_password: String::new(),

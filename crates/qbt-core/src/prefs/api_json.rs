@@ -226,7 +226,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("mail_notification_sender", json!(d.mail_notification_sender));
     put("mail_notification_email", json!(d.mail_notification_email));
     put("mail_notification_smtp", json!(d.mail_notification_smtp));
-    put("mail_notification_ssl_enabled", json!(d.mail_notification_ssl_enabled));
+    put("mail_notification_encryption_type", json!(d.mail_notification_encryption_type.as_api_str()));
     put("mail_notification_auth_enabled", json!(d.mail_notification_auth_enabled));
     put("mail_notification_username", json!(d.mail_notification_username));
     put("mail_notification_password", json!(d.mail_notification_password));
@@ -546,7 +546,9 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("mail_notification_sender", d.mail_notification_sender, to_str);
     set!("mail_notification_email", d.mail_notification_email, to_str);
     set!("mail_notification_smtp", d.mail_notification_smtp, to_str);
-    set!("mail_notification_ssl_enabled", d.mail_notification_ssl_enabled, to_bool);
+    if let Some(v) = get("mail_notification_encryption_type") {
+        d.mail_notification_encryption_type = SmtpEncryptionType::from_api(&to_str(v));
+    }
     set!("mail_notification_auth_enabled", d.mail_notification_auth_enabled, to_bool);
     set!("mail_notification_username", d.mail_notification_username, to_str);
     set!("mail_notification_password", d.mail_notification_password, to_str);
@@ -933,7 +935,7 @@ mod tests {
         "save_path_changed_tmm_enabled", "category_changed_tmm_enabled", "save_path", "temp_path_enabled", "temp_path",
         "use_category_paths_in_manual_mode", "export_dir", "export_dir_fin", "scan_dirs", "excluded_file_names_enabled",
         "excluded_file_names", "mail_notification_enabled", "mail_notification_sender", "mail_notification_email",
-        "mail_notification_smtp", "mail_notification_ssl_enabled", "mail_notification_auth_enabled",
+        "mail_notification_smtp", "mail_notification_encryption_type", "mail_notification_auth_enabled",
         "mail_notification_username", "mail_notification_password", "autorun_on_torrent_added_enabled",
         "autorun_on_torrent_added_program", "autorun_enabled", "autorun_program", "listen_port", "ssl_enabled",
         "ssl_listen_port", "random_port", "upnp", "max_connec", "max_connec_per_torrent", "max_uploads",
@@ -1006,6 +1008,13 @@ mod tests {
         assert_eq!(v["torrent_content_layout"], "Original");
         assert_eq!(v["torrent_stop_condition"], "None");
         assert_eq!(v["proxy_type"], "None");
+        assert_eq!(v["mail_notification_encryption_type"], "SMTPS");
+        assert!(v.get("mail_notification_ssl_enabled").is_none());
+        let mut p = Preferences::default();
+        apply(&mut p, json!({"mail_notification_encryption_type": "STARTTLS"}).as_object().unwrap()).unwrap();
+        assert_eq!(p.downloads.mail_notification_encryption_type, SmtpEncryptionType::Starttls);
+        apply(&mut p, json!({"mail_notification_encryption_type": "bogus"}).as_object().unwrap()).unwrap();
+        assert_eq!(p.downloads.mail_notification_encryption_type, SmtpEncryptionType::Smtps, "toEnum falls back to SMTPS");
         assert_eq!(v["resume_data_storage_type"], "Legacy");
         assert_eq!(v["torrent_content_remove_option"], "Delete");
         assert_eq!(v["max_ratio_enabled"], false);

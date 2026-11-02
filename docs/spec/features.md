@@ -2315,7 +2315,8 @@ Emitted once per transition to finished (`torrentFinished`), after storage moves
 - Logs: ``Running external program. Torrent: "%1". Command: `%2` `` / ``Failed to run external program. Torrent: "%1". Command: `%2` ``.
 
 #### 4.10.3 Email notification on completion
-- Enabled by `Preferences/MailNotification/enabled` (false). Fields: sender `…/sender` (default `qBittorrent_notification@example.com`), recipient `…/email`, server `…/smtp_server` (default `smtp.changeme.com`, format `host[:port]`), `…/req_ssl` (false), `…/req_auth` (false), `…/username`, `…/password`.
+- Enabled by `Preferences/MailNotification/enabled` (false). Fields: sender `…/sender` (default `qBittorrent_notification@example.com`), recipient `…/email`, server `…/smtp_server` (default `smtp.changeme.com`, format `host[:port]`), `…/SMTPEncryptionType` (5.3, `None`/`STARTTLS`/`SMTPS`, default **SMTPS**; it replaced `…/req_ssl`, migrated as true → SMTPS, false → None), `…/req_auth` (false), `…/username`, `…/password`.
+- Encryption (5.3): SMTPS connects with implicit TLS (default port 465); STARTTLS connects in plain text (default port 587) and requires the server's STARTTLS, otherwise logs `STARTTLS is required but was not offered by the server. Unable to send the email.` and quits before authenticating; None sends in plain text (default port 25). An SMTPS handshake failure adds `Check the email server supports SMTPS (SMTP over SSL) and you are using the correct port`. Combo `SMTP encryption:` with items `None`, `STARTTLS`, `SMTPS`.
 - Log `Torrent: %1, sending mail notification`.
 - Message: headers `Date`, `From: qBittorrent <sender>`, `Subject: Torrent "<name>" has finished downloading`, `To`, `MIME-Version: 1.0`, `Content-Type: text/plain; charset=UTF-8`, `Content-Transfer-Encoding: base64`; body (LF→CRLF, base64 in 78-char lines):
   ```

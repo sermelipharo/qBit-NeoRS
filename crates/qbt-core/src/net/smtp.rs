@@ -1,10 +1,10 @@
 //! E-mail notification on download completion (Downloads page; qBittorrent
 //! `Net::Smtp` and `Application::sendNotificationEmail`).
 //!
-//! Connection security: with "This server requires a secure connection
-//! (SSL)" the client uses implicit TLS on port 465 (the default) and
-//! mandatory STARTTLS on any other port; without it, STARTTLS is used when
-//! the server offers it. Certificates are always validated. Authentication
+//! Connection security follows qBittorrent 5.3's "SMTP encryption": SMTPS
+//! (implicit TLS, default port 465), STARTTLS (required: nothing is sent,
+//! credentials included, if the server doesn't offer it; default port 587)
+//! or None (plain SMTP, default port 25). Certificates are always validated. Authentication
 //! (PLAIN or LOGIN) is used when enabled and both username and password are
 //! set. Recipients: `;` separates e-mails, `,` the addresses of one e-mail
 //! (qBittorrent 5.3), so `a@x;b@y,c@z` sends one mail to a@x and one to b@y
@@ -22,11 +22,9 @@ use lettre::{Address, AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executo
 
 use crate::context::CoreContext;
 use crate::error::{QbtError, QbtResult};
-use crate::prefs::DownloadsPrefs;
+use crate::prefs::{DownloadsPrefs, SmtpEncryptionType};
 
 const APP_NAME: &str = "qBit NeoRS";
-const DEFAULT_PORT: u16 = 25;
-const DEFAULT_PORT_SSL: u16 = 465;
 const SMTP_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Resolved `mail_notification_*` settings.
@@ -37,7 +35,7 @@ pub struct MailSettings {
     pub recipients: Vec<Vec<Address>>,
     pub host: String,
     pub port: u16,
-    pub ssl: bool,
+    pub encryption: SmtpEncryptionType,
     /// (username, password) when authentication is enabled and complete.
     pub credentials: Option<(String, String)>,
 }
@@ -55,13 +53,13 @@ fn parse_address(field: &str, value: &str) -> QbtResult<Address> {
 }
 
 /// `host` or `host:port` (IPv6 as `[addr]:port`).
-fn parse_server(server: &str, ssl: bool) -> QbtResult<(String, u16)> {
+fn parse_server(server: &str, encryption: SmtpEncryptionType) -> QbtResult<(String, u16)> {
     let s = server.trim();
     let invalid = || QbtError::invalid(format!("invalid SMTP server: \"{s}\""));
     if s.is_empty() || s.chars().any(|c| c.is_whitespace() || c.is_control() || c == '/' || c == '@') {
         return Err(invalid());
     }
-    let default_port = if ssl { DEFAULT_PORT_SSL } else { DEFAULT_PORT };
+    let default_port = encryption.default_port();
     let (host, port) = if let Some(rest) = s.strip_prefix('[') {
         let (h, tail) = rest.split_once(']').ok_or_else(invalid)?;
         match tail.strip_prefix(':') {
@@ -105,12 +103,13 @@ pub fn settings_from_prefs(d: &DownloadsPrefs) -> QbtResult<MailSettings> {
     if recipients.is_empty() {
         return Err(QbtError::invalid("no e-mail recipient is configured"));
     }
-    let (host, port) = parse_server(&d.mail_notification_smtp, d.mail_notification_ssl_enabled)?;
+    let encryption = d.mail_notification_encryption_type;
+    let (host, port) = parse_server(&d.mail_notification_smtp, encryption)?;
     let credentials = (d.mail_notification_auth_enabled
         && !d.mail_notification_username.is_empty()
         && !d.mail_notification_password.is_empty())
     .then(|| (d.mail_notification_username.clone(), d.mail_notification_password.clone()));
-    Ok(MailSettings { sender, recipients, host, port, ssl: d.mail_notification_ssl_enabled, credentials })
+    Ok(MailSettings { sender, recipients, host, port, encryption, credentials })
 }
 
 /// Builds the message to one recipient group: `From: qBit NeoRS <sender>`,
@@ -136,10 +135,10 @@ fn transport(settings: &MailSettings) -> QbtResult<AsyncSmtpTransport<Tokio1Exec
     let tls_params = || {
         TlsParameters::new(settings.host.clone()).map_err(|e| QbtError::network(format!("TLS setup failed: {e}")))
     };
-    let tls = if settings.ssl {
-        if settings.port == DEFAULT_PORT_SSL { Tls::Wrapper(tls_params()?) } else { Tls::Required(tls_params()?) }
-    } else {
-        Tls::Opportunistic(tls_params()?)
+    let tls = match settings.encryption {
+        SmtpEncryptionType::Smtps => Tls::Wrapper(tls_params()?),
+        SmtpEncryptionType::Starttls => Tls::Required(tls_params()?),
+        SmtpEncryptionType::None => Tls::None,
     };
     let mut b = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(settings.host.as_str())
         .port(settings.port)
@@ -247,6 +246,7 @@ mod tests {
             mail_notification_sender: "from@example.com".into(),
             mail_notification_email: "to@example.com".into(),
             mail_notification_smtp: server.into(),
+            mail_notification_encryption_type: SmtpEncryptionType::None,
             ..Default::default()
         }
     }
@@ -255,8 +255,14 @@ mod tests {
     fn parses_settings() {
         let s = settings_from_prefs(&prefs("smtp.example.com")).unwrap();
         assert_eq!((s.host.as_str(), s.port), ("smtp.example.com", 25));
+        // Default ports per encryption type (qBittorrent 5.3).
+        let mut d = prefs("smtp.example.com");
+        d.mail_notification_encryption_type = SmtpEncryptionType::Starttls;
+        assert_eq!(settings_from_prefs(&d).unwrap().port, 587);
+        d.mail_notification_encryption_type = SmtpEncryptionType::Smtps;
+        assert_eq!(settings_from_prefs(&d).unwrap().port, 465);
         let mut p = prefs("smtp.example.com:587");
-        p.mail_notification_ssl_enabled = true;
+        p.mail_notification_encryption_type = SmtpEncryptionType::Smtps;
         p.mail_notification_auth_enabled = true;
         p.mail_notification_username = "u".into();
         p.mail_notification_password = "secret".into();
@@ -398,5 +404,22 @@ mod tests {
         p.downloads.mail_notification_enabled = false;
         let ctx = testutil::context_with(&rt, dir.path(), p);
         assert!(rt.block_on(send_test_email(&ctx)).is_err());
+    }
+
+    #[test]
+    fn required_starttls_sends_nothing_in_the_clear() {
+        let rt = testutil::runtime();
+        let dir = tempfile::tempdir().unwrap();
+        // The fake server doesn't offer STARTTLS.
+        let (port, log) = rt.block_on(fake_smtp());
+        let mut p = Preferences { downloads: prefs(&format!("127.0.0.1:{port}")), ..Default::default() };
+        p.downloads.mail_notification_encryption_type = SmtpEncryptionType::Starttls;
+        p.downloads.mail_notification_auth_enabled = true;
+        p.downloads.mail_notification_username = "user".into();
+        p.downloads.mail_notification_password = "pa55".into();
+        let ctx = testutil::context_with(&rt, dir.path(), p);
+        assert!(rt.block_on(send_test_email(&ctx)).is_err());
+        let log = log.lock().clone();
+        assert!(!log.iter().any(|l| l.starts_with("AUTH") || l.starts_with("MAIL FROM")), "{log:?}");
     }
 }

@@ -29,7 +29,10 @@ impl PreferencesStore {
     pub fn load(profile: &Profile) -> QbtResult<Self> {
         let path = profile.preferences_file();
         let mut prefs: Preferences = match std::fs::read(&path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
+            Ok(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes).and_then(|mut v| {
+                migrate_stored(&mut v);
+                serde_json::from_value(v)
+            }).unwrap_or_else(|e| {
                 // A corrupt file must never prevent start-up; keep a copy for the user.
                 let _ = std::fs::copy(&path, path.with_extension("json.corrupt"));
                 eprintln!("preferences.json is invalid ({e}); using defaults");
@@ -134,6 +137,19 @@ fn validate(p: &Preferences) -> QbtResult<()> {
 
 /// Fills values whose defaults depend on the machine (save path, random
 /// ports). Returns true when something was filled in and must be persisted.
+/// Stored keys renamed since: `mail_notification_ssl_enabled` became
+/// `mail_notification_encryption_type` (qBittorrent 5.3's
+/// `migrateSMTPEncryptionSetting`: SSL on = SMTPS, off = None).
+fn migrate_stored(v: &mut serde_json::Value) {
+    let Some(d) = v.get_mut("downloads").and_then(serde_json::Value::as_object_mut) else { return };
+    if let Some(ssl) = d.remove("mail_notification_ssl_enabled")
+        && !d.contains_key("mail_notification_encryption_type")
+    {
+        let t = if ssl.as_bool().unwrap_or(false) { SmtpEncryptionType::Smtps } else { SmtpEncryptionType::None };
+        d.insert("mail_notification_encryption_type".into(), serde_json::to_value(t).unwrap_or_default());
+    }
+}
+
 fn resolve_dynamic_defaults(p: &mut Preferences, _profile: &Profile) -> bool {
     let mut changed = false;
     if p.downloads.save_path.is_empty() {
@@ -166,5 +182,27 @@ fn random_port(avoid: Option<i64>) -> i64 {
         if Some(p) != avoid {
             return p;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrates_the_old_smtp_ssl_switch() {
+        let load = |json: &str| {
+            let mut v: serde_json::Value = serde_json::from_str(json).unwrap();
+            migrate_stored(&mut v);
+            serde_json::from_value::<Preferences>(v).unwrap().downloads.mail_notification_encryption_type
+        };
+        assert_eq!(load(r#"{"downloads": {"mail_notification_ssl_enabled": true}}"#), SmtpEncryptionType::Smtps);
+        assert_eq!(load(r#"{"downloads": {"mail_notification_ssl_enabled": false}}"#), SmtpEncryptionType::None);
+        assert_eq!(
+            load(r#"{"downloads": {"mail_notification_ssl_enabled": false, "mail_notification_encryption_type": "Starttls"}}"#),
+            SmtpEncryptionType::Starttls
+        );
+        assert_eq!(load(r#"{"downloads": {}}"#), SmtpEncryptionType::Smtps);
+        assert_eq!(load("{}"), SmtpEncryptionType::Smtps);
     }
 }

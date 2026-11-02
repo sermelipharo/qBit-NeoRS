@@ -38,7 +38,7 @@ Things to know before reading:
 | #24869 | Unauthenticated announce created a torrent entry | ✅ | Handled earlier |
 | #24720 | WebUI sessions count limit | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24379 | Allow cross-origin links to the webroot | ✅ | GET/HEAD of `/` and `/index.html` skip the CSRF check (`webui/webapp.rs`); e2e `csrf_and_host_validation` |
-| #23838 | Fix STARTTLS; replace the SSL checkbox by an encryption type (None / STARTTLS / SMTPS) | ⬜ | Replace `mail_notification_ssl_enabled` (`prefs/api_json.rs:229,542`) with `mail_notification_encryption_type`, migrate the old value, adjust `net/smtp.rs` (its header comment describes the old rule), Swift picker. WebAPI 2.16.0 |
+| #23838 | Fix STARTTLS; replace the SSL checkbox by an encryption type (None / STARTTLS / SMTPS) | ✅ | `SmtpEncryptionType` (default SMTPS) → lettre `Tls::Wrapper` / `Required` / `None`, default ports 465 / 587 / 25; stored `mail_notification_ssl_enabled` and qBittorrent's `req_ssl` (ini or 5.2 WebAPI import) migrate as 5.3 does; Swift picker with 5.3's tooltip. Test: required STARTTLS sends no AUTH or MAIL to a server without it |
 | #24512 | Drop unsupported tracker URLs from magnets | ✅ | `parse_magnet` keeps only http/https/udp trackers with a host (`is_supported_tracker_url`, `bittorrent/metainfo.rs`); test `magnets_keep_only_trackers_they_can_announce_to` |
 | #24087 | Do not load a zero-size GeoIP database | ✅ | `net/geoip.rs:95-110` turns a failed open into a warning; add a test with an empty file to be sure |
 
@@ -134,7 +134,7 @@ Things to know before reading:
 | #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |
 | #24152 | `request_latency` in `sync/maindata` | ✅ | Always 0 |
 | #24084 | `queued_tracker_announces` in `sync/maindata` | ⬜ | See Core/engine |
-| #23838 | `mail_notification_encryption_type` | ⬜ | See Security |
+| #23838 | `mail_notification_encryption_type` | ✅ | Replaces `mail_notification_ssl_enabled` in `app/preferences` |
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
 | #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ⬜ | Serve a completed file from torrent content. Security: resolve against the torrent's content root only, reject `..` and symlink escape, require the file complete, stream with `Content-Disposition` |

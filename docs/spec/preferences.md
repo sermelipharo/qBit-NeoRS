@@ -166,7 +166,7 @@ Widgets appear in this order: Interface group → Transfer List group → Torren
 | 36 | `mail_notification_sender` | string | `"qBittorrent_notification@example.com"` | | `"From:"` (tooltip `"Sender"`) | · `Preferences/MailNotification/sender` |
 | 37 | `mail_notification_email` | string | `""` | | `"To:"` (tooltip `"Receiver"`) | Recipients: `;` separates e-mails, `,` the addresses of one e-mail (5.3, #24304/#24061). · `Preferences/MailNotification/email` |
 | 38 | `mail_notification_smtp` | string | `"smtp.changeme.com"` | `host` or `host:port` | `"SMTP server:"` | · `Preferences/MailNotification/smtp_server` |
-| 39 | `mail_notification_ssl_enabled` | bool | `false` | | `"This server requires a secure connection (SSL)"` | SSL/TLS SMTP. · `Preferences/MailNotification/req_ssl` |
+| 39 | `mail_notification_encryption_type` (5.3; replaced `mail_notification_ssl_enabled`) | string | `"SMTPS"` | `None`, `STARTTLS`, `SMTPS`; unknown values give `SMTPS` | `"SMTP encryption:"` | See features.md §4.10.3. · `Preferences/MailNotification/SMTPEncryptionType` (old `…/req_ssl`: true → SMTPS, false → None) |
 | 40 | `mail_notification_auth_enabled` | bool | `false` | | Checkable group `"Authentication"` | SMTP AUTH. · `Preferences/MailNotification/req_auth` |
 | 41 | `mail_notification_username` | string | `""` | | `"Username:"` | · `Preferences/MailNotification/username` |
 | 42 | `mail_notification_password` | string | `""` | | `"Password:"` (password echo) | Stored in **plain text**. · `Preferences/MailNotification/password` |
@@ -683,7 +683,7 @@ These are not in the WebAPI. A native client still has to implement them for par
  28 temp_path                          29 use_category_paths_in_manual_mode  30 export_dir
  31 export_dir_fin                     32 scan_dirs                          33 excluded_file_names_enabled
  34 excluded_file_names                35 mail_notification_enabled          36 mail_notification_sender
- 37 mail_notification_email            38 mail_notification_smtp             39 mail_notification_ssl_enabled
+ 37 mail_notification_email            38 mail_notification_smtp             39 mail_notification_encryption_type
  40 mail_notification_auth_enabled     41 mail_notification_username         42 mail_notification_password
  43 autorun_on_torrent_added_enabled   44 autorun_on_torrent_added_program   45 autorun_enabled
  46 autorun_program                    47 listen_port                        48 ssl_enabled

@@ -437,7 +437,7 @@ Formatting helpers (exact rules):
 - Ratio: `realRatio = all_time_upload / download`. `download` = `total_done` if `all_time_download < total_done * 0.01`, else `all_time_download`. If download == 0: 0 when upload == 0, else +∞.
 - ETA:
   - Stopped → MAX_ETA.
-  - Finished: min(ratio ETA, seeding-time ETA, inactive-seeding ETA) from the effective share limits. Ratio ETA = `(realDL*maxRatio - totalUpload)/avgUpSpeed`, where realDL = totalDownload or wantedSize. Seeding ETA = `limit*60 - finishedTime` (clamped ≥ 0). Inactive ETA = `limit*60 - timeSinceActivity` (clamped ≥ 0). MAX_ETA if no limits apply.
+  - Finished: from the enabled effective share limits, the min (share limits mode MatchAny) or max (MatchAll, 5.3) of: ratio ETA = `(realDL*maxRatio - totalUpload)/avgUpSpeed`, where realDL = totalDownload or wantedSize (0 when already reached; MAX_ETA when not reached and nothing is uploading); seeding ETA = `limit*60 - finishedTime` (clamped ≥ 0); inactive ETA = `limit*60 - timeSinceActivity` (clamped ≥ 0). MAX_ETA if no limits apply.
   - Downloading: `(wanted - completed) / avg DL speed` (sampled average), MAX_ETA if the speed is 0.
 
 **Sorting**:
@@ -1346,6 +1346,7 @@ Source of truth: `src/gui/*.ui`, `src/gui/*.cpp`, `src/gui/{rss,search,propertie
   - `Torrent::StopCondition`: `0 = None`, `1 = MetadataReceived`, `2 = FilesChecked`.
   - `DownloadPriority`: `0 = Ignored` ("Do not download"), `1 = Normal`, `6 = High`, `7 = Maximum`, `-1 = Mixed` (folder with mixed children; display only).
   - `ShareLimitAction`: `-1 = Default`, `0 = Stop`, `1 = Remove`, `3 = RemoveWithContent`, `2 = EnableSuperSeeding` (values fixed for config compatibility).
+  - `ShareLimitsMode` (5.3): `-1 = Default`, `0 = MatchAny`, `1 = MatchAll`.
   - Share-limit sentinels: ratio `-2 = DEFAULT_RATIO_LIMIT` (use default/category), `-1 = NO_RATIO_LIMIT`; seeding / inactive seeding time (minutes) `-2 = DEFAULT_SEEDING_TIME_LIMIT`, `-1 = NO_SEEDING_TIME_LIMIT`.
   - `TorrentFileGuard::AutoDeleteMode` (setting `Core/AutoDeleteAddedTorrentFile`): `0 = Never`, `1 = IfAdded`, `2 = Always`.
   - `TorrentOperatingMode`: `0 = AutoManaged`, `1 = Forced`.
@@ -1479,7 +1480,7 @@ Used by **Watched Folder Options** (3.20) and the **RSS Downloader** rule editor
 | `Start torrent:` | combo | `Default`, `Yes`, `No` | `Yes` → addStopped=false. |
 | `Stop condition:` | combo | `Default`, `None`, `Metadata received`, `Files checked` | |
 | `Add to top of queue:` | combo | `Default`, `Yes`, `No` | |
-| group `Torrent share limits` | TorrentShareLimitsWidget (3.9) | | Defaults shown are the category's (or global if no category). Output: ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, shareLimitAction. |
+| group `Torrent share limits` | TorrentShareLimitsWidget (3.9) | | Defaults shown are the category's (or global if no category). Output: ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, share limits mode (5.3: `Mode:` combo `Default` / `Match any limit` / `Match all the limits`; the default item reads `Default (%1)` or `From category (%1)` with the inherited mode), shareLimitAction. |
 
 Misc fields are laid out with a flow layout (wrap): Content layout, Skip hash check, Start torrent, Stop condition, Add to top of queue.
 
@@ -1814,7 +1815,7 @@ Header label `Matching RSS Articles`. Tree: one bold top-level item per feed (fo
 - File filters: `Rules (*.json)` and `Rules (legacy) (*.rssrules)`; extension appended according to the chosen filter.
 - Export with no rules → warning `Invalid action` / `The list is empty, there is nothing to export.` Save dialog `Export RSS rules` (home dir). Write error → critical `I/O Error` / `Failed to create the destination file. Reason: %1`.
 - Import: open dialog `Import RSS rules`; max file size 10 MiB; read error → critical `Import error` / `Failed to read the file. %1`; parse error → `Import error` / `Failed to import the selected rules file. Reason: %1` (legacy parse error message `Invalid data format`). Imported rules overwrite existing rules with the same name.
-- **JSON format**: top-level object `{ "<rule name>": { ... } }` with keys `enabled` (bool), `priority` (int), `useRegex`, `mustContain`, `mustNotContain`, `episodeFilter`, `affectedFeeds` (array of URLs; a single string also accepted on import), `lastMatch` (RFC 2822 string), `ignoreDays` (int), `smartFilter` (bool), `previouslyMatchedEpisodes` (array of strings), deprecated duplicates `addPaused` (bool|null), `torrentContentLayout` (`"Original"`/`"Subfolder"`/`"NoSubfolder"`|null), `savePath`, `assignedCategory`, and `torrentParams` (object with keys `category`, `tags` (array), `save_path`, `download_path`, `use_download_path`, `operating_mode` (`"AutoManaged"`/`"Forced"`), `add_to_top_of_queue`, `stopped`, `stop_condition` (`"None"`/`"MetadataReceived"`/`"FilesChecked"`), `skip_checking`, `content_layout`, `use_auto_tmm`, `upload_limit`, `download_limit`, `seeding_time_limit`, `inactive_seeding_time_limit`, `share_limit_action` (enum name), `ratio_limit`, `ssl_certificate`, `ssl_private_key`, `ssl_dh_params`; optional keys omitted when unset). Import defaults: `enabled` true, `priority` 0; if `torrentParams` missing, legacy keys are used (non-empty `savePath` implies `use_auto_tmm=false`; old `createSubfolder` true→Original, false→NoSubfolder).
+- **JSON format**: top-level object `{ "<rule name>": { ... } }` with keys `enabled` (bool), `priority` (int), `useRegex`, `mustContain`, `mustNotContain`, `episodeFilter`, `affectedFeeds` (array of URLs; a single string also accepted on import), `lastMatch` (RFC 2822 string), `ignoreDays` (int), `smartFilter` (bool), `previouslyMatchedEpisodes` (array of strings), deprecated duplicates `addPaused` (bool|null), `torrentContentLayout` (`"Original"`/`"Subfolder"`/`"NoSubfolder"`|null), `savePath`, `assignedCategory`, and `torrentParams` (object with keys `category`, `tags` (array), `save_path`, `download_path`, `use_download_path`, `operating_mode` (`"AutoManaged"`/`"Forced"`), `add_to_top_of_queue`, `stopped`, `stop_condition` (`"None"`/`"MetadataReceived"`/`"FilesChecked"`), `skip_checking`, `content_layout`, `use_auto_tmm`, `upload_limit`, `download_limit`, `seeding_time_limit`, `inactive_seeding_time_limit`, `share_limit_action` (enum name), `share_limits_mode` (enum name, 5.3), `ratio_limit`, `ssl_certificate`, `ssl_private_key`, `ssl_dh_params`; optional keys omitted when unset). Import defaults: `enabled` true, `priority` 0; if `torrentParams` missing, legacy keys are used (non-empty `savePath` implies `use_auto_tmm=false`; old `createSubfolder` true→Original, false→NoSubfolder).
 - **Legacy format** (`.rssrules`): `QDataStream` (version Qt_4_5) serialized `QVariantHash` `{ruleName: {name, must_contain, must_not_contain, save_path, affected_feeds, enabled, category_assigned, use_regex, add_paused (int: 0 = default, 1 = always, 2 = never), episode_filter, last_match, ignore_days}}`.
 
 #### 3.25.5 Persistence
@@ -1955,6 +1956,7 @@ Identity strings (`base/bittorrent/sessionimpl.cpp`):
 | `Torrent::StopCondition` (`torrent.h`) | None=0, MetadataReceived=1, FilesChecked=2 |
 | `TorrentContentLayout` (`torrentcontentlayout.h`) | Original=0, Subfolder=1, NoSubfolder=2 |
 | `ShareLimitAction` (`sharelimits.h`) | Default=-1 (special: inherit), Stop=0, Remove=1, EnableSuperSeeding=2, RemoveWithContent=3 |
+| `ShareLimitsMode` (`sharelimits.h`, 5.3) | Default=-1 (special: inherit), MatchAny=0, MatchAll=1 |
 | Share limit sentinels (`sharelimits.h`) | `DEFAULT_RATIO_LIMIT=-2`, `NO_RATIO_LIMIT=-1`, `DEFAULT_SEEDING_TIME_LIMIT=-2`, `NO_SEEDING_TIME_LIMIT=-1` (applies to both seeding-time and inactive-seeding-time) |
 | `TorrentRemoveOption` (`session.h`) | KeepContent=0, RemoveContent=1 |
 | `TorrentContentRemoveOption` (`torrentcontentremoveoption.h`) | Delete=0 ("Delete files permanently"), MoveToTrash=1 ("Move files to trash (if possible)") |
@@ -2033,9 +2035,10 @@ If the GUI "Add new torrent" dialog is enabled (`AddNewTorrentDialog/Enabled`, d
 | seedingTimeLimit | int minutes, -2 | `seeding_time_limit` | same sentinel semantics. |
 | inactiveSeedingTimeLimit | int minutes, -2 | `inactive_seeding_time_limit` | same. |
 | shareLimitAction | enum, Default | `share_limit_action` (name) | Default = inherit. |
+| shareLimitsMode (5.3) | enum, Default | `share_limits_mode` (name) | `Default` / `MatchAny` / `MatchAll`; Default = inherit. |
 | sslParameters | cert/key/dh | `ssl_certificate`, `ssl_private_key`, `ssl_dh_params` (PEM strings) | For SSL torrents (lt `torrent_need_cert_alert`); missing → `Torrent is missing SSL parameters. Torrent: "%1". Message: "%2"`. |
 
-Serialization (`serializeAddTorrentParams`) always writes `category, tags, save_path, download_path, operating_mode, skip_checking, upload_limit, download_limit, seeding_time_limit, inactive_seeding_time_limit, share_limit_action, ratio_limit, ssl_*`; optional keys only when set.
+Serialization (`serializeAddTorrentParams`) always writes `category, tags, save_path, download_path, operating_mode, skip_checking, upload_limit, download_limit, seeding_time_limit, inactive_seeding_time_limit, share_limit_action, share_limits_mode (5.3), ratio_limit, ssl_*`; optional keys only when set.
 
 #### 4.3.3 Add algorithm (`SessionImpl::addTorrent_impl`)
 Adding is refused until the session has finished restoring (`isRestored()`). Steps:
@@ -2157,7 +2160,7 @@ Only with metadata. Calls lt `force_recheck`, immediately marks state as checkin
 - **Progress**: checking → lt progress; wanted bytes 0 → 0 (or 1 if complete); else `total_wanted_done/total_wanted` clamped.
 - **Ratio** (`realRatio`): upload = all-time upload; download = all-time download, but if all-time download < 1% of `total_done` (seeder that lost stats) use `total_done`. download 0 → ratio 0 if upload 0 else ∞.
 - **Popularity**: ratio / active months (`active_duration` in fractional months); 0 if no active time.
-- **ETA** (`eta()`): stopped → MAX_ETA. Downloading: `(wanted − completed) / avg download payload rate` (MAX_ETA if 0). Finished: min over the applicable share limits — ratio ETA `((realDL or wantedSize) × ratioLimit − totalUpload) / avg upload rate`, seeding-time ETA `limit×60 − finishedTime` (≥0), inactive ETA `limit×60 − timeSinceActivity` (≥0); MAX_ETA if no limits. Average rate = `SpeedMonitor` sliding average of samples (one per state update).
+- **ETA** (`eta()`): stopped → MAX_ETA. Downloading: `(wanted − completed) / avg download payload rate` (MAX_ETA if 0). Finished: min (share limits mode MatchAny) or max (MatchAll, 5.3) over the applicable share limits — ratio ETA `((realDL or wantedSize) × ratioLimit − totalUpload) / avg upload rate`, seeding-time ETA `limit×60 − finishedTime` (≥0), inactive ETA `limit×60 − timeSinceActivity` (≥0); MAX_ETA if no limits. Average rate = `SpeedMonitor` sliding average of samples (one per state update).
 - **Seeding time** = lt `finished_duration`; **active time** = lt `active_duration`; **time since activity** = if exactly one of (time since last upload, time since last download) is unknown (-1) → the known one, else the min of both.
 - **Next announce**, **current tracker** = lt `current_tracker` or first tracker URL.
 - Files progress uses per-piece accounting; availability = fraction of a file's pieces with availability > 0 (−1 per file if lt returns empty availability, i.e. seeding).
@@ -2185,7 +2188,8 @@ Queue positions: only downloading (unfinished) torrents have a queue position (0
   ```json
   {
     "Movies":    {"save_path": "", "download_path": null, "ratio_limit": -2, "seeding_time_limit": -2,
-                  "inactive_seeding_time_limit": -2, "share_limit_action": "Default"},
+                  "inactive_seeding_time_limit": -2, "share_limit_action": "Default",
+                  "share_limits_mode": "Default"},
     "Movies/HD": {"save_path": "/abs/or/relative", "download_path": false, ...}
   }
   ```
@@ -2195,7 +2199,7 @@ Queue positions: only downloading (unfinished) torrents have a queue position (0
   - Written pretty-printed by `QJsonDocument::toJson`; max read size 1 MiB. Errors: `Failed to load Categories. %1`, `Failed to parse Categories configuration. File: "%1". Error: "%2"`, `Failed to save Categories configuration. File: "%1". Error: "%2"`. Legacy migration from `BitTorrent/Session/Categories` (map name→save path).
 - **Category save path** (`categorySavePath`): uncategorized → default save path. Explicit absolute → as is. Explicit relative → `<default save path>/<path>`. Implicit → `<parent category save path>/<subcategory name made valid>` (invalid chars `: ? " * < > |` replaced via `toValidPath`).
 - **Category download path** (`categoryDownloadPath`): resolve option (own → parent chain → global enabled flag). Disabled → none. Uncategorized → global download path. Path = explicit or implicit (subcategory name); absolute → as is; relative → `<parent's download path computed as if enabled>/<path>`, or `<global download path>/<path>` if parent yields none.
-- Category share limits: `categoryRatioLimit` etc. walk own → parent → … → global.
+- Category share limits: `categoryRatioLimit` etc. walk own → parent → … → global; the share limits mode (5.3) inherits the same way. A file without `share_limits_mode` (before 5.3), or with an unknown name, means Default.
 - Recovery at startup: if a torrent references a missing category it is recreated (`Detected inconsistent data: category is missing from the configuration file. Category will be recovered but its settings will be reset to default. Torrent: "%1". Category: "%2"`); invalid names cleared (`Detected inconsistent data: invalid category...`); if a recovered category's path doesn't match an ATM torrent's actual location, the torrent switches to manual (`Detected mismatch between the save paths of the recovered category and the current save path of the torrent. Torrent is now switched to Manual mode...`). Missing tags are likewise recovered (`Detected inconsistent data: tag is missing from the configuration file. Tag will be recovered...`).
 
 #### 4.6.3 Path resolution when adding
@@ -2218,18 +2222,20 @@ On completion an incomplete torrent in its download path is moved to its save pa
 
 ### 4.7 Share limits (`SessionImpl::processTorrentShareLimits`)
 
-- Global settings: `GlobalMaxRatio` (default -1; negative stored as -1, "When ratio reaches"), `GlobalMaxSeedingMinutes` (default -1, "When total seeding time reaches"), `GlobalMaxInactiveSeedingMinutes` (default -1, "When inactive seeding time reaches"), `ShareLimitAction` (default Stop; "then": "Stop torrent" / "Remove torrent" / "Remove torrent and its files" / "Enable super seeding for torrent"; Default is not allowed globally).
-- Effective limits per torrent: own value unless -2 → category chain → global.
+- Global settings: `GlobalMaxRatio` (default -1; negative stored as -1, "When ratio reaches"), `GlobalMaxSeedingMinutes` (default -1, "When total seeding time reaches"), `GlobalMaxInactiveSeedingMinutes` (default -1, "When inactive seeding time reaches"), `ShareLimitAction` (default Stop; "then": "Stop torrent" / "Remove torrent" / "Remove torrent and its files" / "Enable super seeding for torrent"; Default is not allowed globally), `ShareLimitsMode` (5.3, default MatchAny; radios "Any of the above" / "All the above" under the three limits; a stored Default reads as MatchAny).
+- Effective limits per torrent: own value unless -2 → category chain → global. The mode and the action likewise: own unless Default → category chain → global.
 - Evaluation runs (a) every **10 s** on a timer that is active only while a global limit is set or any torrent has an explicit (≥0) own limit (note: category-only limits don't start the timer — they are still evaluated on the finish event; a reimplementation should include category limits in the timer condition), and (b) immediately when a torrent finishes.
 - Skipped if torrent is not finished or is Forced.
-- Checks in order, first hit wins: ratio ≥ limit (`Torrent reached the share ratio limit.`), seeding minutes (`finishedTime/60`) ≥ limit (`Torrent reached the seeding time limit.`), inactive minutes (`timeSinceActivity/60`) ≥ limit (`Torrent reached the inactive seeding time limit.`).
+- Nothing to check when all three limits are disabled (< 0).
+- MatchAny: checks in order, first hit wins: ratio ≥ limit (`Torrent reached the share ratio limit.`), seeding minutes (`finishedTime/60`) ≥ limit (`Torrent reached the seeding time limit.`), inactive minutes (`timeSinceActivity/60`) ≥ limit (`Torrent reached the inactive seeding time limit.`).
+- MatchAll (5.3): every enabled limit must be reached (disabled ones are ignored); description `Torrent reached the share limit(s).`.
 - Actions (log `"<description> <action text> Torrent: "<name>"."`):
   - Remove → remove torrent keeping files (`Removing torrent.`).
   - RemoveWithContent → remove with content (`Removing torrent and deleting its content.`).
   - Stop → if not already stopped: stop (`Torrent stopped.`).
   - EnableSuperSeeding → if running and not already super-seeding: enable (`Super seeding enabled.`).
 - Remove actions also apply to stopped (finished) torrents.
-- Category option dialogs and per-torrent dialogs expose the same three limits + action.
+- Category option dialogs and per-torrent dialogs expose the same three limits + mode + action.
 
 ### 4.8 Files on disk
 
@@ -2507,6 +2513,7 @@ CREATE TABLE "torrents" (
   seeding_time_limit INTEGER NOT NULL,
   inactive_seeding_time_limit INTEGER NOT NULL,
   share_limit_action TEXT NOT NULL DEFAULT `Default`,
+  share_limits_mode TEXT NOT NULL DEFAULT `Default`,  -- 5.3
   has_outer_pieces_priority INTEGER NOT NULL,    -- first/last piece priority
   has_seed_status INTEGER NOT NULL,
   operating_mode TEXT NOT NULL,                  -- AutoManaged | Forced
@@ -3029,7 +3036,7 @@ Legacy keys deleted at startup: `Rss/streamList`, `Rss/streamAlias`, `Rss/open_f
   | `assignedCategory` | string | `""` | DEPRECATED mirror |
   | `torrentParams` | object | — | full `AddTorrentParams` (below). If absent, the deprecated keys are used: `savePath`, `assignedCategory`, `addPaused`, `torrentContentLayout` (or legacy bool `createSubfolder`: true→`Original`, false→`NoSubfolder`); non-empty `savePath` forces `use_auto_tmm=false`. |
 
-- `torrentParams` object (`serializeAddTorrentParams` / `parseAddTorrentParams`): always `category` (string), `tags` (array of strings), `save_path`, `download_path` (strings), `operating_mode` (`"AutoManaged"`|`"Forced"`), `skip_checking` (bool), `upload_limit` / `download_limit` (int B/s, default −1 = unlimited/none), `seeding_time_limit` / `inactive_seeding_time_limit` (int minutes, default −2 = use global), `share_limit_action` (`"Default"`(−1)/`"Stop"`(0)/`"Remove"`(1)/`"EnableSuperSeeding"`(2)/`"RemoveWithContent"`(3); default `Default`), `ratio_limit` (double, default −2 = use global; −1 = unlimited), `ssl_certificate`, `ssl_private_key`, `ssl_dh_params` (PEM strings); and only when set: `add_to_top_of_queue` (bool), `stopped` (bool), `stop_condition` (`"None"`/`"MetadataReceived"`/`"FilesChecked"`), `content_layout` (`"Original"`/`"Subfolder"`/`"NoSubfolder"`), `use_auto_tmm` (bool), `use_download_path` (bool). Unset optionals mean "use session default".
+- `torrentParams` object (`serializeAddTorrentParams` / `parseAddTorrentParams`): always `category` (string), `tags` (array of strings), `save_path`, `download_path` (strings), `operating_mode` (`"AutoManaged"`|`"Forced"`), `skip_checking` (bool), `upload_limit` / `download_limit` (int B/s, default −1 = unlimited/none), `seeding_time_limit` / `inactive_seeding_time_limit` (int minutes, default −2 = use global), `share_limit_action` (`"Default"`(−1)/`"Stop"`(0)/`"Remove"`(1)/`"EnableSuperSeeding"`(2)/`"RemoveWithContent"`(3); default `Default`), `share_limits_mode` (5.3; `"Default"`(−1)/`"MatchAny"`(0)/`"MatchAll"`(1); default `Default`), `ratio_limit` (double, default −2 = use global; −1 = unlimited), `ssl_certificate`, `ssl_private_key`, `ssl_dh_params` (PEM strings); and only when set: `add_to_top_of_queue` (bool), `stopped` (bool), `stop_condition` (`"None"`/`"MetadataReceived"`/`"FilesChecked"`), `content_layout` (`"Original"`/`"Subfolder"`/`"NoSubfolder"`), `use_auto_tmm` (bool), `use_download_path` (bool). Unset optionals mean "use session default".
 - **Export/import** (RSS Downloader dialog buttons "&Import..." / "&Export..."): 
   - JSON (`Rules (*.json)`): same object format as `download_rules.json` (pretty-printed). Import: each rule → `setRule` (overwrites same-named rules). Errors: "Import error" / "Failed to import the selected rules file. Reason: %1"; "Failed to read the file. %1".
   - Legacy (`Rules (legacy) (*.rssrules)`): `QDataStream` (version `Qt_4_5`) serialization of `QVariantHash{ ruleName → QVariantHash }` with keys `name`, `must_contain`, `must_not_contain`, `save_path`, `affected_feeds` (QStringList), `enabled` (bool, import default **false**), `category_assigned`, `use_regex`, `add_paused` (int: 0 default, 1 always/stopped, 2 never), `episode_filter`, `last_match` (QDateTime), `ignore_days`. Stream error → "Invalid data format".
@@ -3533,6 +3540,7 @@ These flags are recomputed only for torrents whose trackers changed / were annou
 | `seeding_time_limit` | int (min) | -2 / -1 / value |
 | `inactive_seeding_time_limit` | int (min) | -2 / -1 / value |
 | `share_limit_action` | string | `Default`, `Stop`, `Remove`, `RemoveWithContent`, `EnableSuperSeeding` |
+| `share_limits_mode` | string | 5.3: `Default`, `MatchAny`, `MatchAll` |
 (Key naming is intentionally mixed: `savePath` camelCase for backward compatibility, the rest snake_case.) Subcategories are always enabled since 2.15.0 (`use_subcategories` key removed from server_state).
 
 **`server_state` keys** (all always present on full update):
@@ -3719,6 +3727,7 @@ Flag letters (in this order of evaluation):
 | `popularity` | number | ratio / active months (`active_duration` in months), 0 if never active |
 | `seeding_time_limit` | int | own setting (min) |
 | `inactive_seeding_time_limit` | int | own setting (min) |
+| `share_limits_mode` | string | own setting: `Default`, `MatchAny`, `MatchAll` (5.3; before `share_limit_action`) |
 | `share_limit_action` | string | own setting: `Default`, `Stop`, `Remove`, `RemoveWithContent`, `EnableSuperSeeding` (2.12.0) |
 | `seen_complete` | int | last time a full copy was seen, epoch s / -1 |
 | `auto_tmm` | bool | Automatic Torrent Management |
@@ -3936,7 +3945,7 @@ Per-session caches: `torrentSourceCache` (source string -> infohash) and `torren
 | `torrents/toggleFirstLastPiecePrio` | `hashes` | toggle | `200` |
 | `torrents/setForceStart` | `hashes`, `value` (bool) | `true` -> start in Forced mode; `false` -> start in AutoManaged mode (note: also starts stopped torrents) | `200` |
 | `torrents/setSuperSeeding` | `hashes`, `value` (bool) | | `200` |
-| `torrents/setShareLimits` | `hashes`, `ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitAction` (all required since 2.12.0) | numbers per 6.8; action string (invalid -> `Default`) | `200` |
+| `torrents/setShareLimits` | `hashes`, `ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitAction` (all required since 2.12.0), `shareLimitsMode` (5.3; required upstream, **optional here**: missing = `Default`, so clients written for 5.2 keep working) | numbers per 6.8; action and mode strings (invalid -> `Default`) | `200` |
 | `torrents/setUploadLimit` | `hashes`, `limit` (B/s; 0 -> -1) | per-torrent limit | `200` |
 | `torrents/setDownloadLimit` | `hashes`, `limit` | | `200` |
 | `torrents/increasePrio` / `decreasePrio` / `topPrio` / `bottomPrio` | `hashes` (`all` is **not** special here; ids parsed directly) | move in queue | `409 Torrent queueing must be enabled` |
@@ -4011,7 +4020,7 @@ Rule object (`rss/rules`, `ruleDef`):
 | `assignedCategory` | string | | deprecated mirror of `torrentParams.category` |
 | (legacy) `createSubfolder` | bool | | very old format, mapped to content layout |
 
-`torrentParams` (`serializeAddTorrentParams`) keys: `category`, `tags` (array), `save_path`, `download_path`, `operating_mode` (`AutoManaged`/`Forced`), `skip_checking`, `upload_limit`, `download_limit`, `seeding_time_limit`, `inactive_seeding_time_limit`, `share_limit_action`, `ratio_limit`, `ssl_certificate`, `ssl_private_key`, `ssl_dh_params`, and only when set: `add_to_top_of_queue`, `stopped`, `stop_condition` (`None`/`MetadataReceived`/`FilesChecked`), `content_layout`, `use_auto_tmm`, `use_download_path`.
+`torrentParams` (`serializeAddTorrentParams`) keys: `category`, `tags` (array), `save_path`, `download_path`, `operating_mode` (`AutoManaged`/`Forced`), `skip_checking`, `upload_limit`, `download_limit`, `seeding_time_limit`, `inactive_seeding_time_limit`, `share_limit_action`, `share_limits_mode` (5.3), `ratio_limit`, `ssl_certificate`, `ssl_private_key`, `ssl_dh_params`, and only when set: `add_to_top_of_queue`, `stopped`, `stop_condition` (`None`/`MetadataReceived`/`FilesChecked`), `content_layout`, `use_auto_tmm`, `use_download_path`.
 
 ### 6.17 `search/*`
 

@@ -259,6 +259,49 @@ impl ShareLimitAction {
     }
 }
 
+/// `ShareLimitsMode` (qBittorrent 5.3): whether reaching any enabled share
+/// limit triggers the action, or only reaching all of them. `Default` defers
+/// to the category, then the global setting (which treats it as `MatchAny`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
+pub enum ShareLimitsMode {
+    #[default]
+    Default,
+    MatchAny,
+    MatchAll,
+}
+
+impl ShareLimitsMode {
+    /// Qt enum key name (`Utils::String::fromEnum`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ShareLimitsMode::Default => "Default",
+            ShareLimitsMode::MatchAny => "MatchAny",
+            ShareLimitsMode::MatchAll => "MatchAll",
+        }
+    }
+
+    /// Exact Qt enum key name; None for anything else.
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "Default" => ShareLimitsMode::Default,
+            "MatchAny" => ShareLimitsMode::MatchAny,
+            "MatchAll" => ShareLimitsMode::MatchAll,
+            _ => return None,
+        })
+    }
+
+    /// `Utils::String::toEnum(s, Default)`.
+    pub fn from_str_or_default(s: &str) -> Self {
+        Self::parse(s).unwrap_or_default()
+    }
+
+    /// The global setting never stores `Default`: it means `MatchAny`.
+    pub fn global(self) -> Self {
+        if self == ShareLimitsMode::MatchAll { ShareLimitsMode::MatchAll } else { ShareLimitsMode::MatchAny }
+    }
+}
+
 fn join_tags<S: Serializer>(tags: &[String], s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&tags.join(", "))
 }
@@ -349,6 +392,8 @@ pub struct TorrentInfo {
     /// Minutes: -2 use global, -1 unlimited.
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
+    /// The torrent's own mode (`Default` = from category / global).
+    pub share_limits_mode: ShareLimitsMode,
     pub share_limit_action: ShareLimitAction,
     #[serde(rename = "seen_complete")]
     pub last_seen_complete: i64,
@@ -602,6 +647,9 @@ pub struct Category {
     /// `Default` = inherit.
     #[serde(default)]
     pub share_limit_action: ShareLimitAction,
+    /// `Default` = inherit.
+    #[serde(default)]
+    pub share_limits_mode: ShareLimitsMode,
 }
 
 fn category_default_ratio() -> f64 {
@@ -622,6 +670,7 @@ impl Default for Category {
             seeding_time_limit: -2,
             inactive_seeding_time_limit: -2,
             share_limit_action: ShareLimitAction::Default,
+            share_limits_mode: ShareLimitsMode::Default,
         }
     }
 }
@@ -679,6 +728,7 @@ pub struct AddTorrentParams {
     pub seeding_time_limit: Option<i64>,
     pub inactive_seeding_time_limit: Option<i64>,
     pub share_limit_action: Option<ShareLimitAction>,
+    pub share_limits_mode: Option<ShareLimitsMode>,
     /// Per-file priorities in torrent file order; empty = all Normal.
     pub file_priorities: Vec<FilePriority>,
     /// Per-file renamed relative paths in torrent file order; empty = unchanged.

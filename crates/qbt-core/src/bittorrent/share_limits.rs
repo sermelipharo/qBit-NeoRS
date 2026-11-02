@@ -1,7 +1,7 @@
 //! Share limit enforcement (`SessionImpl::processTorrentShareLimits`) as a
 //! pure decision.
 
-use crate::model::ShareLimitAction;
+use crate::model::{ShareLimitAction, ShareLimitsMode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ShareInputs {
@@ -19,6 +19,8 @@ pub struct ShareInputs {
     pub ratio_limit: f64,
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
+    /// Effective mode; `Default` is treated as `MatchAny`.
+    pub mode: ShareLimitsMode,
     /// Effective action (never `Default`).
     pub action: ShareLimitAction,
 }
@@ -36,11 +38,27 @@ pub fn evaluate(i: &ShareInputs) -> Option<ShareDecision> {
     if !i.finished || i.forced {
         return None;
     }
-    let description = if i.ratio_limit >= 0.0 && i.ratio >= i.ratio_limit {
+    // If all share limits are disabled, there is nothing to check.
+    if !any_limit_set(i.ratio_limit, i.seeding_time_limit, i.inactive_seeding_time_limit) {
+        return None;
+    }
+    let ratio_set = i.ratio_limit >= 0.0;
+    let seeding_set = i.seeding_time_limit >= 0;
+    let inactive_set = i.inactive_seeding_time_limit >= 0;
+    let ratio_reached = i.ratio >= i.ratio_limit;
+    let seeding_reached = i.seeding_secs / 60 >= i.seeding_time_limit;
+    let inactive_reached = i.time_since_activity / 60 >= i.inactive_seeding_time_limit;
+    let description = if i.mode == ShareLimitsMode::MatchAll {
+        // Every enabled limit must be reached.
+        if (ratio_set && !ratio_reached) || (seeding_set && !seeding_reached) || (inactive_set && !inactive_reached) {
+            return None;
+        }
+        "Torrent reached the share limit(s)."
+    } else if ratio_set && ratio_reached {
         "Torrent reached the share ratio limit."
-    } else if i.seeding_time_limit >= 0 && i.seeding_secs / 60 >= i.seeding_time_limit {
+    } else if seeding_set && seeding_reached {
         "Torrent reached the seeding time limit."
-    } else if i.inactive_seeding_time_limit >= 0 && i.time_since_activity / 60 >= i.inactive_seeding_time_limit {
+    } else if inactive_set && inactive_reached {
         "Torrent reached the inactive seeding time limit."
     } else {
         return None;
@@ -78,6 +96,7 @@ mod tests {
             ratio_limit: -1.0,
             seeding_time_limit: -1,
             inactive_seeding_time_limit: -1,
+            mode: ShareLimitsMode::MatchAny,
             action: ShareLimitAction::Stop,
         }
     }
@@ -135,5 +154,40 @@ mod tests {
         assert_eq!(evaluate(&i).unwrap().action, ShareLimitAction::EnableSuperSeeding);
         i.super_seeding = true;
         assert_eq!(evaluate(&i), None);
+    }
+
+    #[test]
+    fn match_all_needs_every_enabled_limit() {
+        let mut i = inputs();
+        i.mode = ShareLimitsMode::MatchAll;
+        assert_eq!(evaluate(&i), None, "all limits disabled");
+        i.ratio_limit = 0.5;
+        i.seeding_time_limit = 10;
+        i.seeding_secs = 599;
+        // Ratio reached, seeding time not yet.
+        assert_eq!(evaluate(&i), None);
+        i.mode = ShareLimitsMode::Default;
+        assert_eq!(evaluate(&i).unwrap().description, "Torrent reached the share ratio limit.", "Default = MatchAny");
+        i.mode = ShareLimitsMode::MatchAll;
+        i.seeding_secs = 600;
+        let d = evaluate(&i).unwrap();
+        assert_eq!(d.description, "Torrent reached the share limit(s).");
+        assert_eq!(d.action_text, "Torrent stopped.");
+        // The disabled inactive limit is ignored; enabling it blocks again.
+        i.inactive_seeding_time_limit = 5;
+        i.time_since_activity = 299;
+        assert_eq!(evaluate(&i), None);
+        i.time_since_activity = 300;
+        assert!(evaluate(&i).is_some());
+        // Ratio falls short.
+        i.ratio = 0.4;
+        assert_eq!(evaluate(&i), None);
+        // A single enabled limit behaves like MatchAny but with the generic text.
+        let mut j = inputs();
+        j.mode = ShareLimitsMode::MatchAll;
+        j.seeding_time_limit = 0;
+        assert_eq!(evaluate(&j).unwrap().description, "Torrent reached the share limit(s).");
+        j.forced = true;
+        assert_eq!(evaluate(&j), None);
     }
 }

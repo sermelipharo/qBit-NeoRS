@@ -46,7 +46,7 @@ Things to know before reading:
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #24043 | Option to match all share limits (`MatchAny`/`MatchAll`) | ⬜ | Not present (no `share_limits_mode` anywhere). Core: per-torrent, per-category and global mode in `bittorrent/share_limits.rs`; prefs; WebAPI; Swift picker in the Share limits dialog and Downloads prefs |
+| #24043 | Option to match all share limits (`MatchAny`/`MatchAll`) | ✅ | `ShareLimitsMode` per torrent, category (inherits from the parent) and global (`share_limits_mode`, default MatchAny); `share_limits::evaluate` (MatchAll: every enabled limit, "Torrent reached the share limit(s).") and the seeding ETA (min / max of the per-limit ETAs); resume `share_limits_mode`, RSS `share_limits_mode`, imports from qBittorrent's ini and fastresume. Swift: "Mode:" in the share limits editor, "Any of the above" / "All the above" in Seeding Limits |
 | #24266 | "Manage content" (Torrent Content Layout) with batch editing of file names | ⬜ | New Swift dialog from the transfer-list menu: edit many file/folder names at once. Core rename exists (`bittorrent/engine.rs:848`) |
 | #23386 | Enhance file name validation | ⬜ | Small: `rename_path` only checks the last component (`webui/api/torrents.rs:1114-1125`); validate every component of the new path, reject `.`/`..`. Category paths are already safe (`bittorrent/paths.rs` `to_valid_path`) |
 | #23157 | Allow banning an IP range | ⬜ | `parse_banned` accepts single IPs only (`ipfilter.rs:412`); accept ranges, log rejected entries; Swift `IPAddressParser` and `AddressListSheet` |
@@ -114,7 +114,7 @@ Things to know before reading:
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | 🟡 | Done except `shareLimitsMode` (comes with #24043): limits parsed and validated in `apply_share_limit_params`; `torrents/categories` now reports the stored limits instead of -2 |
+| #24918 (2.16.2) | Category share limits in `createCategory`/`editCategory` (`ratioLimit`, `seedingTimeLimit`, `inactiveSeedingTimeLimit`, `shareLimitsMode`, `shareLimitAction`); `editCategory` no longer needs `savePath` | ✅ | Limits parsed and validated in `apply_share_limit_params`, `shareLimitsMode` included (an unknown name is a 400, never a silent Default); `torrents/categories` reports the stored limits and `share_limits_mode` |
 | #24798 | `editCategory` must not overwrite unrelated options | ✅ | Edits start from the stored category; `savePath` optional; empty `downloadPathEnabled` = default (`webui/api/torrents.rs` `edit_category`, e2e `edit_category_keeps_what_the_call_leaves_out`) |
 | #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ✅ | Core preferences (`advanced`), imported from qBittorrent's ini; the Mac app moved its own stored values into them once and reads them from the core; the Web UI honours `confirm_remove_all_tags` and `confirm_torrent_recheck` |
 | #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ✅ | Stored, clamped to -7..7, imported from qBittorrent; passing the variance to SAM is the #24891 engine row |
@@ -139,7 +139,7 @@ Things to know before reading:
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
 | #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ⬜ | Serve a completed file from torrent content. Security: resolve against the torrent's content root only, reject `..` and symlink escape, require the file complete, stream with `Content-Disposition` |
 | #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ✅ | `RssManager::clone_rule` |
-| #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ⬜ | See Core/engine |
+| #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ✅ | `torrents/info` and `sync/maindata` report the torrent's own mode; `app/preferences` `share_limits_mode` (unknown → MatchAny); `torrents/add` `shareLimitsMode`. Deviation: `setShareLimits` keeps `shareLimitsMode` optional (missing = Default) so clients written for 5.2 still work |
 | #23856 (2.15.2) | `app/getFreeSpaceAtPath` | ✅ | `webui/api/app.rs:92`, route `webui/api/mod.rs:173` (the changelog line's `Action` suffix is the C++ method name; the real route is `getFreeSpaceAtPath`) |
 | #23784 (2.16.1) | `search/status` has `pattern`, `category`, `plugins`; prefs `store_search_jobs`, `store_search_job_results` | ⬜ | Add the fields in `webui/api/search.rs` and two prefs; Swift already restores tabs (`Features/Search/SearchSessionStore.swift`) |
 | #24341 | Use torrent names for exported .torrent files | ✅ | `torrents/export` names the file after the torrent (`to_valid_file_name`), the hash as fallback; `Content-Disposition` carries an ASCII `filename` plus RFC 5987 `filename*` (`webui/webapp.rs` `content_disposition`) |

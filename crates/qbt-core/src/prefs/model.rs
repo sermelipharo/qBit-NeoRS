@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::enums::*;
-use crate::model::{ContentLayout, ShareLimitAction, StopCondition, TorrentParamsTemplate};
+use crate::model::{ContentLayout, ShareLimitAction, ShareLimitsMode, StopCondition, TorrentParamsTemplate};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
@@ -330,6 +330,9 @@ pub struct BitTorrentPrefs {
     pub max_seeding_time: i64,
     /// Minutes, -1 = disabled.
     pub max_inactive_seeding_time: i64,
+    /// qBittorrent 5.3: act when any enabled limit is reached (`MatchAny`)
+    /// or only when all of them are (`MatchAll`). `Default` means `MatchAny`.
+    pub share_limits_mode: ShareLimitsMode,
     /// Never `Default` at the global level.
     pub max_ratio_act: ShareLimitAction,
     pub add_trackers_enabled: bool,
@@ -361,6 +364,7 @@ impl Default for BitTorrentPrefs {
             max_ratio: -1.0,
             max_seeding_time: -1,
             max_inactive_seeding_time: -1,
+            share_limits_mode: ShareLimitsMode::MatchAny,
             max_ratio_act: ShareLimitAction::Stop,
             add_trackers_enabled: false,
             add_trackers: String::new(),

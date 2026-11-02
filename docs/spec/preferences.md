@@ -315,6 +315,7 @@ None. In the source, the macOS `"Show speed in Dock"` / `"Show qBittorrent in me
 | 111 | `max_inactive_seeding_time_enabled` | bool (derived) | `false` | | `"When inactive seeding time reaches"` | |
 | 112 | `max_inactive_seeding_time` | int minutes | `-1` | as above; spin default 1440 | spin `" min"` | Seeding time with no upload activity. · `BitTorrent/Session/GlobalMaxInactiveSeedingMinutes` |
 | 113 | `max_ratio_act` | int enum `ShareLimitAction` | `0` | `0` Stop, `1` Remove, `2` EnableSuperSeeding, `3` RemoveWithContent. SET values outside 0–3 → Stop | `"then"` combo, **GUI index ≠ enum value**: idx0 `"Stop torrent"` (0), idx1 `"Remove torrent"` (1), idx2 `"Remove torrent and its files"` (3), idx3 `"Enable super seeding for torrent"` (2). Enabled only when at least one limit is checked | Action when a global share limit is reached. `Default` (−1) is never stored globally (it maps to Stop). · `BitTorrent/Session/ShareLimitAction` |
+| — | `share_limits_mode` (5.3, between `max_inactive_seeding_time` and `max_ratio_act`) | string | `"MatchAny"` | `MatchAny`, `MatchAll`; SET: unknown values give `MatchAny` (`toEnum(…, MatchAny)`), a stored `Default` reads as `MatchAny` | radios `"Any of the above"` / `"All the above"` under the three limits (always enabled) | Whether reaching any enabled global limit triggers the action, or only reaching all of them. Torrents and categories with mode `Default` inherit it. · `BitTorrent/Session/ShareLimitsMode` (enum name; numbers 0/1 also imported) |
 | 114 | `add_trackers_enabled` | bool | `false` | | Checkable group `"Automatically append these trackers to new downloads:"` (mnemonic `A&utomatically…`) | · `BitTorrent/Session/AddTrackersEnabled` |
 | 115 | `add_trackers` | string | `""` | One URL per line; a **blank line starts a new tier** (`parseTrackerEntries`) | plain-text edit | Trackers appended to every new torrent. · `BitTorrent/Session/AdditionalTrackers` |
 | 116 | `add_trackers_from_url_enabled` | bool | `false` | | Checkable group `"Automatically append trackers from URL to new downloads:"` | Enabling it fetches the list now and then every **24 h**. Disabling it clears the fetched list and deletes `<data>/additional_trackers_from_url.txt`. · `BitTorrent/Session/AddTrackersFromURLEnabled` |
@@ -652,6 +653,7 @@ These are not in the WebAPI. A native client still has to implement them for par
 | `TorrentContentLayout` | `Original=0`, `Subfolder=1`, `NoSubfolder=2` (strings in the API) | `torrent_content_layout` |
 | `Torrent::StopCondition` | `None=0`, `MetadataReceived=1`, `FilesChecked=2` (strings in the API) | `torrent_stop_condition` |
 | `ShareLimitAction` | `Default=-1`, `Stop=0`, `Remove=1`, `EnableSuperSeeding=2`, `RemoveWithContent=3` | `max_ratio_act` (ints) |
+| `ShareLimitsMode` (5.3) | `Default=-1`, `MatchAny=0`, `MatchAll=1` | `share_limits_mode` (names) |
 | `Net::ProxyType` | `None=0`, `HTTP=1`, `SOCKS5=2`, `SOCKS4=5` (strings in the API) | `proxy_type` |
 | `Scheduler::Days` | `EveryDay=0`, `Weekday=1`, `Weekend=2`, `Monday=3`, `Tuesday=4`, `Wednesday=5`, `Thursday=6`, `Friday=7`, `Saturday=8`, `Sunday=9` | `scheduler_days` |
 | `DNS::Service` | `DynDNS=0`, `NoIP=1`, `None=-1` | `dyndns_service` |
@@ -747,6 +749,17 @@ These are not in the WebAPI. A native client still has to implement them for par
 220 peer_turnover_cutoff              221 peer_turnover_interval            222 request_queue_size
 223 dht_bootstrap_nodes
 ```
+
+qBittorrent 5.3 changes this list (231 keys; `APPENDIX_A` in
+`crates/qbt-core/src/prefs/api_json.rs` is the exact order): 39 is
+`mail_notification_encryption_type` instead of `mail_notification_ssl_enabled`;
+added are `i2p_pex_enabled` (after `i2p_mixed_mode`),
+`i2p_inbound_length_variance` and `i2p_outbound_length_variance` (after
+`i2p_outbound_length`), `share_limits_mode` (between
+`max_inactive_seeding_time` and `max_ratio_act`), `web_ui_sessions_count_limit`
+(after `web_ui_session_timeout`), `confirm_remove_all_tags` and
+`confirm_remove_tracker_from_all_torrents` (after `confirm_torrent_recheck`),
+and `webtorrent_stun_server` (last).
 
 ## Appendix B — SET vs GET differences
 

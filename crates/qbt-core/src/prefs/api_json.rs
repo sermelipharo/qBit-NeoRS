@@ -12,7 +12,7 @@ use serde_json::{Map, Value, json};
 
 use super::*;
 use crate::error::{QbtError, QbtResult};
-use crate::model::{ContentLayout, ShareLimitAction, StopCondition};
+use crate::model::{ContentLayout, ShareLimitAction, ShareLimitsMode, StopCondition};
 use crate::webui::http::parse_int_str;
 use crate::webui::subnet::{Subnet, parse_ip};
 
@@ -306,6 +306,7 @@ pub fn to_json(p: &Preferences) -> Value {
     put("max_seeding_time", json!(bt.max_seeding_time));
     put("max_inactive_seeding_time_enabled", json!(bt.max_inactive_seeding_time >= 0));
     put("max_inactive_seeding_time", json!(bt.max_inactive_seeding_time));
+    put("share_limits_mode", json!(bt.share_limits_mode.global().as_str()));
     put("max_ratio_act", json!(global_share_action(bt.max_ratio_act)));
     put("add_trackers_enabled", json!(bt.add_trackers_enabled));
     put("add_trackers", json!(bt.add_trackers));
@@ -706,6 +707,10 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     } else if let Some(v) = get("max_inactive_seeding_time") {
         bt.max_inactive_seeding_time = to_int(v).max(-1);
     }
+    if let Some(v) = get("share_limits_mode") {
+        // `toEnum(value, MatchAny)`; "Default" is stored as MatchAny too.
+        bt.share_limits_mode = ShareLimitsMode::parse(&to_str(v)).unwrap_or(ShareLimitsMode::MatchAny).global();
+    }
     if let Some(v) = get("max_ratio_act") {
         bt.max_ratio_act = match to_int(v) {
             1 => ShareLimitAction::Remove,
@@ -951,8 +956,8 @@ mod tests {
         "max_active_downloads", "max_active_torrents", "max_active_uploads", "dont_count_slow_torrents",
         "slow_torrent_dl_rate_threshold", "slow_torrent_ul_rate_threshold", "slow_torrent_inactive_timer",
         "max_ratio_enabled", "max_ratio", "max_seeding_time_enabled", "max_seeding_time",
-        "max_inactive_seeding_time_enabled", "max_inactive_seeding_time", "max_ratio_act", "add_trackers_enabled",
-        "add_trackers", "add_trackers_from_url_enabled", "add_trackers_url", "add_trackers_url_list",
+        "max_inactive_seeding_time_enabled", "max_inactive_seeding_time", "share_limits_mode", "max_ratio_act",
+        "add_trackers_enabled", "add_trackers", "add_trackers_from_url_enabled", "add_trackers_url", "add_trackers_url_list",
         "web_ui_domain_list", "web_ui_address", "web_ui_port", "web_ui_upnp", "use_https", "web_ui_https_cert_path",
         "web_ui_https_key_path", "web_ui_username", "bypass_local_auth", "bypass_auth_subnet_whitelist_enabled",
         "bypass_auth_subnet_whitelist", "web_ui_max_auth_fail_count", "web_ui_ban_duration", "web_ui_session_timeout",
@@ -991,7 +996,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3.
-        assert_eq!(APPENDIX_A.len(), 230);
+        assert_eq!(APPENDIX_A.len(), 231);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);
@@ -1020,6 +1025,7 @@ mod tests {
         assert_eq!(v["max_ratio_enabled"], false);
         assert_eq!(v["max_seeding_time_enabled"], false);
         assert_eq!(v["max_ratio_act"], 0);
+        assert_eq!(v["share_limits_mode"], "MatchAny");
         assert_eq!(v["random_port"], false);
         assert_eq!(v["alt_dl_limit"], 10240);
         assert_eq!(v["scan_dirs"], json!({}));
@@ -1175,6 +1181,28 @@ mod tests {
         assert_eq!(p.bittorrent.max_ratio_act, ShareLimitAction::Stop);
         apply(&mut p, &obj(json!({"max_ratio_act": 3}))).unwrap();
         assert_eq!(to_json(&p)["max_ratio_act"], 3);
+    }
+
+    #[test]
+    fn share_limits_mode_round_trip() {
+        let mut p = Preferences::default();
+        apply(&mut p, &obj(json!({"share_limits_mode": "MatchAll"}))).unwrap();
+        assert_eq!(p.bittorrent.share_limits_mode, ShareLimitsMode::MatchAll);
+        assert_eq!(to_json(&p)["share_limits_mode"], "MatchAll");
+        let stored: Preferences = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
+        assert_eq!(stored.bittorrent.share_limits_mode, ShareLimitsMode::MatchAll);
+        // `toEnum(value, MatchAny)`: unknown values and Default give MatchAny.
+        for v in [json!("bogus"), json!("Default"), json!(1)] {
+            apply(&mut p, &obj(json!({"share_limits_mode": "MatchAll"}))).unwrap();
+            apply(&mut p, &obj(json!({"share_limits_mode": v}))).unwrap();
+            assert_eq!(p.bittorrent.share_limits_mode, ShareLimitsMode::MatchAny);
+        }
+        // A stored Default is reported as MatchAny.
+        p.bittorrent.share_limits_mode = ShareLimitsMode::Default;
+        assert_eq!(to_json(&p)["share_limits_mode"], "MatchAny");
+        // Old preference files without the key.
+        let old: Preferences = serde_json::from_str(r#"{"bittorrent": {"max_ratio": 2.0}}"#).unwrap();
+        assert_eq!(old.bittorrent.share_limits_mode, ShareLimitsMode::MatchAny);
     }
 
     #[test]

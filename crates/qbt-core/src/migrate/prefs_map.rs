@@ -28,6 +28,8 @@ enum Conv {
     ProxyType,
     /// `Net::SMTPEncryptionType` name or number (qBittorrent 5.3).
     SmtpEncryption,
+    /// `BitTorrent::ShareLimitsMode` name or number (qBittorrent 5.3).
+    ShareLimitsMode,
 }
 
 const SHARE_ACTIONS: &[(&str, i64)] = &[("Stop", 0), ("Remove", 1), ("EnableSuperSeeding", 2), ("RemoveWithContent", 3), ("Default", 0)];
@@ -156,6 +158,7 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("max_ratio", "BitTorrent/Session/GlobalMaxRatio", Float),
     ("max_seeding_time", "BitTorrent/Session/GlobalMaxSeedingMinutes", Int),
     ("max_inactive_seeding_time", "BitTorrent/Session/GlobalMaxInactiveSeedingMinutes", Int),
+    ("share_limits_mode", "BitTorrent/Session/ShareLimitsMode", ShareLimitsMode),
     ("max_ratio_act", "BitTorrent/Session/ShareLimitAction", Enum(SHARE_ACTIONS)),
     ("add_trackers_enabled", "BitTorrent/Session/AddTrackersEnabled", Bool),
     ("add_trackers", "BitTorrent/Session/AdditionalTrackers", Str),
@@ -334,6 +337,17 @@ fn smtp_encryption(v: &QValue) -> Option<String> {
     Some(name.into())
 }
 
+/// The session reads a stored `Default` as `MatchAny`.
+fn share_limits_mode(v: &QValue) -> Option<String> {
+    let s = v.to_string_value();
+    let name = match s.trim() {
+        "-1" | "0" | "Default" | "MatchAny" => "MatchAny",
+        "1" | "MatchAll" => "MatchAll",
+        _ => return None,
+    };
+    Some(name.into())
+}
+
 fn qtime(v: &QValue) -> Option<(i64, i64)> {
     match v {
         QValue::Variant(Variant::Time(Some(ms))) => Some((i64::from(ms / 3_600_000), i64::from((ms / 60_000) % 60))),
@@ -367,6 +381,7 @@ pub fn api_json_from_ini(ini: &IniFile) -> (Map<String, Value>, Vec<String>) {
             Enum(names) => enum_value(v, names).map(Value::from),
             ProxyType => proxy_type(v).map(Value::from),
             SmtpEncryption => smtp_encryption(v).map(Value::from),
+            ShareLimitsMode => share_limits_mode(v).map(Value::from),
         };
         if let Some(value) = value {
             m.insert(api.to_owned(), value);
@@ -657,6 +672,19 @@ mod tests {
         assert_eq!(enc("[Preferences]\nMailNotification\\req_ssl=false\n"), E::None);
         assert_eq!(enc("[Preferences]\nMailNotification\\req_ssl=false\nMailNotification\\SMTPEncryptionType=SMTPS\n"), E::Smtps);
         assert_eq!(enc("[Preferences]\n"), E::Smtps, "default");
+
+        // Share limits mode (qBittorrent 5.3): enum name or number.
+        use crate::model::ShareLimitsMode as M;
+        let mode = |text: &str| {
+            let f = ini(text);
+            let (api, _) = api_json_from_ini(&f);
+            build(&api, &f, None, "").unwrap().prefs.bittorrent.share_limits_mode
+        };
+        assert_eq!(mode("[BitTorrent]\nSession\\ShareLimitsMode=MatchAll\n"), M::MatchAll);
+        assert_eq!(mode("[BitTorrent]\nSession\\ShareLimitsMode=1\n"), M::MatchAll);
+        assert_eq!(mode("[BitTorrent]\nSession\\ShareLimitsMode=Default\n"), M::MatchAny);
+        assert_eq!(mode("[BitTorrent]\nSession\\ShareLimitsMode=Bogus\n"), M::MatchAny);
+        assert_eq!(mode("[BitTorrent]\n"), M::MatchAny, "default");
 
         // Malformed hashes are refused.
         let f = ini("[Preferences]\nWebUI\\Password_PBKDF2=\"@ByteArray(not a hash)\"\n");

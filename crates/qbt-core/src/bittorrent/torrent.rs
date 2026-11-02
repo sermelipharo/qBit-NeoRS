@@ -53,6 +53,7 @@ pub fn global_limits(p: &Preferences) -> GlobalShareLimits {
         ratio: if b.max_ratio < 0.0 { -1.0 } else { b.max_ratio },
         seeding_minutes: if b.max_seeding_time < 0 { -1 } else { b.max_seeding_time },
         inactive_seeding_minutes: if b.max_inactive_seeding_time < 0 { -1 } else { b.max_inactive_seeding_time },
+        mode: b.share_limits_mode.global(),
         action: b.max_ratio_act,
     }
 }
@@ -164,6 +165,7 @@ pub struct TorrentEntry {
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
     pub share_limit_action: ShareLimitAction,
+    pub share_limits_mode: ShareLimitsMode,
     pub dl_limit: i64,
     pub ul_limit: i64,
     pub stopped: bool,
@@ -251,6 +253,7 @@ impl TorrentEntry {
             seeding_time_limit: -2,
             inactive_seeding_time_limit: -2,
             share_limit_action: ShareLimitAction::Default,
+            share_limits_mode: ShareLimitsMode::Default,
             dl_limit: 0,
             ul_limit: 0,
             stopped: false,
@@ -309,6 +312,7 @@ impl TorrentEntry {
         e.seeding_time_limit = r.seeding_time_limit.max(-2);
         e.inactive_seeding_time_limit = r.inactive_seeding_time_limit.max(-2);
         e.share_limit_action = categories::action_from_str(&r.share_limit_action);
+        e.share_limits_mode = ShareLimitsMode::from_str_or_default(&r.share_limits_mode);
         e.dl_limit = r.download_limit.max(0);
         e.ul_limit = r.upload_limit.max(0);
         e.stopped = r.stopped;
@@ -373,6 +377,7 @@ impl TorrentEntry {
             seeding_time_limit: self.seeding_time_limit,
             inactive_seeding_time_limit: self.inactive_seeding_time_limit,
             share_limit_action: categories::action_to_str(self.share_limit_action).into(),
+            share_limits_mode: self.share_limits_mode.as_str().into(),
             download_limit: self.dl_limit,
             upload_limit: self.ul_limit,
             stopped: self.stopped,
@@ -598,6 +603,14 @@ impl TorrentEntry {
         }
     }
 
+    pub fn effective_share_limits_mode(&self, env: &Env) -> ShareLimitsMode {
+        if self.share_limits_mode == ShareLimitsMode::Default {
+            categories::category_share_limits_mode(env.cats, &self.category, &env.limits)
+        } else {
+            self.share_limits_mode
+        }
+    }
+
     pub fn total_done(&self) -> i64 {
         self.rt.file_progress.iter().sum::<u64>() as i64
     }
@@ -698,6 +711,7 @@ impl TorrentEntry {
             ratio_limit: self.effective_ratio_limit(env),
             seeding_time_limit: self.effective_seeding_time_limit(env),
             inactive_seeding_time_limit: self.effective_inactive_seeding_time_limit(env),
+            mode: self.effective_share_limits_mode(env),
             seeding_time: self.seeding_time,
             time_since_activity: self.time_since_activity(env.now),
         })
@@ -785,6 +799,7 @@ impl TorrentEntry {
             popularity: state::api_ratio(state::popularity(ratio, self.active_time)),
             seeding_time_limit: self.seeding_time_limit,
             inactive_seeding_time_limit: self.inactive_seeding_time_limit,
+            share_limits_mode: self.share_limits_mode,
             share_limit_action: self.share_limit_action,
             last_seen_complete: self.seen_complete,
             last_activity: {
@@ -1008,12 +1023,18 @@ mod tests {
         e.save_path = "/s".into();
         e.forced = true;
         e.ratio_limit = 1.25;
+        e.share_limits_mode = ShareLimitsMode::MatchAll;
         e.stop_condition = StopCondition::FilesChecked;
         e.peers = vec!["1.2.3.4:5".parse().unwrap()];
+        assert_eq!(e.to_resume().share_limits_mode, "MatchAll");
         let back = TorrentEntry::from_resume(e.to_resume(), Some(m));
         assert_eq!(back.to_resume(), e.to_resume());
         assert!(!back.auto_tmm);
         assert!(back.forced);
+        assert_eq!(back.share_limits_mode, ShareLimitsMode::MatchAll);
+        // Records written before the mode existed inherit it.
+        let old: FastResume = serde_json::from_str(r#"{"info_hash":"x","share_limit_action":"Stop"}"#).unwrap();
+        assert_eq!(TorrentEntry::from_resume(old, None).share_limits_mode, ShareLimitsMode::Default);
     }
 
     #[test]

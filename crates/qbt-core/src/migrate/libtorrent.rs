@@ -75,6 +75,8 @@ pub struct LtResume {
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
     pub share_limit_action: String,
+    /// `qBt-shareLimitsMode` (qBittorrent 5.3).
+    pub share_limits_mode: String,
     pub content_layout: String,
     pub stop_condition: String,
     pub seed_status: bool,
@@ -169,6 +171,7 @@ impl LtResume {
             seeding_time_limit: int(g("qBt-seedingTimeLimit"), -2),
             inactive_seeding_time_limit: int(g("qBt-inactiveSeedingTimeLimit"), -2),
             share_limit_action: bstr(g("qBt-shareLimitAction")),
+            share_limits_mode: bstr(g("qBt-shareLimitsMode")),
             content_layout: String::new(),
             stop_condition: bstr(g("qBt-stopCondition")),
             seed_status: flag(g("qBt-seedStatus")),
@@ -260,6 +263,10 @@ pub fn to_fast_resume(r: &LtResume, id: &str, meta: Option<&TorrentMeta>, have: 
         inactive_seeding_time_limit: r.inactive_seeding_time_limit.max(-2),
         share_limit_action: match r.share_limit_action.as_str() {
             "Stop" | "Remove" | "RemoveWithContent" | "EnableSuperSeeding" => r.share_limit_action.clone(),
+            _ => "Default".into(),
+        },
+        share_limits_mode: match r.share_limits_mode.as_str() {
+            "MatchAny" | "MatchAll" => r.share_limits_mode.clone(),
             _ => "Default".into(),
         },
         download_limit: r.download_rate_limit.max(0),
@@ -505,6 +512,7 @@ pub(crate) mod tests {
             ("qBt-ratioLimit", Value::Int(1500)),
             ("qBt-seedingTimeLimit", Value::Int(-2)),
             ("qBt-shareLimitAction", b("Default")),
+            ("qBt-shareLimitsMode", b("MatchAll")),
             ("qBt-contentLayout", b("NoSubfolder")),
             ("qBt-stopCondition", b("None")),
             ("qBt-seedStatus", Value::Int(1)),
@@ -577,6 +585,7 @@ pub(crate) mod tests {
         assert!(fr.stopped);
         assert_eq!(fr.operating_mode, "AutoManaged");
         assert_eq!(fr.ratio_limit, 1.5);
+        assert_eq!((fr.share_limit_action.as_str(), fr.share_limits_mode.as_str()), ("Default", "MatchAll"));
         assert_eq!((fr.added_on, fr.completed_on, fr.seen_complete), (1_700_000_000, 1_700_000_100, -1));
         assert_eq!((fr.last_upload, fr.last_download), (-1, 1_700_000_050));
         assert_eq!((fr.all_time_upload, fr.all_time_download, fr.seeding_time), (1234, 5678, 400));
@@ -586,6 +595,13 @@ pub(crate) mod tests {
         assert_eq!(fr.completed_bytes, 40);
         assert_eq!(fr.content_layout, "NoSubfolder");
         assert_eq!(wanted_progress(&meta, &fr.file_priorities, &[true, false, true]), 24.0 / 40.0);
+
+        // Unknown or missing modes (before 5.3) inherit.
+        let mut r = r;
+        r.share_limits_mode = "Bogus".into();
+        assert_eq!(to_fast_resume(&r, &meta.id(), Some(&meta), Some(&have), 3).0.share_limits_mode, "Default");
+        r.share_limits_mode = String::new();
+        assert_eq!(to_fast_resume(&r, &meta.id(), Some(&meta), Some(&have), 3).0.share_limits_mode, "Default");
     }
 
     #[test]

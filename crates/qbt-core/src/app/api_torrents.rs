@@ -200,17 +200,19 @@ impl App {
         self.session.set_upload_limit(&hashes, limit)
     }
 
-    /// Ratio -2 = global, -1 = unlimited; times in minutes with the same sentinels.
+    /// Ratio -2 = global, -1 = unlimited; times in minutes with the same sentinels;
+    /// mode and action `Default` = from category / global.
     pub fn set_share_limits(
         &self,
         hashes: Vec<String>,
         ratio_limit: f64,
         seeding_time_limit: i64,
         inactive_seeding_time_limit: i64,
+        mode: ShareLimitsMode,
         action: ShareLimitAction,
     ) -> QbtResult<()> {
         self.session
-            .set_share_limits(&hashes, ratio_limit, seeding_time_limit, inactive_seeding_time_limit, action)
+            .set_share_limits(&hashes, ratio_limit, seeding_time_limit, inactive_seeding_time_limit, mode, action)
     }
 
     pub fn set_super_seeding(&self, hashes: Vec<String>, value: bool) -> QbtResult<()> {

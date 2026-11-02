@@ -154,7 +154,7 @@ fn torrent_lifecycle_and_persistence() {
     app.add_tags(vec![hash.clone()], vec!["iso".into(), "x86".into()]).unwrap();
     assert!(app.add_tags(vec![hash.clone()], vec!["a,b".into()]).is_err());
     app.rename_torrent(hash.clone(), "My\nAlbum".into()).unwrap();
-    app.set_share_limits(vec![hash.clone()], 2.5, -2, -1, ShareLimitAction::Stop).unwrap();
+    app.set_share_limits(vec![hash.clone()], 2.5, -2, -1, ShareLimitsMode::Default, ShareLimitAction::Stop).unwrap();
     let q = TorrentQuery { category: Some("Linux".into()), tag: Some("iso".into()), ..Default::default() };
     assert_eq!(app.torrents_filtered(q).len(), 1);
 
@@ -349,7 +349,7 @@ fn add_options_queueing_and_share_limits() {
 
     // Share limits: ratio 0 is reached as soon as the torrent seeds.
     rt.block_on(app.start_torrents(vec![id.clone()])).unwrap();
-    app.set_share_limits(vec![id.clone()], 0.0, -2, -2, ShareLimitAction::Stop).unwrap();
+    app.set_share_limits(vec![id.clone()], 0.0, -2, -2, ShareLimitsMode::Default, ShareLimitAction::Stop).unwrap();
     let start_wait = Instant::now();
     loop {
         let t = app.torrent(id.clone()).unwrap();

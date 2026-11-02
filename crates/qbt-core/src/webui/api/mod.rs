@@ -399,6 +399,7 @@ pub fn category_json(c: &Category) -> Value {
         "seeding_time_limit": c.seeding_time_limit,
         "inactive_seeding_time_limit": c.inactive_seeding_time_limit,
         "share_limit_action": c.share_limit_action,
+        "share_limits_mode": c.share_limits_mode,
     })
 }
 

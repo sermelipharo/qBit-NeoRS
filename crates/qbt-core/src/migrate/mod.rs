@@ -791,6 +791,9 @@ fn merge_torrent(
     if r.share_limit_action == "Default" {
         r.share_limit_action = q.share_limit_action.clone();
     }
+    if r.share_limits_mode == "Default" {
+        r.share_limits_mode = q.share_limits_mode.clone();
+    }
     r.queue_position = queue_position;
     if opts.stop_all {
         r.stopped = true;

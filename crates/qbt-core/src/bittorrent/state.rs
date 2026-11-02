@@ -2,7 +2,7 @@
 //! buckets (`TorrentFilter::matchStatus`) and the derived values (ratio,
 //! popularity, ETA, time since activity).
 
-use crate::model::{MAX_ETA, MAX_RATIO, StatusFilter, TorrentState};
+use crate::model::{MAX_ETA, MAX_RATIO, ShareLimitsMode, StatusFilter, TorrentState};
 
 /// Everything `updateState` looks at.
 #[derive(Clone, Copy, Debug, Default)]
@@ -151,6 +151,9 @@ pub struct EtaInputs {
     pub ratio_limit: f64,
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
+    /// Effective mode: `MatchAll` waits for the last limit, anything else
+    /// for the first.
+    pub mode: ShareLimitsMode,
     pub seeding_time: i64,
     pub time_since_activity: i64,
 }
@@ -161,23 +164,30 @@ pub fn eta(i: &EtaInputs) -> i64 {
         return MAX_ETA;
     }
     if i.finished {
-        if i.ratio_limit < 0.0 && i.seeding_time_limit < 0 && i.inactive_seeding_time_limit < 0 {
-            return MAX_ETA;
-        }
-        let mut ratio_eta = MAX_ETA;
-        if i.avg_ul > 0.0 && i.ratio_limit >= 0.0 {
+        // qBittorrent 5.3: one ETA per enabled limit; the first reached
+        // limit (MatchAny) or the last one (MatchAll) decides.
+        let mut etas = [None; 3];
+        if i.ratio_limit >= 0.0 {
             let real_dl = if i.all_time_download <= 0 { i.wanted_size } else { i.all_time_download };
-            ratio_eta = (((real_dl as f64) * i.ratio_limit - i.all_time_upload as f64) / i.avg_ul) as i64;
+            let upload_limit = real_dl as f64 * i.ratio_limit;
+            let uploaded = i.all_time_upload as f64;
+            etas[0] = Some(if upload_limit <= uploaded {
+                0
+            } else if i.avg_ul > 0.0 {
+                ((upload_limit - uploaded) / i.avg_ul) as i64
+            } else {
+                MAX_ETA
+            });
         }
-        let mut seeding_eta = MAX_ETA;
         if i.seeding_time_limit >= 0 {
-            seeding_eta = (i.seeding_time_limit * 60 - i.seeding_time).max(0);
+            etas[1] = Some((i.seeding_time_limit * 60 - i.seeding_time).max(0));
         }
-        let mut inactive_eta = MAX_ETA;
         if i.inactive_seeding_time_limit >= 0 {
-            inactive_eta = (i.inactive_seeding_time_limit * 60 - i.time_since_activity).max(0);
+            etas[2] = Some((i.inactive_seeding_time_limit * 60 - i.time_since_activity).max(0));
         }
-        return ratio_eta.min(seeding_eta).min(inactive_eta);
+        let etas = etas.into_iter().flatten();
+        let eta = if i.mode == ShareLimitsMode::MatchAll { etas.max() } else { etas.min() };
+        return eta.unwrap_or(MAX_ETA);
     }
     if i.avg_dl <= 0.0 {
         return MAX_ETA;
@@ -329,6 +339,7 @@ mod tests {
             ratio_limit: -1.0,
             seeding_time_limit: -1,
             inactive_seeding_time_limit: -1,
+            mode: ShareLimitsMode::MatchAny,
             seeding_time: 0,
             time_since_activity: -1,
         }
@@ -356,6 +367,37 @@ mod tests {
         i.inactive_seeding_time_limit = 1;
         i.time_since_activity = 120;
         assert_eq!(eta(&i), 0);
+    }
+
+    #[test]
+    fn seeding_eta_by_share_limits_mode() {
+        let mut i = eta_inputs();
+        i.finished = true;
+        i.all_time_download = 1000;
+        i.all_time_upload = 900;
+        i.avg_ul = 10.0;
+        i.ratio_limit = 1.0; // 10 s
+        i.seeding_time_limit = 10;
+        i.seeding_time = 300; // 300 s
+        i.inactive_seeding_time_limit = 1;
+        i.time_since_activity = 30; // 30 s
+        assert_eq!(eta(&i), 10, "MatchAny: the first limit");
+        i.mode = ShareLimitsMode::MatchAll;
+        assert_eq!(eta(&i), 300, "MatchAll: the last limit");
+        // Disabled limits do not count.
+        i.seeding_time_limit = -1;
+        assert_eq!(eta(&i), 30);
+        // A ratio already reached is 0 even without upload; one not reached
+        // without upload never ends.
+        i.avg_ul = 0.0;
+        assert_eq!(eta(&i), MAX_ETA);
+        i.all_time_upload = 1000;
+        assert_eq!(eta(&i), 30);
+        i.mode = ShareLimitsMode::MatchAny;
+        assert_eq!(eta(&i), 0);
+        i.ratio_limit = -1.0;
+        i.inactive_seeding_time_limit = -1;
+        assert_eq!(eta(&i), MAX_ETA, "no limits");
     }
 
     #[test]

@@ -956,6 +956,7 @@ impl Session {
         ratio_limit: f64,
         seeding_time_limit: i64,
         inactive_seeding_time_limit: i64,
+        mode: ShareLimitsMode,
         action: ShareLimitAction,
     ) -> QbtResult<()> {
         let ratio = if ratio_limit < -2.0 || !ratio_limit.is_finite() { -1.0 } else { ratio_limit };
@@ -965,6 +966,7 @@ impl Session {
             e.ratio_limit = ratio;
             e.seeding_time_limit = seed;
             e.inactive_seeding_time_limit = inactive;
+            e.share_limits_mode = mode;
             e.share_limit_action = action;
         });
         Ok(())

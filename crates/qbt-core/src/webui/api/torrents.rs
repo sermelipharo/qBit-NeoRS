@@ -154,7 +154,10 @@ pub async fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             let seeding = coerce_i(c.params.i64("seedingTimeLimit"));
             let inactive = coerce_i(c.params.i64("inactiveSeedingTimeLimit"));
             let action = share_limit_action(c.params.str("shareLimitAction"));
-            skip_not_found(c.app.set_share_limits(c.torrent_ids("hashes"), ratio, seeding, inactive, action))?;
+            // qBittorrent 5.3 requires `shareLimitsMode`; it stays optional
+            // here (missing = Default) so older clients keep working.
+            let mode = ShareLimitsMode::from_str_or_default(c.params.str("shareLimitsMode"));
+            skip_not_found(c.app.set_share_limits(c.torrent_ids("hashes"), ratio, seeding, inactive, mode, action))?;
             Ok(Reply::ok())
         }
         "toggleSequentialDownload" | "toggleFirstLastPiecePrio" => {
@@ -792,6 +795,7 @@ async fn add(c: &mut Call<'_>) -> ApiResult {
         seeding_time_limit: Some(int_or("seedingTimeLimit", -2)),
         inactive_seeding_time_limit: Some(int_or("inactiveSeedingTimeLimit", -2)),
         share_limit_action: Some(share_limit_action(p.str("shareLimitAction"))),
+        share_limits_mode: Some(ShareLimitsMode::from_str_or_default(p.str("shareLimitsMode"))),
         ..Default::default()
     };
 
@@ -1147,6 +1151,10 @@ fn apply_share_limit_params(c: &Call<'_>, cat: &mut Category) -> Result<(), ApiE
         if let Some(v) = c.params.get(key) {
             *field = parse_int_str(v).filter(|m| *m >= -2).ok_or_else(|| invalid(key))?;
         }
+    }
+    // An unrecognised mode must not silently fall back to Default.
+    if let Some(v) = c.params.get("shareLimitsMode") {
+        cat.share_limits_mode = ShareLimitsMode::parse(v).ok_or_else(|| invalid("shareLimitsMode"))?;
     }
     if let Some(v) = c.params.get("shareLimitAction") {
         cat.share_limit_action = match v {

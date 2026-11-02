@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::paths;
-use crate::model::{Category, CategoryDownloadPath, ShareLimitAction};
+use crate::model::{Category, CategoryDownloadPath, ShareLimitAction, ShareLimitsMode};
 
 pub type CategoryMap = BTreeMap<String, Category>;
 
@@ -177,6 +177,8 @@ pub struct GlobalShareLimits {
     pub ratio: f64,
     pub seeding_minutes: i64,
     pub inactive_seeding_minutes: i64,
+    /// Never `Default` at the global level (treated as `MatchAny`).
+    pub mode: ShareLimitsMode,
     pub action: ShareLimitAction,
 }
 
@@ -220,6 +222,16 @@ pub fn category_share_limit_action(cats: &CategoryMap, name: &str, g: &GlobalSha
     }
 }
 
+pub fn category_share_limits_mode(cats: &CategoryMap, name: &str, g: &GlobalShareLimits) -> ShareLimitsMode {
+    if name.is_empty() {
+        return g.mode.global();
+    }
+    match cats.get(name) {
+        Some(c) if c.share_limits_mode != ShareLimitsMode::Default => c.share_limits_mode,
+        _ => category_share_limits_mode(cats, parent_category_name(name), g),
+    }
+}
+
 // ---- categories.json ---------------------------------------------------------
 
 #[derive(Serialize, Deserialize)]
@@ -237,6 +249,8 @@ struct StoredCategory {
     inactive_seeding_time_limit: i64,
     #[serde(default)]
     share_limit_action: String,
+    #[serde(default)]
+    share_limits_mode: String,
 }
 
 fn minus_two() -> i64 {
@@ -281,6 +295,7 @@ pub fn to_json(cats: &CategoryMap) -> Vec<u8> {
             seeding_time_limit: c.seeding_time_limit,
             inactive_seeding_time_limit: c.inactive_seeding_time_limit,
             share_limit_action: action_to_str(c.share_limit_action).to_string(),
+            share_limits_mode: c.share_limits_mode.as_str().to_string(),
         };
         if let Ok(v) = serde_json::to_value(stored) {
             obj.insert(name.clone(), v);
@@ -314,6 +329,7 @@ pub fn from_json(data: &[u8]) -> Result<CategoryMap, String> {
                 cat.seeding_time_limit = s.seeding_time_limit.max(-2);
                 cat.inactive_seeding_time_limit = s.inactive_seeding_time_limit.max(-2);
                 cat.share_limit_action = action_from_str(&s.share_limit_action);
+                cat.share_limits_mode = ShareLimitsMode::from_str_or_default(&s.share_limits_mode);
             }
             _ => {}
         }
@@ -423,11 +439,25 @@ mod tests {
         let mut c = cats(&[("A", "", CategoryDownloadPath::Default), ("A/B", "", CategoryDownloadPath::Default)]);
         c.get_mut("A").unwrap().ratio_limit = 2.0;
         c.get_mut("A").unwrap().share_limit_action = ShareLimitAction::Remove;
-        let g = GlobalShareLimits { ratio: 1.0, seeding_minutes: 60, inactive_seeding_minutes: -1, action: ShareLimitAction::Stop };
+        let mut g = GlobalShareLimits {
+            ratio: 1.0,
+            seeding_minutes: 60,
+            inactive_seeding_minutes: -1,
+            mode: ShareLimitsMode::MatchAny,
+            action: ShareLimitAction::Stop,
+        };
         assert_eq!(category_ratio_limit(&c, "A/B", &g), 2.0);
         assert_eq!(category_ratio_limit(&c, "", &g), 1.0);
         assert_eq!(category_seeding_time_limit(&c, "A/B", &g), 60);
         assert_eq!(category_share_limit_action(&c, "A/B", &g), ShareLimitAction::Remove);
+        // The mode inherits like the limits: own, parent, then global.
+        assert_eq!(category_share_limits_mode(&c, "A/B", &g), ShareLimitsMode::MatchAny);
+        c.get_mut("A").unwrap().share_limits_mode = ShareLimitsMode::MatchAll;
+        assert_eq!(category_share_limits_mode(&c, "A/B", &g), ShareLimitsMode::MatchAll);
+        c.get_mut("A/B").unwrap().share_limits_mode = ShareLimitsMode::MatchAny;
+        assert_eq!(category_share_limits_mode(&c, "A/B", &g), ShareLimitsMode::MatchAny);
+        g.mode = ShareLimitsMode::Default;
+        assert_eq!(category_share_limits_mode(&c, "", &g), ShareLimitsMode::MatchAny, "global Default = MatchAny");
     }
 
     #[test]
@@ -438,8 +468,15 @@ mod tests {
             ("C", "", CategoryDownloadPath::Default),
         ]);
         c.get_mut("C").unwrap().seeding_time_limit = 30;
-        let back = from_json(&to_json(&c)).unwrap();
+        c.get_mut("C").unwrap().share_limits_mode = ShareLimitsMode::MatchAll;
+        let text = String::from_utf8(to_json(&c)).unwrap();
+        assert!(text.contains(r#""share_limits_mode": "MatchAll""#));
+        let back = from_json(text.as_bytes()).unwrap();
         assert_eq!(back, c);
+        // Files without the key (before qBittorrent 5.3) inherit.
+        let old = from_json(br#"{"D":{"share_limit_action":"Stop"},"E":{"share_limits_mode":"Bogus"}}"#).unwrap();
+        assert_eq!(old["D"].share_limits_mode, ShareLimitsMode::Default);
+        assert_eq!(old["E"].share_limits_mode, ShareLimitsMode::Default);
         let legacy = from_json(br#"{"Old":"/old","x/y":{}, "/bad":{}}"#).unwrap();
         assert_eq!(legacy["Old"].save_path, "/old");
         assert!(legacy.contains_key("x"));

@@ -234,6 +234,7 @@ impl Session {
         e.seeding_time_limit = params.seeding_time_limit.map(|v| v.max(-2)).unwrap_or(-2);
         e.inactive_seeding_time_limit = params.inactive_seeding_time_limit.map(|v| v.max(-2)).unwrap_or(-2);
         e.share_limit_action = params.share_limit_action.unwrap_or_default();
+        e.share_limits_mode = params.share_limits_mode.unwrap_or_default();
         e.dl_limit = params.download_limit.filter(|v| *v > 0).unwrap_or(0);
         e.ul_limit = params.upload_limit.filter(|v| *v > 0).unwrap_or(0);
 

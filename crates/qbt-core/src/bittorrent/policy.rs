@@ -882,6 +882,7 @@ impl Session {
                         ratio_limit: e.effective_ratio_limit(&env),
                         seeding_time_limit: e.effective_seeding_time_limit(&env),
                         inactive_seeding_time_limit: e.effective_inactive_seeding_time_limit(&env),
+                        mode: e.effective_share_limits_mode(&env),
                         action: e.effective_share_limit_action(&env),
                     };
                     share_limits::evaluate(&inputs).map(|d| (e.id.clone(), e.display_name(), d))

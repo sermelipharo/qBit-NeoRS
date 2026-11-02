@@ -61,6 +61,9 @@ pub struct FastResume {
     pub seeding_time_limit: i64,
     pub inactive_seeding_time_limit: i64,
     pub share_limit_action: String,
+    /// qBittorrent 5.3 `qBt-shareLimitsMode`: "Default", "MatchAny" or
+    /// "MatchAll" (missing in older records = "Default").
+    pub share_limits_mode: String,
     pub download_limit: i64,
     pub upload_limit: i64,
     pub stopped: bool,
@@ -123,6 +126,7 @@ impl Default for FastResume {
             seeding_time_limit: -2,
             inactive_seeding_time_limit: -2,
             share_limit_action: "Default".into(),
+            share_limits_mode: "Default".into(),
             download_limit: 0,
             upload_limit: 0,
             stopped: false,
@@ -398,6 +402,7 @@ mod tests {
             file_priorities: vec![0],
             select_only: vec![1, 3],
             ratio_limit: 1.5,
+            share_limits_mode: "MatchAll".into(),
             queue_position: 3,
             trackers: vec![TrackerTierEntry { url: "http://t".into(), tier: 1 }],
             ..Default::default()

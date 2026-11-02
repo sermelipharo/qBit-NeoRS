@@ -265,7 +265,7 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 230);
+        assert_eq!(prefs.as_object().unwrap().len(), 231);
         assert_eq!(prefs["web_ui_port"], h.port);
         assert!(prefs.get("web_ui_password").is_none());
 
@@ -860,6 +860,7 @@ fn edit_category_keeps_what_the_call_leaves_out() {
             ("downloadPath", "/incoming"),
             ("ratioLimit", "2.5"),
             ("seedingTimeLimit", "90"),
+            ("shareLimitsMode", "MatchAll"),
             ("shareLimitAction", "Remove"),
         ];
         assert_eq!(h.post("/api/v2/torrents/createCategory", &create, Some(&c)).await.status(), 200);
@@ -875,6 +876,7 @@ fn edit_category_keeps_what_the_call_leaves_out() {
         assert_eq!(cat["seeding_time_limit"], 90);
         assert_eq!(cat["inactive_seeding_time_limit"], 30);
         assert_eq!(cat["share_limit_action"], "Remove");
+        assert_eq!(cat["share_limits_mode"], "MatchAll");
 
         // An empty downloadPathEnabled goes back to the default.
         let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), ("downloadPathEnabled", "")], Some(&c)).await;
@@ -884,12 +886,77 @@ fn edit_category_keeps_what_the_call_leaves_out() {
         assert_eq!(cat["ratio_limit"], 2.5);
 
         // Bad values are refused instead of resetting the option.
-        for bad in [("ratioLimit", "-3"), ("seedingTimeLimit", "x"), ("shareLimitAction", "Explode"), ("downloadPathEnabled", "maybe")] {
+        for bad in [
+            ("ratioLimit", "-3"),
+            ("seedingTimeLimit", "x"),
+            ("shareLimitAction", "Explode"),
+            ("shareLimitsMode", "MatchSome"),
+            ("shareLimitsMode", "matchall"),
+            ("downloadPathEnabled", "maybe"),
+        ] {
             let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), bad], Some(&c)).await;
             assert_eq!(r.status(), 400, "{bad:?}");
         }
+        let cat = films(h.get("/api/v2/torrents/categories", Some(&c)).await.json().await.unwrap());
+        assert_eq!(cat["share_limits_mode"], "MatchAll", "a refused value changes nothing");
+        let r = h.post("/api/v2/torrents/createCategory", &[("category", "bad"), ("shareLimitsMode", "Any")], Some(&c)).await;
+        assert_eq!(r.status(), 400);
+        let r = h.post("/api/v2/torrents/editCategory", &[("category", "films"), ("shareLimitsMode", "Default")], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let cat = films(h.get("/api/v2/torrents/categories", Some(&c)).await.json().await.unwrap());
+        assert_eq!(cat["share_limits_mode"], "Default");
         let r = h.post("/api/v2/torrents/editCategory", &[("category", "nope"), ("savePath", "/x")], Some(&c)).await;
         assert_eq!(r.status(), 404);
+    });
+}
+
+/// qBittorrent 5.3's share limits mode on torrents: `torrents/add`,
+/// `torrents/info` and `setShareLimits` (where the mode stays optional).
+#[test]
+fn torrent_share_limits_mode() {
+    let h = Harness::new(|_| {});
+    let base = h._dir.path().to_string_lossy().into_owned();
+    h.block(async {
+        let c = h.login().await;
+        let info = |hash: String| {
+            let (h, c) = (&h, c.clone());
+            async move {
+                let r = h.get(&format!("/api/v2/torrents/info?hashes={hash}"), Some(&c)).await;
+                let v: serde_json::Value = r.json().await.unwrap();
+                v.as_array().and_then(|a| a.first()).cloned().unwrap_or_default()
+            }
+        };
+        let id = "3333333333333333333333333333333333333333".to_string();
+        let urls = format!("magnet:?xt=urn:btih:{id}&dn=three");
+        let save = format!("{base}/m3");
+        let form = [("urls", urls.as_str()), ("savepath", save.as_str()), ("stopped", "true"), ("shareLimitsMode", "MatchAll")];
+        assert_eq!(h.post("/api/v2/torrents/add", &form, Some(&c)).await.status(), 200);
+        let t = info(id.clone()).await;
+        assert_eq!(t["share_limits_mode"], "MatchAll");
+
+        // Without shareLimitsMode (clients before 5.3) the mode goes back to Default.
+        let limits = [
+            ("hashes", id.as_str()),
+            ("ratioLimit", "2"),
+            ("seedingTimeLimit", "-2"),
+            ("inactiveSeedingTimeLimit", "-2"),
+            ("shareLimitAction", "Stop"),
+        ];
+        assert_eq!(h.post("/api/v2/torrents/setShareLimits", &limits, Some(&c)).await.status(), 200);
+        let t = info(id.clone()).await;
+        assert_eq!((t["share_limits_mode"].as_str(), t["ratio_limit"].as_f64()), (Some("Default"), Some(2.0)));
+        let mut with_mode = limits.to_vec();
+        with_mode.push(("shareLimitsMode", "MatchAny"));
+        assert_eq!(h.post("/api/v2/torrents/setShareLimits", &with_mode, Some(&c)).await.status(), 200);
+        assert_eq!(info(id.clone()).await["share_limits_mode"], "MatchAny");
+
+        // The global mode.
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!(prefs["share_limits_mode"], "MatchAny");
+        let json = r#"{"share_limits_mode":"MatchAll"}"#;
+        assert_eq!(h.post("/api/v2/app/setPreferences", &[("json", json)], Some(&c)).await.status(), 200);
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!(prefs["share_limits_mode"], "MatchAll");
     });
 }
 

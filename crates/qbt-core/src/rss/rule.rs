@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 
 use super::date::{format_rfc2822, parse_rfc2822};
 use crate::model::{
-    AddTorrentParams, ContentLayout, RssAutoDownloadRule, ShareLimitAction, StopCondition, TorrentParamsTemplate,
+    AddTorrentParams, ContentLayout, RssAutoDownloadRule, ShareLimitAction, ShareLimitsMode, StopCondition, TorrentParamsTemplate,
 };
 
 const MAX_PATTERN_LEN: usize = 4096;
@@ -330,7 +330,8 @@ pub(crate) struct Rule {
     pub previously_matched: Vec<String>,
     pub params: TorrentParamsTemplate,
     /// `torrentParams` keys the template does not model (`operating_mode`,
-    /// `share_limit_action`, `ssl_*`, unknown keys), kept for round trips.
+    /// `share_limit_action`, `share_limits_mode`, `ssl_*`, unknown keys), kept
+    /// for round trips.
     pub params_extra: Map<String, Value>,
     must_exprs: Vec<Expr>,
     must_not_exprs: Vec<Expr>,
@@ -492,6 +493,12 @@ impl Rule {
                 .and_then(Value::as_str)
                 .and_then(share_limit_action_from_str)
                 .filter(|a| *a != ShareLimitAction::Default),
+            share_limits_mode: self
+                .params_extra
+                .get("share_limits_mode")
+                .and_then(Value::as_str)
+                .and_then(ShareLimitsMode::parse)
+                .filter(|m| *m != ShareLimitsMode::Default),
             ..Default::default()
         }
     }
@@ -671,7 +678,8 @@ fn share_limit_action_from_str(s: &str) -> Option<ShareLimitAction> {
     })
 }
 
-const EXTRA_PARAM_KEYS: [&str; 5] = ["operating_mode", "share_limit_action", "ssl_certificate", "ssl_private_key", "ssl_dh_params"];
+const EXTRA_PARAM_KEYS: [&str; 6] =
+    ["operating_mode", "share_limit_action", "share_limits_mode", "ssl_certificate", "ssl_private_key", "ssl_dh_params"];
 const KNOWN_PARAM_KEYS: [&str; 17] = [
     "category",
     "tags",
@@ -748,6 +756,7 @@ pub(crate) fn parse_params(obj: &Map<String, Value>) -> (TorrentParamsTemplate, 
             "share_limit_action" => {
                 Value::from(v.as_str().filter(|s| share_limit_action_from_str(s).is_some()).unwrap_or("Default"))
             }
+            "share_limits_mode" => Value::from(v.as_str().filter(|s| ShareLimitsMode::parse(s).is_some()).unwrap_or("Default")),
             _ => v.clone(),
         };
         extra.insert(k.clone(), v);
@@ -777,6 +786,7 @@ pub(crate) fn serialize_params(p: &TorrentParamsTemplate, extra: &Map<String, Va
     m.insert("seeding_time_limit".into(), p.seeding_time_limit.into());
     m.insert("inactive_seeding_time_limit".into(), p.inactive_seeding_time_limit.into());
     m.insert("share_limit_action".into(), extra_str("share_limit_action", "Default"));
+    m.insert("share_limits_mode".into(), extra_str("share_limits_mode", "Default"));
     m.insert("ratio_limit".into(), serde_json::Number::from_f64(p.ratio_limit).map_or(Value::from(-2), Value::Number));
     m.insert("ssl_certificate".into(), extra_str("ssl_certificate", ""));
     m.insert("ssl_private_key".into(), extra_str("ssl_private_key", ""));
@@ -1019,6 +1029,7 @@ mod tests {
         r.params.content_layout = Some(ContentLayout::Subfolder);
         r.params_extra.insert("share_limit_action".into(), "Stop".into());
         r.params_extra.insert("operating_mode".into(), "Forced".into());
+        r.params_extra.insert("share_limits_mode".into(), "MatchAll".into());
         let v = r.to_json();
         assert_eq!(v["lastMatch"], "03 Oct 2026 04:05:06 +0000");
         assert_eq!(v["addPaused"], true);
@@ -1026,6 +1037,7 @@ mod tests {
         assert_eq!(v["assignedCategory"], "TV");
         assert_eq!(v["torrentParams"]["operating_mode"], "Forced");
         assert_eq!(v["torrentParams"]["share_limit_action"], "Stop");
+        assert_eq!(v["torrentParams"]["share_limits_mode"], "MatchAll");
         assert_eq!(v["torrentParams"]["ratio_limit"], -2.0);
         assert!(v["torrentParams"].get("use_auto_tmm").is_none());
         assert!(v["torrentParams"].get("stop_condition").is_none());
@@ -1037,6 +1049,7 @@ mod tests {
         assert_eq!(params.stopped, Some(true));
         assert!(params.forced);
         assert_eq!(params.share_limit_action, Some(ShareLimitAction::Stop));
+        assert_eq!(params.share_limits_mode, Some(ShareLimitsMode::MatchAll));
         assert_eq!(params.save_path, None);
         assert_eq!(params.upload_limit, None);
         assert_eq!(params.ratio_limit, Some(-2.0));
@@ -1046,6 +1059,17 @@ mod tests {
         assert_eq!(dto.must_contain, "a|b");
         let again = Rule::from_dto(&dto, Some(&back));
         assert_eq!(again.to_json(), v);
+    }
+
+    #[test]
+    fn share_limits_mode_param_is_normalised() {
+        let parse = |v: Value| parse_params(serde_json::json!({"share_limits_mode": v}).as_object().unwrap()).1;
+        assert_eq!(parse(serde_json::json!("MatchAny"))["share_limits_mode"], "MatchAny");
+        assert_eq!(parse(serde_json::json!("bogus"))["share_limits_mode"], "Default");
+        assert_eq!(parse(serde_json::json!(1))["share_limits_mode"], "Default");
+        // Rules from before 5.3 still write the key, as Default.
+        let v = serialize_params(&TorrentParamsTemplate::default(), &Map::new());
+        assert_eq!(v["share_limits_mode"], "Default");
     }
 
     #[test]

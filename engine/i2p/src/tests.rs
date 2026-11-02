@@ -24,6 +24,7 @@ async fn fake_sam() -> u16 {
                         "HELLO REPLY RESULT=OK VERSION=3.1\n".to_string()
                     } else if line.starts_with("SESSION CREATE") {
                         assert!(line.contains("inbound.quantity=2"));
+                        assert!(line.contains(" inbound.lengthVariance=-2 outbound.lengthVariance=7\n"), "{line}");
                         "SESSION STATUS RESULT=OK DESTINATION=PRIVKEY\n".to_string()
                     } else if line.starts_with("NAMING LOOKUP NAME=ME") {
                         format!("NAMING REPLY RESULT=OK NAME=ME VALUE={DEST}\n")
@@ -65,7 +66,13 @@ fn parses_replies_and_addresses() {
 #[tokio::test]
 async fn session_connect_accept_lookup() {
     let port = fake_sam().await;
-    let opts = SamOptions { port, inbound_quantity: 2, ..Default::default() };
+    let opts = SamOptions {
+        port,
+        inbound_quantity: 2,
+        inbound_length_variance: -2,
+        outbound_length_variance: 9,
+        ..Default::default()
+    };
     let s = Session::create(opts, Duration::from_secs(5)).await.unwrap();
     assert_eq!(s.destination, DEST);
     assert_eq!(s.id().len(), 12);

@@ -56,7 +56,7 @@ Things to know before reading:
 | #24158 | `seeding_outgoing_connections` setting | ⬜ | Pref (default true); needs engine support to stop dialling peers while seeding (`engine/librqbit`), otherwise inert |
 | #24253 | `max_outstanding_block_requests` (libtorrent `max_allowed_in_request_queue`) | ⬜ | Low: pref + cap on queued incoming requests per peer in the engine. NeoRS only has `request_queue_size` (`prefs/model.rs:582`) |
 | #24684 | `allow_multiple_connections_per_pid` | ⬜ | Low: pref + engine check on duplicate peer IDs; only `enable_multi_connections_from_same_ip` exists (`prefs/api_json.rs:404`) |
-| #24891 | I2P inbound/outbound length variance | ⬜ | Small: the prefs exist (stored, clamped); add them to the SAM options (`engine/i2p/src/lib.rs:207` sends `inbound.length`, no variance) |
+| #24891 | I2P inbound/outbound length variance | ✅ | `SamOptions::{inbound,outbound}_length_variance` (-7..7), sent as `inbound.lengthVariance` / `outbound.lengthVariance` in SESSION CREATE like libtorrent |
 | #24870 | I2P PeX setting | ➖ | No I2P PeX in the engine (`docs/PARITY.md`, I2P row); `i2p_pex_enabled` is stored and returned for clients |
 | #24837 | WebTorrent STUN server setting | ➖ | No WebTorrent in the engine; `webtorrent_stun_server` is stored and returned for clients |
 | #24641 | Revamp .torrent backup management | ⬜ | Replace `export_dir`/`export_dir_fin` (`prefs/api_json.rs:220`) with `torrent_files_backup_enabled`, `torrent_files_backup_dir`, `torrent_files_finished_backup_dir_enabled`, `torrent_files_finished_backup_dir`, `remove_torrent_file_backup`; migrate old keys; the export code is `export_to` in `bittorrent/adding.rs`; Swift Downloads prefs |

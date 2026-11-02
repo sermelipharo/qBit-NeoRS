@@ -136,6 +136,8 @@ impl NetPrefs {
                 outbound_quantity: c.i2p_outbound_quantity.clamp(1, 16) as u8,
                 inbound_length: c.i2p_inbound_length.clamp(0, 7) as u8,
                 outbound_length: c.i2p_outbound_length.clamp(0, 7) as u8,
+                inbound_length_variance: c.i2p_inbound_length_variance.clamp(-7, 7) as i8,
+                outbound_length_variance: c.i2p_outbound_length_variance.clamp(-7, 7) as i8,
             },
             mixed_mode: c.i2p_mixed_mode,
         });
@@ -1001,6 +1003,8 @@ mod tests {
         p.advanced.embedded_tracker_port = 9001;
         p.connection.i2p_enabled = true;
         p.connection.i2p_inbound_length = 99;
+        p.connection.i2p_inbound_length_variance = -3;
+        p.connection.i2p_outbound_length_variance = 99;
         p.connection.i2p_mixed_mode = true;
         let n = NetPrefs::from_prefs(&p);
         assert!(n.port_mapping.upnp && n.port_mapping.natpmp);
@@ -1009,6 +1013,7 @@ mod tests {
         let i2p = n.i2p.unwrap();
         assert!(i2p.mixed_mode);
         assert_eq!(i2p.sam.inbound_length, 7);
+        assert_eq!((i2p.sam.inbound_length_variance, i2p.sam.outbound_length_variance), (-3, 7));
         p.webui.web_ui_upnp = false;
         p.connection.i2p_enabled = false;
         let n = NetPrefs::from_prefs(&p);

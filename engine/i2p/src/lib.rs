@@ -27,6 +27,9 @@ pub struct SamOptions {
     pub outbound_quantity: u8,
     pub inbound_length: u8,
     pub outbound_length: u8,
+    /// Random hop-count variance (`inbound.lengthVariance`), -7..=7.
+    pub inbound_length_variance: i8,
+    pub outbound_length_variance: i8,
 }
 
 impl Default for SamOptions {
@@ -38,6 +41,8 @@ impl Default for SamOptions {
             outbound_quantity: 3,
             inbound_length: 3,
             outbound_length: 3,
+            inbound_length_variance: 0,
+            outbound_length_variance: 0,
         }
     }
 }
@@ -204,8 +209,14 @@ impl Session {
         };
         let cmd = format!(
             "SESSION CREATE STYLE=STREAM ID={id} DESTINATION=TRANSIENT SIGNATURE_TYPE=7 \
-             inbound.quantity={} outbound.quantity={} inbound.length={} outbound.length={}",
-            opts.inbound_quantity, opts.outbound_quantity, opts.inbound_length, opts.outbound_length
+             inbound.quantity={} outbound.quantity={} inbound.length={} outbound.length={} \
+             inbound.lengthVariance={} outbound.lengthVariance={}",
+            opts.inbound_quantity,
+            opts.outbound_quantity,
+            opts.inbound_length,
+            opts.outbound_length,
+            opts.inbound_length_variance.clamp(-7, 7),
+            opts.outbound_length_variance.clamp(-7, 7)
         );
         let reply = control.command(&cmd).await?;
         SamConn::check(&reply, "SESSION", "STATUS")?;

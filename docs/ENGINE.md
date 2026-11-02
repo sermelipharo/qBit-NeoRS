@@ -382,7 +382,8 @@ proxy" (`remote_dns`).
 ## engine/i2p — I2P through SAM v3.1
 
 New crate `librqbit-i2p`: `Session::create` (HELLO, `SESSION CREATE
-STYLE=STREAM` with qBittorrent's tunnel quantity/length settings, own
+STYLE=STREAM` with qBittorrent's tunnel quantity/length settings and
+(5.3) length variance, as libtorrent sends them, own
 destination via `NAMING LOOKUP NAME=ME`), `connect` (STREAM CONNECT),
 `accept` (STREAM ACCEPT, returns the peer destination), `lookup`, I2P base64
 and `.b32.i2p` helpers. Lines are length-limited and every SAM error is

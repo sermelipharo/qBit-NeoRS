@@ -70,7 +70,7 @@ Things to know before reading:
 | #24670 | Update share limits timer when limits change | ✅ | Limits are evaluated by the session tick (`bittorrent/policy.rs:865`); no stale timer to refresh |
 | #25040 | Free space of the parent path when the path is missing | ✅ | `utils/fs.rs:16-20` walks up to an existing parent |
 | #24304 | Several recipients for e-mail notifications | ✅ | `net/smtp.rs` sends one e-mail per `;` group, to the group's `,`-separated addresses (as `SMTPClient::sendMail`); tests `parses_settings`, `sends_through_local_server` |
-| #24000 | Session speed = sum of per-torrent payload rates | ⬜ | Verify how the global rate is computed (`bittorrent/speed.rs`, `transfer/info`); sum per-torrent smoothed rates if it comes from raw byte deltas |
+| #24000 | Session speed = sum of per-torrent payload rates | ✅ | Came from the engine's session-wide estimator; now the sum of the torrents' rates each tick (`policy.rs` tick), also for the speed graph's payload series |
 | #23817 | Do not overwrite config without write permission | ⬜ | Low, verify: profile files go through `write_atomic` (`utils/fs.rs:35`); check a read-only profile does not lose data or loop on errors |
 | #24671 | Relative logs folder | ✅ | Was resolved against the process' working directory; now inside the profile's data folder (`logger::log_dir`, unit test) |
 | #24505 | "Resolve peer countries" off by default | ✅ | Off for new profiles (saved settings keep their value); demo mode keeps flags on |

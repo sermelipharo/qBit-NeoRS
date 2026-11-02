@@ -418,6 +418,8 @@ impl Session {
         }
 
         let engine = self.engine();
+        // Total (protocol + overhead) rates of this tick, for the speed graph.
+        let mut total_rates = (0i64, 0i64);
         if let Some(engine) = &engine {
             let s = engine.transfer_stats();
             let mut m = self.misc.lock();
@@ -438,16 +440,10 @@ impl Session {
             if td > 0 || tu > 0 {
                 m.stats_dirty = true;
             }
-            m.dl_rate = s.payload_dl_rate;
-            m.ul_rate = s.payload_ul_rate;
             m.peers_live = s.peers as i64;
             m.dht_nodes = s.dht_nodes;
             let secs = (dt_ms.max(1) as f64) / 1000.0;
-            let (total_up, total_down) = ((tu as f64 / secs) as i64, (td as f64 / secs) as i64);
-            let (up, down) = (m.ul_rate, m.dl_rate);
-            m.speed.record(now_s, total_up.max(up), total_down.max(down), up, down);
-        } else {
-            self.misc.lock().speed.record(now_s, 0, 0, 0, 0);
+            total_rates = ((tu as f64 / secs) as i64, (td as f64 / secs) as i64);
         }
 
         if let Some(engine) = &engine {
@@ -455,6 +451,19 @@ impl Session {
         }
 
         let events = self.update_torrents(engine.as_deref(), &prefs, dt_ms, now, now_s);
+        // Session payload rates are the sum of the torrents' (qBittorrent
+        // 5.3, #24000), so the status bar matches the transfer list.
+        let (down, up) = {
+            let st = self.state.read();
+            st.torrents.values().fold((0i64, 0i64), |(d, u), e| (d + e.rt.dl_rate.max(0), u + e.rt.ul_rate.max(0)))
+        };
+        {
+            let mut m = self.misc.lock();
+            m.dl_rate = down;
+            m.ul_rate = up;
+            let (total_up, total_down) = total_rates;
+            m.speed.record(now_s, total_up.max(up), total_down.max(down), up, down);
+        }
         self.save_fetched_piece_layers().await;
         self.update_queue();
         self.reconcile(None).await;

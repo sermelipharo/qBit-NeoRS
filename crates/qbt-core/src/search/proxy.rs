@@ -45,6 +45,14 @@ pub(crate) fn proxy_env(c: &ConnectionPrefs) -> ProxyEnv {
     let vars = match c.proxy_type {
         ProxyType::None => Vec::new(),
         ProxyType::Http => {
+            // urllib decodes the user info, so it is percent-encoded here (as
+            // qBittorrent 5.3 builds the URL with QUrl); SOCKS credentials
+            // stay as typed because helpers.py passes them on undecoded.
+            let credential = if c.proxy_auth_enabled {
+                format!("{}:{}@", encode_userinfo(&c.proxy_username), encode_userinfo(&c.proxy_password))
+            } else {
+                String::new()
+            };
             let url = format!("http://{credential}{host}:{}", c.proxy_port);
             vec![(HTTP_PROXY, url.clone()), (HTTPS_PROXY, url)]
         }
@@ -59,6 +67,19 @@ pub(crate) fn proxy_env(c: &ConnectionPrefs) -> ProxyEnv {
         }
     };
     ProxyEnv { vars }
+}
+
+/// Percent-encodes everything but RFC 3986 unreserved characters.
+fn encode_userinfo(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -94,7 +115,10 @@ mod tests {
         c.proxy_auth_enabled = true;
         c.proxy_username = "u".into();
         c.proxy_password = "p@ss".into();
-        assert_eq!(proxy_env(&c).vars[0].1, "http://u:p@ss@10.0.0.1:3128");
+        assert_eq!(proxy_env(&c).vars[0].1, "http://u:p%40ss@10.0.0.1:3128");
+        c.proxy_username = "me@corp".into();
+        c.proxy_password = "a/b?c#d%e:f".into();
+        assert_eq!(proxy_env(&c).vars[0].1, "http://me%40corp:a%2Fb%3Fc%23d%25e%3Af@10.0.0.1:3128");
     }
 
     #[test]

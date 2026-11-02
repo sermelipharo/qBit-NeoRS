@@ -199,7 +199,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24912 | Keep cookies across HTTP redirects | ✅ | nova3 scripts from 5.3 (`helpers.py` 1.59 keeps cookies across redirects) |
 | #24933 | Escape pipe characters properly | ✅ | `novaprinter.py` 1.56 percent-encodes the name and refuses `|` in other fields; `search/job.rs` decodes the name (test `field_rules`) |
 | #25017 | Relaxed plugin versioning | ✅ | `PluginVersion` takes 1 to 3 components and prints without trailing zeros; the header is read in 22-byte chunks (tests in `search/nova.rs`) |
-| #24548 | Revised plugin install procedure (unlisted: more checks, new log format) | ⬜ | Compare `search/plugins.rs` with `git show d3e8abede`: unknown file format, same or newer already installed, post-install verification, new log lines |
+| #24548 | Revised plugin install procedure (unlisted: more checks, new log format) | ✅ | The install was already staged, syntax-checked and rolled back; now with 5.3's log lines ("Same or newer version…", "Search plugin has been updated…" for new plugins too, "Search plugin installation failed…"). The search HTTP proxy URL percent-encodes its credentials, as 5.3's QUrl does; SOCKS ones stay raw because helpers.py does not decode them |
 | #24776 | Middle-click closes search tabs | ⬜ | See macOS app UI |
 | #23911 | Search docs format | ➖ | Docs only |
 

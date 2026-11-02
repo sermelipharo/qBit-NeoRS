@@ -705,7 +705,9 @@ impl Inner {
         if let Some(old) = installed
             && old >= new_version
         {
-            self.ctx.logger.info(format!("Plugin already at version {old}, which is greater than {new_version}"));
+            self.ctx.logger.info(format!(
+                "Same or newer version of search plugin is already installed. Plugin name: \"{name}\". Current version: {old}. Incoming version: {new_version}"
+            ));
             return Err(fail("A more recent version of this plugin is already installed."));
         }
 
@@ -751,22 +753,24 @@ impl Inner {
             if updated && !dest.exists() {
                 let _ = std::fs::rename(&backup, &dest);
             }
-            return Err(fail(&format!("Cannot install the plugin file: {e}")));
+            self.ctx.logger.warning(format!("Cannot install the plugin file: {e}"));
+            return Err(fail("Search plugin installation failed."));
         }
         nova::clear_python_cache(&self.dirs.root);
         self.refresh().await;
 
         if !self.plugins.read().contains_key(name) {
             let _ = std::fs::remove_file(&dest);
-            self.ctx.logger.info(format!("Plugin {name} is not supported."));
+            self.ctx.logger.info(format!("Search plugin installation failed. Plugin name: \"{name}\""));
             if updated {
                 let _ = std::fs::rename(&backup, &dest);
                 self.refresh().await;
             }
             return Err(fail("Plugin is not supported."));
         }
+        // qBittorrent 5.3 logs this for new plugins too.
+        self.ctx.logger.info(format!("Search plugin has been updated. Plugin name: \"{name}\". Version: {new_version}."));
         if updated {
-            self.ctx.logger.info(format!("Plugin {name} has been successfully updated."));
             let _ = std::fs::remove_file(&backup);
         }
         Ok(name.to_string())

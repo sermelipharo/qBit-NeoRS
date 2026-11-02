@@ -47,7 +47,8 @@ struct SidebarSnapshot: Equatable, Sendable {
         var count: Int
     }
 
-    /// An RSS folder or feed below the filters, or the "Manage Feeds" row
+    /// An RSS folder or feed below the filters (after the sticky "All" and
+    /// "Unread" rows), or the "Manage Feeds" row
     /// (`id` empty) while there are none. Selecting one opens the RSS tab.
     struct FeedRow: Equatable, Sendable {
         static let manageID = ""
@@ -96,12 +97,17 @@ struct SidebarSnapshot: Equatable, Sendable {
 
     private static func feedRows(_ nodes: [RSSNode]) -> [FeedRow] {
         func row(_ node: RSSNode) -> FeedRow {
-            let symbol = node.kind == .folder ? Symbol.folder : node.hasError ? Symbol.exclamationmarkTriangleFill : Symbol.dotRadiowavesUpForward
-            return FeedRow(id: node.id, title: node.name, symbol: symbol, tint: node.kind == .folder ? .accent : .orange,
+            let symbol = switch node.kind {
+            case .all: Symbol.tray2
+            case .unread: Symbol.tray
+            case .folder: Symbol.folder
+            case .feed: node.hasError ? Symbol.exclamationmarkTriangleFill : Symbol.dotRadiowavesUpForward
+            }
+            return FeedRow(id: node.id, title: node.name, symbol: symbol, tint: node.kind == .feed ? .orange : .accent,
                            count: Int(node.unreadCount), children: (node.children ?? []).map(row))
         }
-        let rows = nodes.filter { $0.kind != .unread }.map(row)
-        guard rows.isEmpty else { return rows }
+        // "All" and "Unread" lead the section once there are feeds.
+        if nodes.contains(where: { !$0.isSticky }) { return nodes.map(row) }
         return [FeedRow(id: FeedRow.manageID, title: String(localized: "Manage Feeds"), symbol: Symbol.dotRadiowavesUpForward,
                         tint: .orange, count: 0)]
     }

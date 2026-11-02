@@ -61,13 +61,15 @@ enum SidebarMenu {
             menu.addAction(String(localized: "Update"), symbol: Symbol.arrowClockwise) { rss.update([node]) }
             menu.addAction(String(localized: "Mark Items Read"), symbol: Symbol.checkmarkCircle) { rss.markRead([node]) }
             menu.addDivider()
-            menu.addAction(String(localized: "Rename…"), symbol: Symbol.pencil) { openRSS(model) { rss.sheet = .rename(node) } }
-            if node.kind == .feed {
-                menu.addAction(String(localized: "Feed Options…"), symbol: Symbol.gearshape) { openRSS(model) { rss.sheet = .feedOptions(node) } }
-                menu.addAction(String(localized: "Copy Feed URL"), symbol: Symbol.docOnDoc) { rss.copyFeedURLs([node]) }
+            if !node.isSticky {
+                menu.addAction(String(localized: "Rename…"), symbol: Symbol.pencil) { openRSS(model) { rss.sheet = .rename(node) } }
+                if node.kind == .feed {
+                    menu.addAction(String(localized: "Feed Options…"), symbol: Symbol.gearshape) { openRSS(model) { rss.sheet = .feedOptions(node) } }
+                    menu.addAction(String(localized: "Copy Feed URL"), symbol: Symbol.docOnDoc) { rss.copyFeedURLs([node]) }
+                }
+                menu.addAction(String(localized: "Delete"), symbol: Symbol.trash) { openRSS(model) { rss.pendingDeletion = [node] } }
+                menu.addDivider()
             }
-            menu.addAction(String(localized: "Delete"), symbol: Symbol.trash) { openRSS(model) { rss.pendingDeletion = [node] } }
-            menu.addDivider()
         }
         addFeedActions(to: menu, model: model)
         menu.addDivider()

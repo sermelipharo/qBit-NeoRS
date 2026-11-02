@@ -36,7 +36,7 @@ struct RSSPane: View {
 
     var body: some View {
         Group {
-            if !showsFeedList, model.nodes.allSatisfy({ $0.kind == .unread }) {
+            if !showsFeedList, model.nodes.allSatisfy(\.isSticky) {
                 ContentUnavailableView {
                     Label("No Feeds", systemImage: Symbol.dotRadiowavesUpForward)
                 } description: {

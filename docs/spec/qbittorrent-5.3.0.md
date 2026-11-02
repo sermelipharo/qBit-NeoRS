@@ -185,7 +185,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | PR | Change | Status | Notes |
 |---|---|---|---|
 | #24056 | "Clone rule" in the auto-downloader | ✅ | Toolbar button and context menu item "Clone rule…" with the "Rule cloning" prompt; the copy is disabled, history and last match cleared |
-| #23963 | Sticky "All" RSS item | ⬜ | `RSSFeedList.swift` has only the Unread node (`.unread`); add "All" showing every article |
+| #23963 | Sticky "All" RSS item | ✅ | `RSSNode.Kind.all` above "Unread" in the RSS window and the main window's sidebar RSS section (once feeds exist); shows every article; sticky rows can't be renamed, moved or deleted |
 | #24120 | Add torrents from links in the article viewer | ⬜ | Verify `RSSArticleView.swift` / `RSSDescriptionRenderer.swift` make description links downloadable via `RSSLinkPolicy.isSupportedTorrentURL` |
 | #24519 | Persist feed list sort order | ⬜ | Low: `RSSFeedList` has no sort order to persist; add sorting and remember it |
 | #24806 | Clamp max articles per feed to non-negative | ✅ | `rss/mod.rs:179` clamps to `0..=i32::MAX` |

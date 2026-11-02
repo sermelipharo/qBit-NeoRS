@@ -155,6 +155,7 @@ enum Symbol {
     static let tray = "tray"
     static let trayAndArrowDown = "tray.and.arrow.down"
     static let trayFull = "tray.full"
+    static let tray2 = "tray.2"
     static let tv = "tv"
     static let wandAndStars = "wand.and.stars"
     static let xmark = "xmark"
@@ -310,6 +311,7 @@ enum Symbol {
         tray,
         trayAndArrowDown,
         trayFull,
+        tray2,
         tv,
         wandAndStars,
         xmark,

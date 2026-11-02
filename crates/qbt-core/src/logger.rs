@@ -24,6 +24,9 @@ pub struct Logger {
     events: EventBus,
     prefs: Arc<PreferencesStore>,
     default_dir: PathBuf,
+    /// Relative log folders are inside the profile's data folder
+    /// (qBittorrent 5.3, #24671), not the process' working directory.
+    data_dir: PathBuf,
     stderr: bool,
 }
 
@@ -41,6 +44,17 @@ struct OpenLog {
     size: u64,
 }
 
+/// The log folder: the default when unset, relative paths inside the data
+/// folder.
+fn log_dir(setting: &str, default_dir: &Path, data_dir: &Path) -> PathBuf {
+    let setting = setting.trim();
+    if setting.is_empty() {
+        default_dir.to_path_buf()
+    } else {
+        data_dir.join(setting)
+    }
+}
+
 impl Logger {
     pub fn new(profile: &Profile, prefs: &Arc<PreferencesStore>, events: EventBus, stderr: bool) -> Self {
         Self {
@@ -54,6 +68,7 @@ impl Logger {
             events,
             prefs: prefs.clone(),
             default_dir: profile.logs_dir(),
+            data_dir: profile.data_dir.clone(),
             stderr,
         }
     }
@@ -142,7 +157,7 @@ impl Logger {
             g.file = None;
             return;
         }
-        let dir = if b.file_log_path.is_empty() { self.default_dir.clone() } else { PathBuf::from(&b.file_log_path) };
+        let dir = log_dir(&b.file_log_path, &self.default_dir, &self.data_dir);
         let path = dir.join(LOG_FILE_NAME);
         if g.file.as_ref().map(|f| f.path != path).unwrap_or(true) {
             g.file = open_log(&path);
@@ -234,4 +249,18 @@ fn format_line(m: &LogMessage) -> String {
         .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%dT%H:%M:%S").to_string())
         .unwrap_or_default();
     format!("({tag}) {ts} - {}", m.message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_log_folders_are_in_the_data_folder() {
+        let (default, data) = (Path::new("/p/data/logs"), Path::new("/p/data"));
+        assert_eq!(log_dir("", default, data), Path::new("/p/data/logs"));
+        assert_eq!(log_dir(" ", default, data), Path::new("/p/data/logs"));
+        assert_eq!(log_dir("mylogs", default, data), Path::new("/p/data/mylogs"));
+        assert_eq!(log_dir("/var/log/qbt", default, data), Path::new("/var/log/qbt"));
+    }
 }

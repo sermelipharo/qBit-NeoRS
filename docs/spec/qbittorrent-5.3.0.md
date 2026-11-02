@@ -72,7 +72,7 @@ Things to know before reading:
 | #24304 | Several recipients for e-mail notifications | ✅ | `net/smtp.rs` sends one e-mail per `;` group, to the group's `,`-separated addresses (as `SMTPClient::sendMail`); tests `parses_settings`, `sends_through_local_server` |
 | #24000 | Session speed = sum of per-torrent payload rates | ⬜ | Verify how the global rate is computed (`bittorrent/speed.rs`, `transfer/info`); sum per-torrent smoothed rates if it comes from raw byte deltas |
 | #23817 | Do not overwrite config without write permission | ⬜ | Low, verify: profile files go through `write_atomic` (`utils/fs.rs:35`); check a read-only profile does not lose data or loop on errors |
-| #24671 | Relative logs folder | ⬜ | Low, verify: resolve a relative file-log path against the profile (`logger.rs`) |
+| #24671 | Relative logs folder | ✅ | Was resolved against the process' working directory; now inside the profile's data folder (`logger::log_dir`, unit test) |
 | #24505 | "Resolve peer countries" off by default | ✅ | Off for new profiles (saved settings keep their value); demo mode keeps flags on |
 | #24711 | Disk queue default 100 MiB | ✅ | Default changed; the engine does not use the value, it is reported for clients |
 | #24084 | "Queued tracker announces" session metric | ⬜ | Count announces waiting on `max_concurrent_http_announces` (`prefs/model.rs:573`); needs a counter in `engine/tracker_comms`; show in Statistics and `server_state` |

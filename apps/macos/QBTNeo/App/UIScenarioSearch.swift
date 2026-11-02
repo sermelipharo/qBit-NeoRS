@@ -1,19 +1,29 @@
 #if DEBUG
 import AppKit
 
-/// Scenario 4: a live search through the Search window, stored and restored across a relaunch.
+/// Scenario 4: a live search through the main window's Search tab, stored and
+/// restored across a relaunch ("Reopen search tabs at launch" and "Also store
+/// search results" are turned on first).
 extension UIScenarios {
     static var searchQuery: String { ProcessInfo.processInfo.environment["QBT_UI_QUERY"] ?? "ubuntu" }
 
+    /// The main window once it shows the Search tab (search is a tab, not a window).
     static func searchWindow(_ d: UIDriver) -> NSWindow? {
-        d.windows.first { $0.title == "Search" || $0.title.hasPrefix("Search") && !$0.title.contains("plugin") }
+        d.model.mainPane == .search ? d.model.mainWindow : nil
     }
 
     static func openSearchWindow(_ d: UIDriver) async throws -> NSWindow {
+        // Tabs and results are only stored with these core preferences on.
+        var prefs = d.model.corePreferences
+        if !prefs.behavior.storeSearchJobs || !prefs.behavior.storeSearchJobResults {
+            prefs.behavior.storeSearchJobs = true
+            prefs.behavior.storeSearchJobResults = true
+            d.model.savePreferences(prefs)
+        }
         d.model.show(pane: .search)
         _ = await d.wait(timeout: 15) { searchWindow(d) != nil }
-        guard let window = searchWindow(d) else { throw UIDriver.Failure(description: "Search window did not open") }
-        d.log("Search window open: '\(window.title)'")
+        guard let window = searchWindow(d) else { throw UIDriver.Failure(description: "Search tab did not open") }
+        d.log("Search tab open in '\(window.title)'")
         return window
     }
 

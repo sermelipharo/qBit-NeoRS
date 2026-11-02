@@ -1,6 +1,5 @@
 //! Adding torrents (`SessionImpl::addTorrent_impl`), metadata download for
-//! magnets, the add dialog's metadata preview, duplicates and the
-//! "Copy .torrent files to" export.
+//! magnets, the add dialog's metadata preview and duplicates.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -371,8 +370,8 @@ impl Session {
         self.emit(CoreEvent::TorrentAdded { hash: id.clone(), name: name.clone() });
         if let Some(bytes) = &torrent_bytes {
             self.cache_metadata(&id, bytes.clone());
-            self.export_to(&prefs.downloads.export_dir, &id, &name).await;
         }
+        self.backup_added_torrent(&id, &name, torrent_bytes.is_some()).await;
         if prefs.downloads.autorun_on_torrent_added_enabled {
             self.run_external_program(&prefs.downloads.autorun_on_torrent_added_program, &id);
         }
@@ -457,44 +456,6 @@ impl Session {
         }
         self.emit(CoreEvent::DuplicateTorrent { hash: id.to_string(), name, merged_trackers: merged });
         Err(QbtError::conflict(format!("This torrent is already in the transfer list. {message}")))
-    }
-
-    /// Copies the .torrent of a torrent to an export folder
-    /// (`<name>.torrent`, then `<name> (N).torrent`).
-    pub(super) async fn export_to(&self, dir: &str, id: &str, name: &str) {
-        let dir = dir.trim();
-        if dir.is_empty() {
-            return;
-        }
-        let Ok(bytes) = self.export_torrent(id) else { return };
-        let dir = paths::expand_home(dir);
-        let base = paths::to_valid_file_name(name);
-        let display = name.to_string();
-        let logger = self.ctx.logger.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            let result = (|| -> std::io::Result<()> {
-                std::fs::create_dir_all(&dir)?;
-                for n in 0..1000 {
-                    let file = if n == 0 { format!("{base}.torrent") } else { format!("{base} ({n}).torrent") };
-                    let path = Path::new(&dir).join(file);
-                    match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
-                        Ok(mut f) => {
-                            use std::io::Write;
-                            return f.write_all(&bytes);
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                        Err(e) => return Err(e),
-                    }
-                }
-                Err(std::io::Error::other("too many files with the same name"))
-            })();
-            if let Err(e) = result {
-                logger.warning(format!(
-                    "Failed to export torrent. Torrent: \"{display}\". Destination: \"{dir}\". Reason: \"{e}\""
-                ));
-            }
-        })
-        .await;
     }
 
     /// Runs the external program for a torrent (added/finished hooks).
@@ -725,7 +686,7 @@ impl Session {
         let id = new_id.as_str();
         if !only_layers {
             self.emit(CoreEvent::TorrentMetadataReceived { hash: id.to_string(), name: name.clone() });
-            self.export_to(&prefs.downloads.export_dir, id, &name).await;
+            self.backup_on_metadata(id, &name).await;
         }
         self.reconcile(Some(&[id.to_string()])).await;
         Some(new_id)

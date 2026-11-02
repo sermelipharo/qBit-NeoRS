@@ -186,6 +186,8 @@ pub struct TorrentEntry {
     pub disable_dht: bool,
     pub disable_pex: bool,
     pub disable_lsd: bool,
+    /// See [`FastResume::torrent_file_backup`].
+    pub torrent_file_backup: String,
     pub rt: Runtime,
 }
 
@@ -272,6 +274,7 @@ impl TorrentEntry {
             disable_dht: false,
             disable_pex: false,
             disable_lsd: false,
+            torrent_file_backup: String::new(),
             rt: Runtime::default(),
         }
     }
@@ -333,6 +336,7 @@ impl TorrentEntry {
         e.disable_dht = r.disable_dht;
         e.disable_pex = r.disable_pex;
         e.disable_lsd = r.disable_lsd;
+        e.torrent_file_backup = r.torrent_file_backup;
         if let Some(m) = &meta {
             let n = m.files.len();
             let valid_paths = r.file_paths.len() == n && r.file_paths.iter().all(|p| paths::is_valid_relative_path(p));
@@ -397,6 +401,7 @@ impl TorrentEntry {
             disable_dht: self.disable_dht,
             disable_pex: self.disable_pex,
             disable_lsd: self.disable_lsd,
+            torrent_file_backup: self.torrent_file_backup.clone(),
             ..Default::default()
         }
     }

@@ -2063,7 +2063,7 @@ Adding is refused until the session has finished restoring (`isRestored()`). Ste
 8. Flags: `paused` iff (stopped OR AutoManaged); `auto_managed` iff (!stopped AND AutoManaged). `duplicate_is_error`. `added_time = now`. `max_connections` = per-torrent connection limit, `max_uploads` = per-torrent upload slots.
 9. `async_add_torrent`; on `add_torrent_alert`:
    - error → `Failed to add torrent. Reason: "%1"` (WARNING), `addTorrentFailed` (DuplicateTorrent if lt duplicate error).
-   - success → if addToQueueTop: `queue_position_top()`; create TorrentImpl; request resume data with `save_info_dict`; log `Added new torrent. Torrent: "%1"`; emit `torrentAdded`; if it has metadata and "Copy .torrent files to:" (`TorrentExportDirectory`) set → export (4.8.5).
+   - success → if addToQueueTop: `queue_position_top()`; create TorrentImpl; request resume data with `save_info_dict`; log `Added new torrent. Torrent: "%1"`; emit `torrentAdded`; with "Store backup in:" (5.3, `TorrentBackupEnabled`) → .torrent backup (4.8.5).
 10. After lt checks/pauses (4.4.3) the torrent is resumed per its mode.
 
 #### 4.3.4 Stop condition semantics
@@ -2073,7 +2073,7 @@ Adding is refused until the session has finished restoring (`isRestored()`). Ste
 - `stop()` always clears the stop condition. Persisted as `qBt-stopCondition` / column `stop_condition`. Legacy lt `stop_when_ready` flag in old resume data maps to FilesChecked.
 
 #### 4.3.5 Magnet metadata retrieval
-- Normal path (torrent added without metadata): state `DownloadingMetadata` / `ForcedDownloadingMetadata` / `StoppedDownloading` / `QueuedDownloading`. On `metadata_received_alert` → `MaintenanceJob::HandleMetadata` → request resume data → in `handleSaveResumeData` the info dict is taken, content layout applied, renamed files honoured, `findIncompleteFiles` run → `endReceivedMetadataHandling`: file priorities (excluded-name filter applied), stop condition applied, torrent **reloaded** in lt (remove + re-add with metadata, same queue position, flags reflecting stopped/forced/automanaged), first/last piece priority applied, `torrentMetadataReceived` emitted, `.torrent` exported to TorrentExportDirectory if set.
+- Normal path (torrent added without metadata): state `DownloadingMetadata` / `ForcedDownloadingMetadata` / `StoppedDownloading` / `QueuedDownloading`. On `metadata_received_alert` → `MaintenanceJob::HandleMetadata` → request resume data → in `handleSaveResumeData` the info dict is taken, content layout applied, renamed files honoured, `findIncompleteFiles` run → `endReceivedMetadataHandling`: file priorities (excluded-name filter applied), stop condition applied, torrent **reloaded** in lt (remove + re-add with metadata, same queue position, flags reflecting stopped/forced/automanaged), first/last piece priority applied, `torrentMetadataReceived` emitted, a pending magnet .torrent backup written (5.3, not for torrents with a v2 hash; 4.8.5).
 - Preview path (`Session::downloadMetadata`, used by the Add dialog for magnets): adds a hidden lt torrent (not in torrent list) with save path `<system temp>/.qBittorrent/<torrentID>`, flags: not paused, not auto-managed, **upload_mode** (never writes files), additional trackers appended; on metadata → removed with `delete_files`, `metadataDownloaded(TorrentInfo)` emitted. `cancelDownloadMetadata` removes it. Queue up/bottom operations push these hidden torrents to the queue bottom. The temp dir is deleted recursively on exit.
 - Log on failure: `Failed to download torrent metadata. Reason: "%1"`.
 
@@ -2257,10 +2257,14 @@ On add (unless skipChecking) and when magnet metadata arrives: first look in the
 - Files with priority Ignored are stored at `<parent dir>/.unwanted/<file name>` (lt rename). Re-enabling moves them back. Toggling the option re-evaluates all torrents. Empty `.unwanted` folders are removed after files leave them; on Windows the folder is marked hidden. User-visible paths never include `.unwanted`.
 - Combines with `.!qB` (extension applied first, then folder).
 
-#### 4.8.5 Copy .torrent files
-- "Copy .torrent files to:" (`TorrentExportDirectory`, default empty) — on add (if metadata present) or when magnet metadata arrives.
-- "Copy .torrent files for finished downloads to:" (`FinishedTorrentExportDirectory`) — on each "finished" event.
-- File name: `<torrent name made valid>.torrent` (chars `\ / : ? " * < > |` removed via `toValidFileName`, trimmed); if it exists → `<name> (1).torrent`, `(2)`… Directory created if missing. Error: `Failed to export torrent. Torrent: "%1". Destination: "%2". Reason: "%3"`.
+#### 4.8.5 .torrent file backups (qBittorrent 5.3, #24641)
+5.3 replaced "Copy .torrent files to:" / "Copy .torrent files for finished downloads to:" (`TorrentExportDirectory`, `FinishedTorrentExportDirectory`) with the group "Store backup .torrent file":
+- "Store backup in:" (`TorrentBackupEnabled`, default false; folder `TorrentBackupDirectory`, empty = `backup`; caption `Choose backup directory`). Relative folders are inside the data folder (`resolvePath(…, SpecialFolder::Data)`). On add with metadata the source .torrent file is copied (or the descriptor saved); a magnet records its URI and the backup is written when the metadata arrives (not for torrents with a v2 hash) or when it finishes.
+- "When torrent finished move backup to:" (`FinishedTorrentBackupDirectoryEnabled`, default false; `FinishedTorrentBackupDirectory`, empty = `backup`): on each "finished" event the backup is moved there (renamed to a unique name) unless already in that folder; a pending magnet backup is written there instead (only while backups are enabled).
+- "Remove backup when removing torrent" (`RemoveTorrentFileBackup`, default false): the recorded backup file is deleted with the torrent.
+- Each torrent's backup path is kept in a `BackupTorrentFiles` key-value registry (stored relative when the folder is relative, or the magnet URI while pending). File name: `<torrent name made valid>.torrent` (`toValidFileName`), `<name> (1).torrent`, `(2)`… if taken. Logs: `Failed to backup .torrent file. Torrent: "%1". Destination: "%2". Reason: "%3"` (warning), `Could not move .torrent file backup. Torrent: "%1". File: "%2".`, `Could not remove .torrent file backup. Torrent: "%1". File: "%2". Reason: %3`, `Could not parse backup Magnet URI. Torrent: "%1". URI: "%2".`
+- Upgrade (`migrateTorrentExportFolderSettings`): an old export folder becomes the backup folder, enabled when it was set; the old key is removed.
+- qBit NeoRS (`bittorrent/torrent_backup.rs`): the registry is the resume record's `torrent_file_backup` (`magnet:` while pending); backups are written from the stored metadata with the current trackers (like "Export .torrent") rather than byte copies of the source file; files are created exclusively (never replacing or following an existing entry) with a sanitised name cut to 200 bytes, moved by copy-then-delete, and only a regular `.torrent` file is ever deleted. The data folder is the profile's `data/`.
 
 #### 4.8.6 Pre-allocation, Mark-of-the-Web
 - Pre-allocate → lt `storage_mode_allocate`, else sparse.
@@ -2296,7 +2300,7 @@ Path must be non-empty and absolute (`Watched folder Path cannot be empty.`, `Wa
 ### 4.10 Completion actions
 
 #### 4.10.1 "Finished" event
-Emitted once per transition to finished (`torrentFinished`), after storage moves/renames complete; not emitted for torrents added with skipChecking. Logged `Torrent download finished. Torrent: "%1"`. Then: export to finished-.torrent dir, share-limit processing, GUI notification `Download completed` / `'%1' has finished downloading.` After processing a batch, if no torrent remains that is unfinished-and-running-and-not-errored → `allTorrentsFinished` (4.10.3).
+Emitted once per transition to finished (`torrentFinished`), after storage moves/renames complete; not emitted for torrents added with skipChecking. Logged `Torrent download finished. Torrent: "%1"`. Then: .torrent backup handling (4.8.5), share-limit processing, GUI notification `Download completed` / `'%1' has finished downloading.` After processing a batch, if no torrent remains that is unfinished-and-running-and-not-errored → `allTorrentsFinished` (4.10.3).
 
 #### 4.10.2 Run external program (`app/application.cpp::runExternalProgram`)
 - Two hooks: on torrent **added** (`AutoRun/OnTorrentAdded/Enabled` false, `…/Program`) and on torrent **finished** (`AutoRun/enabled` false, `AutoRun/program`). Template trimmed before use.

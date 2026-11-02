@@ -77,6 +77,10 @@ pub struct WatchedFolder {
     pub params: TorrentParamsTemplate,
 }
 
+/// `SessionImpl::torrentBackupDirectory()` when none is set: relative to
+/// the profile's data folder.
+pub const DEFAULT_TORRENT_BACKUP_DIR: &str = "backup";
+
 /// Downloads page.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
@@ -106,10 +110,19 @@ pub struct DownloadsPrefs {
     /// Empty = `<save_path>/temp`.
     pub temp_path: String,
     pub use_category_paths_in_manual_mode: bool,
-    /// Copy .torrent files to ("" = off).
-    pub export_dir: String,
-    /// Copy .torrent files of finished downloads to ("" = off).
-    pub export_dir_fin: String,
+    /// qBittorrent 5.3 "Store backup .torrent file" (replaced "Copy .torrent
+    /// files to", migrated on load in `PreferencesStore::load`): keep a copy
+    /// of each added torrent's .torrent file.
+    pub torrent_files_backup_enabled: bool,
+    /// Backup folder; a relative path is inside the profile's data folder
+    /// ("" reads as `backup`).
+    pub torrent_files_backup_dir: String,
+    /// Move the backup to `torrent_files_finished_backup_dir` when the
+    /// torrent finishes.
+    pub torrent_files_finished_backup_dir_enabled: bool,
+    pub torrent_files_finished_backup_dir: String,
+    /// Delete the backup when the torrent is removed.
+    pub remove_torrent_file_backup: bool,
     pub watched_folders: Vec<WatchedFolder>,
     pub excluded_file_names_enabled: bool,
     pub excluded_file_names: Vec<String>,
@@ -151,8 +164,11 @@ impl Default for DownloadsPrefs {
             temp_path_enabled: false,
             temp_path: String::new(),
             use_category_paths_in_manual_mode: false,
-            export_dir: String::new(),
-            export_dir_fin: String::new(),
+            torrent_files_backup_enabled: false,
+            torrent_files_backup_dir: DEFAULT_TORRENT_BACKUP_DIR.into(),
+            torrent_files_finished_backup_dir_enabled: false,
+            torrent_files_finished_backup_dir: DEFAULT_TORRENT_BACKUP_DIR.into(),
+            remove_torrent_file_backup: false,
             watched_folders: Vec::new(),
             excluded_file_names_enabled: false,
             excluded_file_names: Vec::new(),

@@ -157,8 +157,13 @@ Widgets appear in this order: Interface group → Transfer List group → Torren
 | 27 | `temp_path_enabled` | bool | `false` | | `"Use another path for incomplete torrents:"` | Turns on the global "download path" (incomplete folder). · `BitTorrent/Session/TempPathEnabled` |
 | 28 | `temp_path` | string path | `<save_path>/temp` (computed from the save path at construction) | | path edit next to the checkbox (enabled only while it is checked) | Incomplete-download folder. Torrents are moved to the save path when they finish. · `BitTorrent/Session/TempPath` |
 | 29 | `use_category_paths_in_manual_mode` | bool | `false` | | `"Use Category paths in Manual Mode"` (tooltip `"Resolve relative Save Path against appropriate Category path instead of Default one"`) | In Manual mode, a relative save path is resolved against the category path instead of the default path. · `BitTorrent/Session/UseCategoryPathsInManualMode` |
-| 30 | `export_dir` | string path | `""` | `""` = disabled | `"Copy .torrent files to:"` (checkbox + path; caption `"Choose export directory"`) | Copies every added torrent's `.torrent` file here. · `BitTorrent/Session/TorrentExportDirectory` |
-| 31 | `export_dir_fin` | string path | `""` | `""` = disabled | `"Copy .torrent files for finished downloads to:"` | Copies the `.torrent` file here when a download finishes. · `BitTorrent/Session/FinishedTorrentExportDirectory` |
+| 30 | `export_dir` | string path | `""` | `""` = disabled | `"Copy .torrent files to:"` (checkbox + path; caption `"Choose export directory"`) | **Removed in 5.3** (see below). Copies every added torrent's `.torrent` file here. · `BitTorrent/Session/TorrentExportDirectory` |
+| 31 | `export_dir_fin` | string path | `""` | `""` = disabled | `"Copy .torrent files for finished downloads to:"` | **Removed in 5.3** (see below). Copies the `.torrent` file here when a download finishes. · `BitTorrent/Session/FinishedTorrentExportDirectory` |
+| — | `torrent_files_backup_enabled` (5.3, replaces 30–31) | bool | `false` | | Group `"Store backup .torrent file"` → checkbox `"Store backup in:"` + path (caption `"Choose backup directory"`, base path = data folder) | Keeps a copy of each added torrent's `.torrent` file (features §4.8.5). · `BitTorrent/Session/TorrentBackupEnabled` |
+| — | `torrent_files_backup_dir` (5.3) | string path | `"backup"` | empty reads as `backup`; relative = inside the data folder | path edit next to the checkbox | · `BitTorrent/Session/TorrentBackupDirectory` |
+| — | `torrent_files_finished_backup_dir_enabled` (5.3) | bool | `false` | | `"When torrent finished move backup to:"` + path | Moves the backup there when the torrent finishes. · `BitTorrent/Session/FinishedTorrentBackupDirectoryEnabled` |
+| — | `torrent_files_finished_backup_dir` (5.3) | string path | `"backup"` | as above | path edit | · `BitTorrent/Session/FinishedTorrentBackupDirectory` |
+| — | `remove_torrent_file_backup` (5.3) | bool | `false` | | `"Remove backup when removing torrent"` | Deletes the backup with the torrent. · `BitTorrent/Session/RemoveTorrentFileBackup`. Upgrade: a set `TorrentExportDirectory` / `FinishedTorrentExportDirectory` becomes the (enabled) backup folder; qBit NeoRS migrates `export_dir`/`export_dir_fin` in `preferences.json` on load and when importing qBittorrent settings |
 | 32 | `scan_dirs` | object `{ "<folder path>": 0 \| 1 \| "<custom save path>" }` | `{}` | GET: `0` = save into the watched folder itself; `1` = default save path (the folder's AddTorrentParams.savePath is empty); string = custom save path. SET: int `0` → savePath = watched folder with ATM off; int `1` → existing options unchanged; string → that save path with ATM off. Folders absent from the object are **removed**. Invalid folders are skipped silently | Group `"Automatically add torrents from:"`: tree with column `"Watched Folder"`, buttons `"Add..."`, `"Options.."`, `"Remove"` (see §2.2) | **Deprecated** legacy view of watched folders. The full model lives in `watched_folders.json` (per folder: `recursive` plus full AddTorrentParams). · file `<config>/watched_folders.json` |
 | 33 | `excluded_file_names_enabled` | bool | `false` | | Checkable group `"Excluded file names"` | Turns the excluded-file-name filter on. · `BitTorrent/ExcludedFileNamesEnabled` |
 | 34 | `excluded_file_names` | string (`\n`-separated) | `""` | wildcard patterns | plain-text edit inside that group. Tooltip (verbatim): `Blacklist filtered file names from being downloaded from torrent(s).\nFiles matching any of the filters in this list will have their priority automatically set to "Do not download".\n\nUse newlines to separate multiple entries. Can use wildcards as outlined below.\n*: matches zero or more of any characters.\n?: matches any single character.\n[...]: sets of characters can be represented in square brackets.\n\nExamples\n*.exe: filter '.exe' file extension.\nreadme.txt: filter exact file name.\n?.txt: filter 'a.txt', 'b.txt' but not 'aa.txt'.\nreadme[0-9].txt: filter 'readme1.txt', 'readme2.txt' but not 'readme10.txt'.` | Matching files get priority "Do not download" when the torrent is added. The API SET splits on `\n` and keeps empty entries; the GUI drops empty lines. · `BitTorrent/Session/ExcludedFileNames` (string list) |
@@ -750,9 +755,13 @@ These are not in the WebAPI. A native client still has to implement them for par
 223 dht_bootstrap_nodes
 ```
 
-qBittorrent 5.3 changes this list (231 keys; `APPENDIX_A` in
+qBittorrent 5.3 changes this list (234 keys; `APPENDIX_A` in
 `crates/qbt-core/src/prefs/api_json.rs` is the exact order): 39 is
 `mail_notification_encryption_type` instead of `mail_notification_ssl_enabled`;
+30–31 (`export_dir`, `export_dir_fin`) are replaced by
+`torrent_files_backup_enabled`, `torrent_files_backup_dir`,
+`torrent_files_finished_backup_dir_enabled`,
+`torrent_files_finished_backup_dir` and `remove_torrent_file_backup`;
 added are `i2p_pex_enabled` (after `i2p_mixed_mode`),
 `i2p_inbound_length_variance` and `i2p_outbound_length_variance` (after
 `i2p_outbound_length`), `share_limits_mode` (between

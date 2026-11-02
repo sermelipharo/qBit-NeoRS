@@ -46,8 +46,15 @@ enum SettingsSearchAliases {
         "temp_path_enabled": ["BitTorrent/Session/TempPathEnabled", "Use another path for incomplete torrents:", "Saving Management"],
         "temp_path": ["BitTorrent/Session/TempPath"],
         "use_category_paths_in_manual_mode": ["BitTorrent/Session/UseCategoryPathsInManualMode", "Saving Management"],
-        "export_dir": ["BitTorrent/Session/TorrentExportDirectory", "Saving Management"],
-        "export_dir_fin": ["BitTorrent/Session/FinishedTorrentExportDirectory", "Saving Management"],
+        "torrent_files_backup_enabled": [
+            "BitTorrent/Session/TorrentBackupEnabled", "BitTorrent/Session/TorrentBackupDirectory", "Saving Management",
+            "Copy .torrent files to:",
+        ],
+        "torrent_files_finished_backup_dir_enabled": [
+            "BitTorrent/Session/FinishedTorrentBackupDirectoryEnabled", "BitTorrent/Session/FinishedTorrentBackupDirectory",
+            "Saving Management", "Copy .torrent files for finished downloads to:",
+        ],
+        "remove_torrent_file_backup": ["BitTorrent/Session/RemoveTorrentFileBackup", "Saving Management"],
         "excluded_file_names_enabled": ["BitTorrent/ExcludedFileNamesEnabled"],
         "excluded_file_names": ["BitTorrent/Session/ExcludedFileNames"],
         "mail_notification_enabled": ["Preferences/MailNotification/enabled", "Email notification upon download completion"],

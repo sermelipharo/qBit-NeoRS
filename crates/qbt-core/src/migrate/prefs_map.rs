@@ -79,8 +79,14 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("temp_path_enabled", "BitTorrent/Session/TempPathEnabled", Bool),
     ("temp_path", "BitTorrent/Session/TempPath", Str),
     ("use_category_paths_in_manual_mode", "BitTorrent/Session/UseCategoryPathsInManualMode", Bool),
+    // Before qBittorrent 5.3; turned into the backup folders in `build`.
     ("export_dir", "BitTorrent/Session/TorrentExportDirectory", Str),
     ("export_dir_fin", "BitTorrent/Session/FinishedTorrentExportDirectory", Str),
+    ("torrent_files_backup_enabled", "BitTorrent/Session/TorrentBackupEnabled", Bool),
+    ("torrent_files_backup_dir", "BitTorrent/Session/TorrentBackupDirectory", Str),
+    ("torrent_files_finished_backup_dir_enabled", "BitTorrent/Session/FinishedTorrentBackupDirectoryEnabled", Bool),
+    ("torrent_files_finished_backup_dir", "BitTorrent/Session/FinishedTorrentBackupDirectory", Str),
+    ("remove_torrent_file_backup", "BitTorrent/Session/RemoveTorrentFileBackup", Bool),
     ("excluded_file_names_enabled", "BitTorrent/ExcludedFileNamesEnabled", Bool),
     ("excluded_file_names", "BitTorrent/Session/ExcludedFileNames", Lines),
     ("mail_notification_enabled", "Preferences/MailNotification/enabled", Bool),
@@ -440,6 +446,34 @@ pub fn build(api: &Map<String, Value>, ini: &IniFile, watched: Option<Vec<Watche
         let t = if ssl.as_bool().unwrap_or(false) { "SMTPS" } else { "None" };
         api.insert("mail_notification_encryption_type".into(), json!(t));
     }
+    // qBittorrent before 5.3 (its `migrateTorrentExportFolderSettings`): a
+    // set export folder becomes the enabled backup folder.
+    for (old, dir, enabled) in [
+        ("export_dir", "torrent_files_backup_dir", "torrent_files_backup_enabled"),
+        ("export_dir_fin", "torrent_files_finished_backup_dir", "torrent_files_finished_backup_dir_enabled"),
+    ] {
+        if let Some(old) = api.remove(old)
+            && !api.contains_key(dir)
+        {
+            let path = old.as_str().unwrap_or_default().trim().to_owned();
+            api.insert(enabled.into(), json!(!path.is_empty()));
+            if !path.is_empty() {
+                api.insert(dir.into(), json!(path));
+            }
+        }
+    }
+    // A backup folder inside qBittorrent's data folder (its default is the
+    // relative `backup`) becomes the same folder inside ours.
+    let src = source_data_dir.trim_end_matches('/');
+    for key in ["torrent_files_backup_dir", "torrent_files_finished_backup_dir"] {
+        let Some(dir) = api.get(key).and_then(Value::as_str).map(|d| d.trim_end_matches('/').to_owned()) else { continue };
+        if !src.is_empty() && dir.starts_with('/') && (dir == src || dir.starts_with(&format!("{src}/"))) {
+            let rel = dir[src.len()..].trim_start_matches('/');
+            let rel = if rel.is_empty() { crate::prefs::DEFAULT_TORRENT_BACKUP_DIR } else { rel };
+            notes.push(format!("backup folder \"{dir}\" is inside qBittorrent's data folder: using \"{rel}\" in the profile's data folder"));
+            api.insert(key.into(), json!(rel));
+        }
+    }
     let store = PreferencesStore::in_memory(Preferences::default());
     store.apply_json(&Value::Object(api.clone()).to_string()).map_err(|e| format!("preferences rejected: {e}"))?;
     let mut p = store.get();
@@ -524,6 +558,12 @@ pub fn known_difference(key: &str) -> Option<&'static str> {
         "bypass_auth_subnet_whitelist" => "subnets are normalised (CIDR form)",
         "banned_IPs" => "addresses are normalised, sorted and de-duplicated",
         "mail_notification_ssl_enabled" => "qBittorrent 5.3 replaced it by mail_notification_encryption_type (on = SMTPS, off = None)",
+        "export_dir" | "export_dir_fin" => {
+            "qBittorrent 5.3 replaced it by the .torrent backup folders (torrent_files_backup_dir / torrent_files_finished_backup_dir)"
+        }
+        "torrent_files_backup_dir" | "torrent_files_finished_backup_dir" => {
+            "a folder inside qBittorrent's data folder is used inside the profile's data folder"
+        }
         _ => return None,
     })
 }
@@ -630,6 +670,35 @@ mod tests {
         assert_eq!(m["rss_smart_episode_filters"], json!("s(\\d+)e(\\d+)\n(\\d{1,2})"));
         assert!(!m.contains_key("upnp"), "absent keys keep our defaults");
         assert!(used.contains(&"BitTorrent/Session/Port".to_string()));
+    }
+
+    #[test]
+    fn imports_torrent_backup_settings() {
+        // qBittorrent before 5.3: the export folders become enabled backup folders.
+        let f = ini(concat!(
+            "[BitTorrent]\nSession\\TorrentExportDirectory=/t/all\nSession\\FinishedTorrentExportDirectory=\n",
+            "Session\\ShutdownTimeout=20\n",
+        ));
+        let (api, used) = api_json_from_ini(&f);
+        assert!(used.contains(&"BitTorrent/Session/TorrentExportDirectory".to_string()));
+        let p = build(&api, &f, None, "/src/data").unwrap().prefs;
+        assert_eq!(p.advanced.shutdown_timeout, 20);
+        let d = p.downloads;
+        assert!(d.torrent_files_backup_enabled && !d.torrent_files_finished_backup_dir_enabled);
+        assert_eq!((d.torrent_files_backup_dir.as_str(), d.torrent_files_finished_backup_dir.as_str()), ("/t/all", "backup"));
+
+        // qBittorrent 5.3 keys; a folder inside its data folder maps into ours.
+        let f = ini(concat!(
+            "[BitTorrent]\nSession\\TorrentBackupEnabled=true\nSession\\TorrentBackupDirectory=/src/data/backup\n",
+            "Session\\FinishedTorrentBackupDirectoryEnabled=true\nSession\\FinishedTorrentBackupDirectory=/t/done\n",
+            "Session\\RemoveTorrentFileBackup=true\nSession\\TorrentExportDirectory=/stale\n",
+        ));
+        let (api, _) = api_json_from_ini(&f);
+        let built = build(&api, &f, None, "/src/data").unwrap();
+        let d = built.prefs.downloads;
+        assert!(d.torrent_files_backup_enabled && d.torrent_files_finished_backup_dir_enabled && d.remove_torrent_file_backup);
+        assert_eq!((d.torrent_files_backup_dir.as_str(), d.torrent_files_finished_backup_dir.as_str()), ("backup", "/t/done"));
+        assert!(built.notes.iter().any(|n| n.contains("backup folder")));
     }
 
     #[test]

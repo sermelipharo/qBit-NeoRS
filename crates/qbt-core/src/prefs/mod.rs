@@ -139,7 +139,10 @@ fn validate(p: &Preferences) -> QbtResult<()> {
 /// ports). Returns true when something was filled in and must be persisted.
 /// Stored keys renamed since: `mail_notification_ssl_enabled` became
 /// `mail_notification_encryption_type` (qBittorrent 5.3's
-/// `migrateSMTPEncryptionSetting`: SSL on = SMTPS, off = None).
+/// `migrateSMTPEncryptionSetting`: SSL on = SMTPS, off = None);
+/// `export_dir` / `export_dir_fin` became the .torrent backup folders
+/// (`migrateTorrentExportFolderSettings`: the folder is kept and enabled
+/// when it was set).
 fn migrate_stored(v: &mut serde_json::Value) {
     let Some(d) = v.get_mut("downloads").and_then(serde_json::Value::as_object_mut) else { return };
     if let Some(ssl) = d.remove("mail_notification_ssl_enabled")
@@ -147,6 +150,19 @@ fn migrate_stored(v: &mut serde_json::Value) {
     {
         let t = if ssl.as_bool().unwrap_or(false) { SmtpEncryptionType::Smtps } else { SmtpEncryptionType::None };
         d.insert("mail_notification_encryption_type".into(), serde_json::to_value(t).unwrap_or_default());
+    }
+    for (old, dir, enabled) in [
+        ("export_dir", "torrent_files_backup_dir", "torrent_files_backup_enabled"),
+        ("export_dir_fin", "torrent_files_finished_backup_dir", "torrent_files_finished_backup_dir_enabled"),
+    ] {
+        if let Some(old) = d.remove(old)
+            && !d.contains_key(dir)
+        {
+            let path = old.as_str().unwrap_or_default().trim().to_owned();
+            d.insert(enabled.into(), serde_json::Value::Bool(!path.is_empty()));
+            let path = if path.is_empty() { DEFAULT_TORRENT_BACKUP_DIR.to_owned() } else { path };
+            d.insert(dir.into(), serde_json::Value::String(path));
+        }
     }
 }
 
@@ -188,6 +204,28 @@ fn random_port(avoid: Option<i64>) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn migrates_the_old_export_folders() {
+        let load = |json: &str| {
+            let mut v: serde_json::Value = serde_json::from_str(json).unwrap();
+            migrate_stored(&mut v);
+            serde_json::from_value::<Preferences>(v).unwrap().downloads
+        };
+        let d = load(r#"{"downloads": {"export_dir": "/t/all", "export_dir_fin": ""}}"#);
+        assert!(d.torrent_files_backup_enabled);
+        assert_eq!(d.torrent_files_backup_dir, "/t/all");
+        assert!(!d.torrent_files_finished_backup_dir_enabled);
+        assert_eq!(d.torrent_files_finished_backup_dir, "backup");
+        let d = load(r#"{"downloads": {"export_dir_fin": " /t/done "}}"#);
+        assert!(!d.torrent_files_backup_enabled);
+        assert!(d.torrent_files_finished_backup_dir_enabled);
+        assert_eq!(d.torrent_files_finished_backup_dir, "/t/done");
+        // Already migrated: the new keys win.
+        let d = load(r#"{"downloads": {"export_dir": "/old", "torrent_files_backup_dir": "/new"}}"#);
+        assert_eq!((d.torrent_files_backup_enabled, d.torrent_files_backup_dir.as_str()), (false, "/new"));
+        assert_eq!(load("{}"), DownloadsPrefs::default());
+    }
 
     #[test]
     fn migrates_the_old_smtp_ssl_switch() {

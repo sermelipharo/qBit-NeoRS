@@ -92,6 +92,12 @@ pub struct FastResume {
     pub disable_dht: bool,
     pub disable_pex: bool,
     pub disable_lsd: bool,
+    /// Where its .torrent backup was stored (qBittorrent 5.3's
+    /// `BackupTorrentFiles` registry): the file path as configured
+    /// (relative to the data folder when the backup folder is), or
+    /// `magnet:` while a magnet's backup waits for the metadata.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub torrent_file_backup: String,
 }
 
 impl Default for FastResume {
@@ -146,6 +152,7 @@ impl Default for FastResume {
             disable_dht: false,
             disable_pex: false,
             disable_lsd: false,
+            torrent_file_backup: String::new(),
         }
     }
 }

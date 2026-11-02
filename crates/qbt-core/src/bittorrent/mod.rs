@@ -31,6 +31,7 @@ pub mod speed;
 pub mod state;
 pub mod sync;
 pub mod torrent;
+mod torrent_backup;
 pub mod trackers;
 pub mod trash;
 mod watched;

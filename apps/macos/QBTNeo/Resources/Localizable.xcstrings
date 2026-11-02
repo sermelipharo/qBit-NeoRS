@@ -59199,6 +59199,16 @@
         }
       }
     },
+    "Choose backup directory": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите папку для резервных копий"
+          }
+        }
+      }
+    },
     "Choose export directory": {
       "localizations": {
         "ar": {
@@ -195381,6 +195391,16 @@
         }
       }
     },
+    "Remove backup when removing torrent": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалять резервную копию при удалении торрента"
+          }
+        }
+      }
+    },
     "Rule cloning": {
       "localizations": {
         "az-Latn": {
@@ -195923,6 +195943,26 @@
         }
       }
     },
+    "Store backup .torrent file": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранить резервную копию торрент-файла"
+          }
+        }
+      }
+    },
+    "Store backup in:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранить резервные копии в:"
+          }
+        }
+      }
+    },
     "The category decides the save path in automatic mode": {
       "localizations": {
         "ru": {
@@ -196331,6 +196371,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Папка из категории"
+          }
+        }
+      }
+    },
+    "When torrent finished move backup to:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По завершении перемещать копию в:"
           }
         }
       }

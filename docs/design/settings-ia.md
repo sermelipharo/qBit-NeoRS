@@ -520,8 +520,9 @@ Inner segments: **Adding · Files · Seeding & Queue**.
 5. **.torrent Files** `[A]`
    * Delete .torrent files afterwards, with "Also when addition is
      cancelled" (`auto_delete_mode`). The data-loss warning is kept.
-   * Copy .torrent files to:
-   * Copy .torrent files for finished downloads to:
+   * Store backup in: (qBittorrent 5.3)
+   * When torrent finished move backup to:
+   * Remove backup when removing torrent
 6. **Extra Trackers** `[A]`
    * Automatically append these trackers to new downloads: (text)
    * Automatically append trackers from URL to new downloads: URL and
@@ -905,8 +906,9 @@ Counts:
 | 27 | `temp_path_enabled` | Downloads › Saving Management | Transfers › Adding › Save Location | B | new: "Keep incomplete downloads in:" |
 | 28 | `temp_path` | Downloads › Saving Management | Transfers › Adding › Save Location | B | new: "Keep incomplete downloads in:" |
 | 29 | `use_category_paths_in_manual_mode` | Downloads › Saving Management | Transfers › Files › Categories & Automatic Mode | A | kept |
-| 30 | `export_dir` | Downloads › Saving Management | Transfers › Adding › .torrent Files | A | kept |
-| 31 | `export_dir_fin` | Downloads › Saving Management | Transfers › Adding › .torrent Files | A | kept |
+| 30 | `torrent_files_backup_enabled`, `torrent_files_backup_dir` (5.3; were `export_dir`) | Downloads › Store backup .torrent file | Transfers › Adding › .torrent Files | A | kept: "Store backup in:" |
+| 31 | `torrent_files_finished_backup_dir_enabled`, `torrent_files_finished_backup_dir` (5.3; were `export_dir_fin`) | Downloads › Store backup .torrent file | Transfers › Adding › .torrent Files | A | kept: "When torrent finished move backup to:" |
+| — | `remove_torrent_file_backup` (5.3) | Downloads › Store backup .torrent file | Transfers › Adding › .torrent Files | A | kept |
 | 32 | `scan_dirs` | Downloads › Automatically add torrents from (legacy API view) | Transfers › Adding › Watched Folders | B | kept (edited through the folder list) |
 | 33 | `excluded_file_names_enabled` | Downloads › Excluded file names | Transfers › Files › Files on Disk | A | kept; editor in a disclosure |
 | 34 | `excluded_file_names` | Downloads › Excluded file names | Transfers › Files › Files on Disk | A | kept; editor in a disclosure |
@@ -1200,7 +1202,7 @@ translation, and their qBittorrent strings stay as a fallback until then.
 | Seeding & Queue | Раздача и очередь | (Transfers segment) |
 | Save Location | Место сохранения | "Saving Management" (part) |
 | Watched Folders | Папки наблюдения | "Automatically add torrents from:" |
-| .torrent Files | Файлы .torrent | "Delete .torrent files afterwards" plus the export paths |
+| .torrent Files | Файлы .torrent | "Delete .torrent files afterwards" plus the backup folders |
 | Extra Trackers | Дополнительные трекеры | "Automatically append these trackers…" |
 | Removing Torrents | Удаление торрентов | Advanced row |
 | Files on Disk | Файлы на диске | unnamed Downloads group |

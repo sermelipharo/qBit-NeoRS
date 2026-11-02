@@ -265,7 +265,7 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 231);
+        assert_eq!(prefs.as_object().unwrap().len(), 234);
         assert_eq!(prefs["web_ui_port"], h.port);
         assert!(prefs.get("web_ui_password").is_none());
 
@@ -957,6 +957,84 @@ fn torrent_share_limits_mode() {
         assert_eq!(h.post("/api/v2/app/setPreferences", &[("json", json)], Some(&c)).await.status(), 200);
         let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
         assert_eq!(prefs["share_limits_mode"], "MatchAll");
+    });
+}
+
+/// Polls `pred` for up to 30 s.
+async fn eventually(what: &str, mut pred: impl FnMut() -> bool) {
+    let start = Instant::now();
+    while !pred() {
+        assert!(start.elapsed() < Duration::from_secs(30), "timed out waiting for {what}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// qBittorrent 5.3's .torrent file backups: the settings, the backup of an
+/// added torrent (named after it, inside the profile's data folder by
+/// default), its move to the finished folder and its removal with the
+/// torrent.
+#[test]
+fn torrent_file_backups() {
+    let h = Harness::new(|_| {});
+    let base = h._dir.path().to_path_buf();
+    h.block(async {
+        let c = h.login().await;
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!(prefs["torrent_files_backup_enabled"], false);
+        assert_eq!(prefs["torrent_files_backup_dir"], "backup");
+        assert!(prefs.get("export_dir").is_none() && prefs.get("export_dir_fin").is_none());
+
+        let done = base.join("done");
+        let json = json!({
+            "torrent_files_backup_enabled": true,
+            "torrent_files_finished_backup_dir_enabled": true,
+            "torrent_files_finished_backup_dir": done.to_string_lossy(),
+            "remove_torrent_file_backup": true,
+        });
+        let r = h.post("/api/v2/app/setPreferences", &[("json", &json.to_string())], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!(prefs["torrent_files_finished_backup_dir"], json!(done.to_string_lossy()));
+        assert_eq!(prefs["remove_torrent_file_backup"], true);
+
+        // A stopped torrent: backed up at once into data/backup.
+        let tor = crate::migrate::libtorrent::tests::sample_torrent(16, &[7u8; 40], b"nfo!");
+        let id = crate::bittorrent::metainfo::parse_torrent(&tor, Default::default()).unwrap().meta.id();
+        let save = base.join("dl");
+        let add = |stopped: &'static str| {
+            let form = reqwest::multipart::Form::new()
+                .part("torrents", reqwest::multipart::Part::bytes(tor.clone()).file_name("x.torrent"))
+                .text("savepath", save.to_string_lossy().into_owned())
+                .text("stopped", stopped);
+            h.client.post(h.url("/api/v2/torrents/add")).header("Cookie", &c).multipart(form).send()
+        };
+        assert_eq!(add("true").await.unwrap().status(), 200);
+        let backup = base.join("data/backup/dir.torrent");
+        eventually("the backup", || backup.is_file()).await;
+        let parsed = crate::bittorrent::metainfo::parse_torrent(&std::fs::read(&backup).unwrap(), Default::default()).unwrap();
+        assert_eq!(parsed.meta.id(), id);
+
+        // Removing the torrent removes its backup.
+        let del = [("hashes", id.as_str()), ("deleteFiles", "false")];
+        assert_eq!(h.post("/api/v2/torrents/delete", &del, Some(&c)).await.status(), 200);
+        eventually("the backup to go", || !backup.exists()).await;
+
+        // A file already named like the torrent is kept; the backup gets a
+        // new name, and moves to the finished folder once the download
+        // (data already on disk) is checked complete.
+        std::fs::write(&backup, b"user file").unwrap();
+        std::fs::create_dir_all(save.join("dir")).unwrap();
+        std::fs::write(save.join("dir/a.mkv"), [7u8; 40]).unwrap();
+        std::fs::write(save.join("dir/b.nfo"), b"nfo!").unwrap();
+        assert_eq!(add("false").await.unwrap().status(), 200);
+        let finished = done.join("dir.torrent");
+        eventually("the backup in the finished folder", || finished.is_file()).await;
+        assert!(!base.join("data/backup/dir (1).torrent").exists(), "moved, not copied");
+        assert_eq!(std::fs::read(&backup).unwrap(), b"user file");
+
+        assert_eq!(h.post("/api/v2/torrents/delete", &del, Some(&c)).await.status(), 200);
+        eventually("the finished backup to go", || !finished.exists()).await;
+        assert!(backup.exists());
     });
 }
 

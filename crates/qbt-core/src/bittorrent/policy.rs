@@ -835,7 +835,7 @@ impl Session {
             })
             .await;
         }
-        self.export_to(&prefs.downloads.export_dir_fin, id, &name).await;
+        self.backup_on_finished(id, &name).await;
         if prefs.downloads.autorun_enabled {
             self.run_external_program(&prefs.downloads.autorun_program, id);
         }

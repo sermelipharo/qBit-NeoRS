@@ -56,6 +56,12 @@ fn to_int(v: &Value) -> i64 {
     if i32::try_from(n).is_ok() { n } else { 0 }
 }
 
+/// An empty .torrent backup folder means the default one
+/// (`SessionImpl::torrentBackupDirectory`).
+fn backup_dir_or_default(dir: &str) -> &str {
+    if dir.is_empty() { DEFAULT_TORRENT_BACKUP_DIR } else { dir }
+}
+
 /// `QVariant::toReal` (malformed or non-finite -> 0).
 fn to_f64(v: &Value) -> f64 {
     let f = match v {
@@ -217,8 +223,12 @@ pub fn to_json(p: &Preferences) -> Value {
     put("temp_path_enabled", json!(d.temp_path_enabled));
     put("temp_path", json!(d.temp_path));
     put("use_category_paths_in_manual_mode", json!(d.use_category_paths_in_manual_mode));
-    put("export_dir", json!(d.export_dir));
-    put("export_dir_fin", json!(d.export_dir_fin));
+    // qBittorrent 5.3: .torrent file backups (replaced export_dir/export_dir_fin).
+    put("torrent_files_backup_enabled", json!(d.torrent_files_backup_enabled));
+    put("torrent_files_backup_dir", json!(backup_dir_or_default(&d.torrent_files_backup_dir)));
+    put("torrent_files_finished_backup_dir_enabled", json!(d.torrent_files_finished_backup_dir_enabled));
+    put("torrent_files_finished_backup_dir", json!(backup_dir_or_default(&d.torrent_files_finished_backup_dir)));
+    put("remove_torrent_file_backup", json!(d.remove_torrent_file_backup));
     put("scan_dirs", scan_dirs_json(&d.watched_folders));
     put("excluded_file_names_enabled", json!(d.excluded_file_names_enabled));
     put("excluded_file_names", json!(d.excluded_file_names.join("\n")));
@@ -537,8 +547,15 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("temp_path_enabled", d.temp_path_enabled, to_bool);
     set!("temp_path", d.temp_path, to_str);
     set!("use_category_paths_in_manual_mode", d.use_category_paths_in_manual_mode, to_bool);
-    set!("export_dir", d.export_dir, to_str);
-    set!("export_dir_fin", d.export_dir_fin, to_str);
+    set!("torrent_files_backup_enabled", d.torrent_files_backup_enabled, to_bool);
+    if let Some(v) = get("torrent_files_backup_dir") {
+        d.torrent_files_backup_dir = backup_dir_or_default(&to_str(v)).to_owned();
+    }
+    set!("torrent_files_finished_backup_dir_enabled", d.torrent_files_finished_backup_dir_enabled, to_bool);
+    if let Some(v) = get("torrent_files_finished_backup_dir") {
+        d.torrent_files_finished_backup_dir = backup_dir_or_default(&to_str(v)).to_owned();
+    }
+    set!("remove_torrent_file_backup", d.remove_torrent_file_backup, to_bool);
     if let Some(v) = get("scan_dirs") {
         apply_scan_dirs(d, v);
     }
@@ -941,7 +958,9 @@ mod tests {
         "add_stopped_enabled", "torrent_stop_condition", "merge_trackers", "auto_delete_mode", "preallocate_all",
         "incomplete_files_ext", "use_unwanted_folder", "auto_tmm_enabled", "torrent_changed_tmm_enabled",
         "save_path_changed_tmm_enabled", "category_changed_tmm_enabled", "save_path", "temp_path_enabled", "temp_path",
-        "use_category_paths_in_manual_mode", "export_dir", "export_dir_fin", "scan_dirs", "excluded_file_names_enabled",
+        "use_category_paths_in_manual_mode", "torrent_files_backup_enabled", "torrent_files_backup_dir",
+        "torrent_files_finished_backup_dir_enabled", "torrent_files_finished_backup_dir", "remove_torrent_file_backup",
+        "scan_dirs", "excluded_file_names_enabled",
         "excluded_file_names", "mail_notification_enabled", "mail_notification_sender", "mail_notification_email",
         "mail_notification_smtp", "mail_notification_encryption_type", "mail_notification_auth_enabled",
         "mail_notification_username", "mail_notification_password", "autorun_on_torrent_added_enabled",
@@ -978,7 +997,8 @@ mod tests {
         "confirm_remove_tracker_from_all_torrents", "recheck_completed_torrents", "app_instance_name",
         "refresh_interval", "resolve_peer_host_names", "resolve_peer_countries", "reannounce_when_address_changed",
         "enable_embedded_tracker", "embedded_tracker_port", "embedded_tracker_port_forwarding", "mark_of_the_web",
-        "ignore_ssl_errors", "python_executable_path", "bdecode_depth_limit", "bdecode_token_limit",
+        "ignore_ssl_errors", "python_executable_path", "bdecode_depth_limit",
+        "bdecode_token_limit",
         "async_io_threads", "hashing_threads", "file_pool_size", "checking_memory_use", "disk_cache", "disk_cache_ttl",
         "disk_queue_size", "disk_io_type", "disk_io_read_mode", "disk_io_write_mode", "enable_coalesce_read_write",
         "enable_piece_extent_affinity", "enable_upload_suggestions", "send_buffer_watermark",
@@ -999,7 +1019,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3.
-        assert_eq!(APPENDIX_A.len(), 231);
+        assert_eq!(APPENDIX_A.len(), 234);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);
@@ -1084,7 +1104,7 @@ mod tests {
             &obj(json!({
                 "dht": "false", "pex": 0, "lsd": "yes", "upnp": "0", "anonymous_mode": 2.5,
                 "max_active_downloads": "7", "max_active_torrents": 9.6, "max_active_uploads": "x",
-                "save_path": 12, "export_dir": true, "max_ratio": "2.25", "rss_fetch_delay": "  9 ",
+                "save_path": 12, "torrent_files_backup_dir": true, "max_ratio": "2.25", "rss_fetch_delay": "  9 ",
             })),
         )
         .unwrap();
@@ -1097,9 +1117,32 @@ mod tests {
         assert_eq!(p.bittorrent.max_active_torrents, 10);
         assert_eq!(p.bittorrent.max_active_uploads, 0); // malformed -> 0
         assert_eq!(p.downloads.save_path, "12");
-        assert_eq!(p.downloads.export_dir, "true");
+        assert_eq!(p.downloads.torrent_files_backup_dir, "true");
         assert_eq!(p.bittorrent.max_ratio, 2.25);
         assert_eq!(p.rss.rss_fetch_delay, 9);
+    }
+
+    #[test]
+    fn torrent_backup_keys() {
+        let mut p = Preferences::default();
+        let v = to_json(&p);
+        assert_eq!(v["torrent_files_backup_enabled"], json!(false));
+        assert_eq!(v["torrent_files_backup_dir"], json!("backup"));
+        assert_eq!(v["torrent_files_finished_backup_dir"], json!("backup"));
+        assert!(v.get("export_dir").is_none());
+        apply(
+            &mut p,
+            &obj(json!({
+                "torrent_files_backup_enabled": true, "torrent_files_backup_dir": "/b",
+                "torrent_files_finished_backup_dir_enabled": "true", "torrent_files_finished_backup_dir": "",
+                "remove_torrent_file_backup": 1,
+                "export_dir": "/ignored",
+            })),
+        )
+        .unwrap();
+        let d = &p.downloads;
+        assert!(d.torrent_files_backup_enabled && d.torrent_files_finished_backup_dir_enabled && d.remove_torrent_file_backup);
+        assert_eq!((d.torrent_files_backup_dir.as_str(), d.torrent_files_finished_backup_dir.as_str()), ("/b", "backup"));
     }
 
     #[test]

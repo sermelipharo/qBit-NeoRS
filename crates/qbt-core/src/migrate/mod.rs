@@ -862,8 +862,9 @@ pub fn apply_sandbox(p: &mut Preferences, sb: &Sandbox) {
     p.downloads.mail_notification_enabled = false;
     p.downloads.autorun_enabled = false;
     p.downloads.autorun_on_torrent_added_enabled = false;
-    p.downloads.export_dir.clear();
-    p.downloads.export_dir_fin.clear();
+    p.downloads.torrent_files_backup_enabled = false;
+    p.downloads.torrent_files_finished_backup_dir_enabled = false;
+    p.downloads.remove_torrent_file_backup = false;
     p.downloads.watched_folders.clear();
     p.advanced.resolve_peer_countries = false;
     p.advanced.enable_embedded_tracker = false;

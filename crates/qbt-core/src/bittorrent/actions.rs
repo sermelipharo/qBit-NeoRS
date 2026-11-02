@@ -355,6 +355,7 @@ impl Session {
             let backup = self.backup.clone();
             let rid = id.clone();
             let _ = tokio::task::spawn_blocking(move || backup.delete(&rid)).await;
+            self.remove_torrent_backup(&name, std::mem::take(&mut e.torrent_file_backup)).await;
             self.ctx.logger.info(format!("Torrent removed. Torrent: \"{name}\""));
             self.emit(CoreEvent::TorrentRemoved { hash: id.clone(), name: name.clone() });
             let (Some((h, _)), Some(engine)) = (e.rt.engine.take(), self.engine()) else { continue };

@@ -15,6 +15,7 @@ mod api_creator;
 mod api_gui;
 mod api_log;
 mod api_names;
+mod api_plugins;
 mod api_rss;
 mod api_search;
 mod api_torrents;
@@ -49,6 +50,8 @@ pub struct App {
     pub(crate) gui_sync: parking_lot::Mutex<bittorrent::sync::GuiSyncState>,
     /// Torrent name rules pushed by the macOS app (memory only).
     pub(crate) name_rules: parking_lot::RwLock<Option<Arc<NameRulesSnapshot>>>,
+    /// Lua plugins (idle, without any Lua state, while switched off).
+    pub(crate) plugins: Arc<crate::plugins::PluginsManager>,
 }
 
 #[cfg_attr(feature = "ffi", uniffi::export)]
@@ -79,6 +82,7 @@ impl App {
             events,
             logger,
             config: Arc::new(config),
+            plugins: Default::default(),
         };
 
         let (session, rss, search, creator, webui) = rt.block_on(async {
@@ -102,7 +106,13 @@ impl App {
             crate::net::dyndns::launch(&ctx)
         };
 
+        let plugins = {
+            let _guard = rt.enter();
+            crate::plugins::PluginsManager::launch(&ctx, crate::plugins::SessionHost::new(&session, &ctx))
+        };
+
         let app = Arc::new(Self {
+            plugins,
             rt,
             ctx,
             tracker,
@@ -138,6 +148,7 @@ impl App {
             session.shutdown().await;
         };
         self.tracker.stop();
+        self.plugins.stop();
         let _ = self.rt.block_on(async { tokio::time::timeout(std::time::Duration::from_secs(10), fut).await });
         self.ctx.logger.flush();
     }

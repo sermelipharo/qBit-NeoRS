@@ -27,6 +27,7 @@ use crate::error::{QbtError, QbtResult};
 use crate::events::CoreEvent;
 use crate::model::*;
 use crate::net::geoip::{self, GeoIp};
+use crate::plugins::{PluginArg, PluginHandler, TorrentArg};
 use crate::prefs::Preferences;
 
 /// A peer source that can be switched off per torrent.
@@ -375,6 +376,26 @@ impl Session {
 
     pub(super) fn emit(&self, event: CoreEvent) {
         self.ctx.events.emit(event);
+    }
+
+    /// Hands a torrent event to the plugins engine when an enabled plugin
+    /// handles it (one atomic load otherwise). Takes the state lock briefly:
+    /// never call it while holding it.
+    pub(super) fn plugin_event(&self, handler: PluginHandler, id: &str, extra: impl FnOnce() -> Vec<PluginArg>) {
+        if !self.ctx.plugins.wants(handler) {
+            return;
+        }
+        let Some(torrent) = self.plugin_torrent(id) else { return };
+        let mut args = vec![PluginArg::Torrent(torrent)];
+        args.extend(extra());
+        self.ctx.plugins.emit(handler, args, &self.ctx.logger);
+    }
+
+    /// A torrent for a plugin event, with a copy of its current state;
+    /// `None` when there is no such torrent.
+    pub(super) fn plugin_torrent(&self, id: &str) -> Option<TorrentArg> {
+        let info = self.torrent_info(id).ok()?;
+        Some(TorrentArg { id: info.hash.clone(), captured: Some(Arc::new(info)) })
     }
 
     /// Runs `f` on each existing torrent among `hashes` (lower-cased).
@@ -1096,17 +1117,23 @@ impl Session {
         } else {
             hash.split('|').map(str::to_string).collect()
         };
+        let mut added_by: Vec<(String, Vec<TrackerTierEntry>)> = Vec::new();
         let ids = self.for_each(&hashes, |e, _| {
             let before: HashSet<String> = e.trackers.iter().map(|t| t.url.clone()).collect();
             let added = trackers::add_trackers(&mut e.trackers, &valid);
             e.trust_urls(valid.iter().map(|t| t.url.as_str()));
             if added {
-                for t in e.trackers.iter().filter(|t| !before.contains(&t.url)) {
+                let new: Vec<TrackerTierEntry> = e.trackers.iter().filter(|t| !before.contains(&t.url)).cloned().collect();
+                for t in &new {
                     logger.info(format!("Added tracker to torrent. Torrent: \"{}\". Tracker: \"{}\"", e.display_name(), t.url));
                 }
+                added_by.push((e.id.clone(), new));
             }
         });
         self.push_trackers(&ids);
+        for (id, list) in added_by {
+            self.plugin_event(PluginHandler::TorrentTrackersAdded, &id, || vec![PluginArg::Trackers(list)]);
+        }
         Ok(())
     }
 
@@ -1183,17 +1210,26 @@ impl Session {
             hash.split('|').map(str::to_string).collect()
         };
         let urls: HashSet<&str> = urls.iter().map(|u| u.as_str()).collect();
+        let mut removed_by: Vec<(String, Vec<String>)> = Vec::new();
         let ids = self.for_each(&hashes, |e, _| {
             let name = e.display_name();
+            let mut removed = Vec::new();
             e.trackers.retain(|t| {
                 let remove = urls.contains(t.url.as_str());
                 if remove {
                     logger.info(format!("Removed tracker from torrent. Torrent: \"{name}\". Tracker: \"{}\"", t.url));
+                    removed.push(t.url.clone());
                 }
                 !remove
             });
+            if !removed.is_empty() {
+                removed_by.push((e.id.clone(), removed));
+            }
         });
         self.push_trackers(&ids);
+        for (id, list) in removed_by {
+            self.plugin_event(PluginHandler::TorrentTrackersRemoved, &id, || vec![PluginArg::StrList(list)]);
+        }
         Ok(())
     }
 
@@ -1451,10 +1487,12 @@ impl Session {
     fn set_category_unchecked(&self, hashes: &[String], category: &str) -> QbtResult<()> {
         let switch_to_manual = !self.ctx.prefs.current().downloads.torrent_changed_tmm_enabled;
         let mut relocate = Vec::new();
+        let mut changed = Vec::new();
         self.for_each(hashes, |e, env| {
             if e.category == category {
                 return;
             }
+            changed.push((e.id.clone(), e.category.clone()));
             if switch_to_manual && e.auto_tmm {
                 e.save_path = e.save_path(env);
                 e.download_path = e.download_path(env);
@@ -1466,6 +1504,9 @@ impl Session {
             }
         });
         self.relocate(relocate);
+        for (id, old) in changed {
+            self.plugin_event(PluginHandler::TorrentCategoryChanged, &id, || vec![PluginArg::Str(old)]);
+        }
         Ok(())
     }
 
@@ -1482,6 +1523,9 @@ impl Session {
             e.auto_tmm = enabled;
             relocate.push(e.id.clone());
         });
+        for id in &relocate {
+            self.plugin_event(PluginHandler::TorrentSavingModeChanged, id, Vec::new);
+        }
         self.relocate(relocate);
         Ok(())
     }
@@ -1516,45 +1560,67 @@ impl Session {
 
     pub fn delete_tags(&self, tags: &[String]) -> QbtResult<()> {
         let del: HashSet<String> = tags.iter().map(|t| t.trim().to_string()).collect();
+        let mut removed = Vec::new();
         {
             let mut st = self.state.write();
             st.tags.retain(|t| !del.contains(t));
             for e in st.torrents.values_mut() {
                 let before = e.tags.len();
-                e.tags.retain(|t| !del.contains(t));
+                e.tags.retain(|t| {
+                    let gone = del.contains(t);
+                    if gone {
+                        removed.push((e.id.clone(), t.clone()));
+                    }
+                    !gone
+                });
                 if e.tags.len() != before {
                     e.rt.dirty = true;
                 }
             }
         }
         self.save_tags();
+        for (id, tag) in removed {
+            self.plugin_event(PluginHandler::TorrentTagRemoved, &id, || vec![PluginArg::Str(tag)]);
+        }
         Ok(())
     }
 
     pub fn add_tags(&self, hashes: &[String], tags: &[String]) -> QbtResult<()> {
         let tags = Self::valid_tags(tags)?;
         self.state.write().tags.extend(tags.iter().cloned());
+        let mut added = Vec::new();
         self.for_each(hashes, |e, _| {
             for t in &tags {
                 if !e.tags.contains(t) {
                     e.tags.push(t.clone());
+                    added.push((e.id.clone(), t.clone()));
                 }
             }
             e.tags.sort();
         });
         self.save_tags();
+        for (id, tag) in added {
+            self.plugin_event(PluginHandler::TorrentTagAdded, &id, || vec![PluginArg::Str(tag)]);
+        }
         Ok(())
     }
 
     pub fn remove_tags(&self, hashes: &[String], tags: &[String]) -> QbtResult<()> {
         let del: HashSet<String> = tags.iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect();
+        let mut removed = Vec::new();
         self.for_each(hashes, |e, _| {
+            for t in e.tags.iter().filter(|t| del.is_empty() || del.contains(*t)) {
+                removed.push((e.id.clone(), t.clone()));
+            }
             if del.is_empty() {
                 e.tags.clear();
             } else {
                 e.tags.retain(|t| !del.contains(t));
             }
         });
+        for (id, tag) in removed {
+            self.plugin_event(PluginHandler::TorrentTagRemoved, &id, || vec![PluginArg::Str(tag)]);
+        }
         Ok(())
     }
 
@@ -1562,8 +1628,21 @@ impl Session {
         let mut tags = Self::valid_tags(tags)?;
         tags.sort();
         self.state.write().tags.extend(tags.iter().cloned());
-        self.for_each(hashes, |e, _| e.tags = tags.clone());
+        let mut changes = Vec::new();
+        self.for_each(hashes, |e, _| {
+            for t in e.tags.iter().filter(|t| !tags.contains(t)) {
+                changes.push((e.id.clone(), t.clone(), false));
+            }
+            for t in tags.iter().filter(|t| !e.tags.contains(t)) {
+                changes.push((e.id.clone(), t.clone(), true));
+            }
+            e.tags = tags.clone();
+        });
         self.save_tags();
+        for (id, tag, added) in changes {
+            let handler = if added { PluginHandler::TorrentTagAdded } else { PluginHandler::TorrentTagRemoved };
+            self.plugin_event(handler, &id, || vec![PluginArg::Str(tag)]);
+        }
         Ok(())
     }
 

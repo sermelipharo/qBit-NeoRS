@@ -17,6 +17,7 @@ pub mod logger;
 pub mod migrate;
 pub mod model;
 pub mod net;
+pub mod plugins;
 pub mod prefs;
 pub mod rss;
 pub mod search;

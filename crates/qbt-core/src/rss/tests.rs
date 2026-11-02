@@ -50,7 +50,7 @@ fn context(dir: &Path, prefs: Preferences) -> CoreContext {
     let prefs = Arc::new(PreferencesStore::in_memory(prefs));
     let events = EventBus::default();
     let logger = Arc::new(Logger::new(&profile, &prefs, events.clone(), false));
-    CoreContext { rt: tokio::runtime::Handle::current(), profile, prefs, events, logger, config: Arc::new(config) }
+    CoreContext { rt: tokio::runtime::Handle::current(), profile, prefs, events, logger, config: Arc::new(config), plugins: Default::default() }
 }
 
 type Routes = Arc<Mutex<HashMap<String, (u16, Vec<u8>)>>>;

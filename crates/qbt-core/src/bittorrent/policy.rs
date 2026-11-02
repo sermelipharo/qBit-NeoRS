@@ -16,6 +16,7 @@ use super::share_limits::{self, ShareInputs};
 use super::torrent::{Env, Phase};
 use super::{scheduler, trackers};
 use crate::events::CoreEvent;
+use crate::plugins::{PluginArg, PluginHandler};
 use crate::model::*;
 use crate::net::http::{self, HttpPurpose, HttpRequest};
 use crate::prefs::{BtProtocol, Preferences};
@@ -52,6 +53,8 @@ struct Timers {
 
 pub(super) enum TorrentEvent {
     Finished(String),
+    /// Stopped by its stop condition (files checked).
+    Stopped(String),
     Errored { id: String, name: String, message: String, disk_full: bool },
     Checked(String),
 }
@@ -472,8 +475,11 @@ impl Session {
         for ev in events {
             match ev {
                 TorrentEvent::Finished(id) => finished.push(id),
+                TorrentEvent::Stopped(id) => self.plugin_event(PluginHandler::TorrentStopped, &id, Vec::new),
                 TorrentEvent::Errored { id, name, message, disk_full } => {
                     self.ctx.logger.warning(format!("Torrent errored. Torrent: \"{name}\". Error: \"{message}\""));
+                    let text = message.clone();
+                    self.plugin_event(PluginHandler::TorrentIOError, &id, || vec![PluginArg::Str(text)]);
                     if disk_full || is_disk_full(&message) {
                         self.emit(CoreEvent::FullDiskError { hash: id, name, message });
                     } else {
@@ -643,6 +649,7 @@ impl Session {
                 if e.stop_condition == StopCondition::FilesChecked {
                     e.stop_condition = StopCondition::None;
                     e.stopped = true;
+                    events.push(TorrentEvent::Stopped(e.id.clone()));
                     self.ctx.logger.info(format!("Torrent stopped. Torrent: \"{}\"", e.display_name()));
                 }
                 e.rt.dirty = true;
@@ -858,6 +865,7 @@ impl Session {
             });
         }
         self.emit(CoreEvent::TorrentFinished { hash: id.to_string(), name });
+        self.plugin_event(PluginHandler::TorrentFinished, id, Vec::new);
         self.process_share_limits(Some(id)).await;
     }
 

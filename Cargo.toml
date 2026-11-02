@@ -118,6 +118,8 @@ libc = "0.2"
 librqbit-dualstack-sockets = "0.7"
 librqbit-utp = "0.7"
 lru = "0.18"
+# Lua 5.4 for the plugins engine (MIT; the Lua sources are vendored, MIT).
+mlua = { version = "0.11", default-features = false, features = ["lua54", "vendored"] }
 maxminddb = "0.32"
 mdns-sd = "0.21"
 memchr = "2"

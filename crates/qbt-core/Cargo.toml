@@ -29,6 +29,7 @@ hyper = { workspace = true, features = ["server", "http1"] }
 hyper-util = { workspace = true, features = ["tokio", "server", "http1", "service"] }
 libc.workspace = true
 memchr.workspace = true
+mlua.workspace = true
 lettre = { workspace = true, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls", "rustls-platform-verifier", "aws-lc-rs"] }
 maxminddb = { workspace = true, features = ["mmap"] }
 parking_lot.workspace = true

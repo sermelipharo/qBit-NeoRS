@@ -637,6 +637,9 @@ pub struct AdvancedPrefs {
     pub dht_bootstrap_nodes: String,
     /// Stored for WebAPI clients; the engine has no WebTorrent.
     pub webtorrent_stun_server: String,
+    /// qBit NeoRS: run Lua plugins (qBittorrent 5.3's plugins engine, a
+    /// build option there). Off by default; not settable through the WebAPI.
+    pub plugins_enabled: bool,
 }
 
 pub const DEFAULT_DHT_BOOTSTRAP_NODES: &str =
@@ -721,6 +724,7 @@ impl Default for AdvancedPrefs {
             max_outstanding_block_requests: 2000,
             dht_bootstrap_nodes: DEFAULT_DHT_BOOTSTRAP_NODES.into(),
             webtorrent_stun_server: "stun.l.google.com:19302".into(),
+            plugins_enabled: false,
         }
     }
 }

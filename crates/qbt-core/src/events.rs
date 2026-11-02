@@ -49,6 +49,9 @@ pub enum CoreEvent {
     SessionResumed,
     /// A WebAPI client or signal asked the application to quit.
     ShutdownRequested,
+    /// Plugins were loaded, installed, updated, removed, enabled or
+    /// disabled, or the engine started or stopped.
+    PluginsChanged,
 }
 
 /// Receives core events. Implemented in Swift by the app; called from core

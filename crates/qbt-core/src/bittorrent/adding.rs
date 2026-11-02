@@ -11,6 +11,7 @@ use super::torrent::{self, Env, TorrentEntry};
 use super::{autorun, paths, resume, trackers};
 use crate::error::{QbtError, QbtResult};
 use crate::events::CoreEvent;
+use crate::plugins::{PluginArg, PluginHandler};
 use crate::model::*;
 use crate::net::http::{self, HttpPurpose, HttpRequest};
 use crate::prefs::{AutoDeleteMode, Preferences};
@@ -157,6 +158,10 @@ impl Session {
                 e => e.to_string(),
             };
             self.ctx.logger.warning(format!("Failed to add torrent. Source: \"{label}\". Reason: \"{reason}\""));
+            if self.ctx.plugins.wants(PluginHandler::AddTorrentFailed) {
+                let args = vec![PluginArg::Str(label.clone()), PluginArg::Str(reason.clone())];
+                self.ctx.plugins.emit(PluginHandler::AddTorrentFailed, args, &self.ctx.logger);
+            }
             self.emit(CoreEvent::AddTorrentFailed { source: label.clone(), reason });
         }
         if let Some(path) = file_source {
@@ -368,6 +373,12 @@ impl Session {
         }
         self.ctx.logger.info(format!("Added new torrent. Torrent: \"{name}\""));
         self.emit(CoreEvent::TorrentAdded { hash: id.clone(), name: name.clone() });
+        self.plugin_event(PluginHandler::TorrentAdded, &id, Vec::new);
+        if self.ctx.plugins.wants(PluginHandler::TorrentMetadataReady)
+            && self.with_torrent(&id, |e, _| e.has_metadata()).unwrap_or(false)
+        {
+            self.plugin_event(PluginHandler::TorrentMetadataReady, &id, Vec::new);
+        }
         if let Some(bytes) = &torrent_bytes {
             self.cache_metadata(&id, bytes.clone());
         }
@@ -453,6 +464,12 @@ impl Session {
             self.ctx.logger.info(format!(
                 "Detected an attempt to add a duplicate torrent. Existing torrent: \"{name}\". Torrent infohash: {id}. Result: {message}"
             ));
+        }
+        if self.ctx.plugins.wants(PluginHandler::DuplicateTorrentDetected)
+            && let Some(torrent) = self.plugin_torrent(id)
+        {
+            let args = vec![PluginArg::Str(id.to_string()), PluginArg::Torrent(torrent), PluginArg::Str(message.to_string())];
+            self.ctx.plugins.emit(PluginHandler::DuplicateTorrentDetected, args, &self.ctx.logger);
         }
         self.emit(CoreEvent::DuplicateTorrent { hash: id.to_string(), name, merged_trackers: merged });
         Err(QbtError::conflict(format!("This torrent is already in the transfer list. {message}")))
@@ -625,6 +642,7 @@ impl Session {
         let logger = self.ctx.logger.clone();
         let mut moved = None;
         let only_layers;
+        let mut stopped_by_condition = false;
         let name = {
             let mut st = self.state.write();
             if st.torrents.get(id).is_none_or(|e| e.has_metadata() && !e.needs_piece_layers())
@@ -668,6 +686,7 @@ impl Session {
             if e.stop_condition == StopCondition::MetadataReceived {
                 e.stop_condition = StopCondition::None;
                 e.stopped = true;
+                stopped_by_condition = true;
                 logger.info(format!("Torrent stopped. Torrent: \"{}\"", e.display_name()));
             }
             e.display_name()
@@ -686,6 +705,10 @@ impl Session {
         let id = new_id.as_str();
         if !only_layers {
             self.emit(CoreEvent::TorrentMetadataReceived { hash: id.to_string(), name: name.clone() });
+            self.plugin_event(PluginHandler::TorrentMetadataReady, id, Vec::new);
+            if stopped_by_condition {
+                self.plugin_event(PluginHandler::TorrentStopped, id, Vec::new);
+            }
             self.backup_on_metadata(id, &name).await;
         }
         self.reconcile(Some(&[id.to_string()])).await;

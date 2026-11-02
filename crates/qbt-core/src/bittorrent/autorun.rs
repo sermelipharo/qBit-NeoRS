@@ -85,19 +85,52 @@ pub fn replace_vars(s: &str, v: &AutorunVars) -> String {
     chars.into_iter().collect()
 }
 
+/// Removes one pair of quotes around a whole argument ("strip redundant
+/// quotes" in `Application::runExternalProgram`).
+fn strip_quotes(arg: String) -> String {
+    if arg.len() >= 2 && arg.starts_with('"') && arg.ends_with('"') { arg[1..arg.len() - 1].to_string() } else { arg }
+}
+
 /// Program + arguments for a template.
 pub fn build_argv(template: &str, v: &AutorunVars) -> Vec<String> {
-    split_command(template.trim())
-        .into_iter()
-        .map(|arg| {
-            let stripped = if arg.len() >= 2 && arg.starts_with('"') && arg.ends_with('"') {
-                arg[1..arg.len() - 1].to_string()
-            } else {
-                arg
-            };
-            replace_vars(&stripped, v)
-        })
-        .collect()
+    split_command(template.trim()).into_iter().map(|arg| replace_vars(&strip_quotes(arg), v)).collect()
+}
+
+/// Program + arguments of a plain command line (no placeholders), split
+/// like `build_argv`: plugins' `qBittorrent.exec` (qBittorrent's
+/// `LuaFunctions::exec` on Unix).
+pub fn split_program(command: &str) -> Vec<String> {
+    split_command(command.trim()).into_iter().map(strip_quotes).collect()
+}
+
+/// Like [`spawn`], but the program is killed when it runs longer than
+/// `limit`, and `running` counts the programs started this way that are
+/// still running. Must be called inside the runtime.
+pub fn spawn_limited(argv: &[String], limit: std::time::Duration, running: &'static std::sync::atomic::AtomicUsize) -> bool {
+    use std::sync::atomic::Ordering;
+    let Some((program, args)) = argv.split_first() else { return false };
+    if program.is_empty() {
+        return false;
+    }
+    let mut cmd = tokio::process::Command::new(program);
+    cmd.args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    match cmd.spawn() {
+        Ok(mut child) => {
+            running.fetch_add(1, Ordering::Relaxed);
+            tokio::spawn(async move {
+                if tokio::time::timeout(limit, child.wait()).await.is_err() {
+                    let _ = child.kill().await;
+                }
+                running.fetch_sub(1, Ordering::Relaxed);
+            });
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 /// Starts the program detached (stdio to /dev/null) and reaps it in the
@@ -168,5 +201,26 @@ mod tests {
         assert_eq!(argv, vec!["/usr/bin/notify", "My Torrent; rm -rf ~", "/dl/My Torrent", "--size=1234", ""]);
         let one_quote = build_argv("\"", &v);
         assert_eq!(one_quote, vec!["\""]);
+    }
+
+    #[test]
+    fn plain_command_lines() {
+        assert_eq!(split_program(r#"touch "/dl/My Torrent.txt""#), vec!["touch", "/dl/My Torrent.txt"]);
+        assert_eq!(split_program("  rm  -f a%Nb "), vec!["rm", "-f", "a%Nb"]);
+        assert!(split_program("   ").is_empty());
+    }
+
+    #[tokio::test]
+    async fn limited_programs_are_killed() {
+        static RUNNING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let argv = vec!["/bin/sleep".to_string(), "30".to_string()];
+        assert!(spawn_limited(&argv, std::time::Duration::from_millis(100), &RUNNING));
+        assert_eq!(RUNNING.load(std::sync::atomic::Ordering::Relaxed), 1);
+        let start = std::time::Instant::now();
+        while RUNNING.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+            assert!(start.elapsed() < std::time::Duration::from_secs(5), "not killed");
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(!spawn_limited(&["/nonexistent/program".to_string()], std::time::Duration::from_secs(1), &RUNNING));
     }
 }

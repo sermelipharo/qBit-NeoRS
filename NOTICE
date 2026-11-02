@@ -39,6 +39,13 @@ It contains or is derived from the following third-party work:
   texts ship in Contents/Resources/python/licenses (scripts/python-licenses
   in the sources).
 
+* Lua 5.4 (https://www.lua.org), MIT License, Copyright 1994-2025 Lua.org,
+  PUC-Rio. Compiled into the core from the sources vendored by the lua-src
+  crate, through the mlua bindings (https://github.com/mlua-rs/mlua, MIT
+  License, Copyright 2019-2021 A. Orlenko and 2017 rlua), for the Lua
+  plugins engine. The example plugins in crates/qbt-core/tests/fixtures/plugins
+  are copied unchanged from qBittorrent 5.3.0 (examples/plugins).
+
 * DB-IP "IP to Country Lite" database (downloaded at runtime when peer country
   resolution is enabled), Creative Commons Attribution 4.0, https://db-ip.com.
 

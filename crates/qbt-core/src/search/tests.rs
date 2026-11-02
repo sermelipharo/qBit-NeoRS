@@ -45,6 +45,7 @@ impl Harness {
             events,
             logger,
             config: Arc::new(config),
+            plugins: Default::default(),
         };
         let added: Arc<Mutex<Vec<TorrentSource>>> = Arc::default();
         let sink = added.clone();

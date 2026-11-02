@@ -11,6 +11,7 @@ use super::torrent::{Env, Phase, TorrentEntry};
 use super::{batch_rename, bencode, metainfo, paths, trash};
 use crate::error::{QbtError, QbtResult};
 use crate::events::CoreEvent;
+use crate::plugins::{PluginArg, PluginHandler};
 use crate::model::*;
 use crate::prefs::{ContentRemoveOption, Preferences};
 
@@ -346,6 +347,7 @@ impl Session {
 
     async fn start_mode(&self, hashes: &[String], forced: bool) -> QbtResult<()> {
         let logger = self.ctx.logger.clone();
+        let mut started = Vec::new();
         let ids = self.for_each(hashes, |e, _| {
             e.rt.error = None;
             e.rt.error_reported = false;
@@ -358,15 +360,20 @@ impl Session {
             if e.stopped {
                 e.stopped = false;
                 logger.info(format!("Torrent resumed. Torrent: \"{}\"", e.display_name()));
+                started.push(e.id.clone());
             }
         });
         self.update_queue();
         self.reconcile(Some(&ids)).await;
+        for id in started {
+            self.plugin_event(PluginHandler::TorrentStarted, &id, Vec::new);
+        }
         Ok(())
     }
 
     pub async fn stop(&self, hashes: &[String]) -> QbtResult<()> {
         let logger = self.ctx.logger.clone();
+        let mut stopped = Vec::new();
         let ids = self.for_each(hashes, |e, _| {
             e.stop_condition = StopCondition::None;
             if !e.stopped {
@@ -375,9 +382,13 @@ impl Session {
                 e.rt.ul_rate = 0;
                 e.rt.avg.reset();
                 logger.info(format!("Torrent stopped. Torrent: \"{}\"", e.display_name()));
+                stopped.push(e.id.clone());
             }
         });
         self.reconcile(Some(&ids)).await;
+        for id in stopped {
+            self.plugin_event(PluginHandler::TorrentStopped, &id, Vec::new);
+        }
         Ok(())
     }
 
@@ -387,6 +398,7 @@ impl Session {
         let prefs = self.ctx.prefs.current();
         let to_trash = prefs.advanced.torrent_content_remove_option == ContentRemoveOption::MoveToTrash;
         for id in Self::ids_of(hashes) {
+            self.plugin_event(PluginHandler::TorrentAboutToBeRemoved, &id, Vec::new);
             let removed = self.state.write().torrents.remove(&id);
             let Some(mut e) = removed else { continue };
             if let Some(t) = e.rt.metadata_task.take() {
@@ -566,6 +578,7 @@ impl Session {
             let id = id.to_string();
             self.ctx.rt.spawn(async move { me.move_storage(id, target, false, MoveContext::ChangeSavePath, false).await });
         }
+        self.plugin_event(PluginHandler::TorrentSavePathChanged, id, Vec::new);
     }
 
     pub async fn set_download_path(&self, hashes: &[String], path: &str) -> QbtResult<()> {
@@ -784,7 +797,10 @@ impl Session {
         if old == new {
             return Ok(());
         }
-        self.rename_files(hash, vec![(idx, new)]).await
+        self.rename_files(hash, vec![(idx, new)]).await?;
+        let id = hash.trim().to_ascii_lowercase();
+        self.plugin_event(PluginHandler::TorrentContentFileRenamed, &id, || vec![PluginArg::Int(idx as i64), PluginArg::Str(old)]);
+        Ok(())
     }
 
     pub async fn rename_folder(&self, hash: &str, old: &str, new: &str) -> QbtResult<()> {
@@ -832,7 +848,21 @@ impl Session {
             }
             Ok(changes)
         })??;
-        self.rename_files(hash, changes).await
+        let old_paths: Vec<(i64, String)> = self
+            .with_torrent(hash, |e, _| changes.iter().map(|(i, _)| (*i as i64, e.file_paths[*i].clone())).collect())
+            .unwrap_or_default();
+        let result = self.rename_files(hash, changes.clone()).await;
+        let id = hash.trim().to_ascii_lowercase();
+        match &result {
+            Ok(()) => self.plugin_event(PluginHandler::TorrentContentFolderRenamed, &id, || {
+                vec![PluginArg::Str(new), PluginArg::Str(old), PluginArg::IndexedPaths(old_paths)]
+            }),
+            Err(_) => self.plugin_event(PluginHandler::TorrentContentFolderRenamingFailed, &id, || {
+                let failed = changes.iter().map(|(i, _)| *i as i64).collect();
+                vec![PluginArg::Str(new), PluginArg::Str(old), PluginArg::IndexedPaths(Vec::new()), PluginArg::IntList(failed)]
+            }),
+        }
+        result
     }
 
     /// Renames many files at once ("Manage Torrent Content", qBittorrent 5.3):

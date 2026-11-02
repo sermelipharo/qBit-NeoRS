@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::app::{AppConfig, Profile};
 use crate::events::EventBus;
 use crate::logger::Logger;
+use crate::plugins::PluginBus;
 use crate::prefs::PreferencesStore;
 
 /// Shared services handed to every subsystem at start-up.
@@ -14,4 +15,6 @@ pub struct CoreContext {
     pub events: EventBus,
     pub logger: Arc<Logger>,
     pub config: Arc<AppConfig>,
+    /// Hands session events to the plugins engine (a no-op while it is off).
+    pub plugins: PluginBus,
 }

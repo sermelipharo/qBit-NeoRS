@@ -26,5 +26,5 @@ pub(crate) fn context_with(rt: &tokio::runtime::Runtime, dir: &Path, prefs: Pref
     let prefs = Arc::new(PreferencesStore::in_memory(prefs));
     let events = EventBus::default();
     let logger = Arc::new(Logger::new(&profile, &prefs, events.clone(), false));
-    CoreContext { rt: rt.handle().clone(), profile, prefs, events, logger, config: Arc::new(config) }
+    CoreContext { rt: rt.handle().clone(), profile, prefs, events, logger, config: Arc::new(config), plugins: Default::default() }
 }

@@ -591,6 +591,7 @@ These are not in the WebAPI. A native client still has to implement them for par
 | "Cards: show technical info as tags" | `GUI/TorrentNames/CardTags` | bool | `true` | |
 | "Show the year as a tag" | `GUI/TorrentNames/YearAsTag` | bool | `true` | Off: the year is appended to the title. |
 | Name rules | `GUI/TorrentNames/Rules` | data (JSON `[NameRule]`) | absent | Absent = built-in rules. |
+| Settings › Privacy › Plugins: "Enable plugins" | core `advanced.plugins_enabled` (`config/preferences.json`) | bool | `false` | Runs the Lua plugins engine (qBittorrent 5.3, features.md §3.39; a build option upstream). Not readable or settable through the WebAPI. Off: no plugins thread and no Lua state. Plugin enabled flags are in `config/plugins.json`. |
 
 ### 11.2 Properties panel / speed graph
 

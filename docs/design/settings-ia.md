@@ -659,6 +659,11 @@ Inner segments: **Adding · Files · Seeding & Queue**.
    * Ignore SSL errors
      ↳ *Unsafe: accepts forged certificates for RSS, updates and downloads.*
      Shown in red when on.
+10. **Plugins** `[B]` (qBit NeoRS switch for qBittorrent 5.3's Lua plugins)
+   * Enable plugins, with *Manage Plugins…*
+     ↳ *Plugins are Lua programs that react to torrent events. An enabled
+     plugin can run programs and send e-mail as you: install plugins only
+     from people you trust.* Shown in red when on.
 
 ### 5.7 Remote — `globe`
 

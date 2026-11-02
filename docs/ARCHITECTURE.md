@@ -76,10 +76,26 @@ Rules:
   apply differences live (rate limits, queueing, WebUI restart, RSS timers ...).
 * `EventBus` fans `CoreEvent`s out to the Swift listener and in-process
   subscribers.
+* Lua plugins (`plugins/`, qBittorrent 5.3's engine): `PluginsManager`
+  starts one `qbt-plugins` thread when `advanced.plugins_enabled` is on and
+  stops it when it goes off (no thread or Lua state otherwise). The thread
+  owns one sandboxed Lua 5.4 state per plugin (`runtime.rs`: libraries,
+  budget hook, memory cap; `api.rs`: the `qBittorrent` namespace and the
+  torrent object, which reads and changes torrents through the
+  `PluginHost` trait, implemented by `SessionHost`). The session reaches
+  plugins only through `CoreContext::plugins` (`PluginBus`): an atomic mask
+  of the handlers enabled plugins define, then a non-blocking send into a
+  256-entry queue with the torrent ID, a copy of its `TorrentInfo` and the
+  handler's arguments (`Session::plugin_event`). Facade calls
+  (`api_plugins.rs`) go to the thread as requests with a reply channel;
+  `CoreEvent::PluginsChanged` tells the app to refresh. The vendored Lua is
+  a `static:-bundle` C library, which `scripts/build-core.sh` merges into
+  the static library for Xcode.
 * Profile layout (`~/Library/Application Support/qBit NeoRS/`):
   `config/preferences.json`, `config/categories.json`,
   `config/watched_folders.json`, `config/search.json` (disabled search
-  plugins), `data/BT_backup/` (per torrent `<id>.torrent`
+  plugins), `config/plugins.json` (enabled Lua plugins), `data/plugins/`
+  (Lua plugins, 0700), `data/BT_backup/` (per torrent `<id>.torrent`
   + `<id>.fastresume` JSON), `data/rss/`, `data/nova3/`, `data/logs/`,
   `data/GeoDB/`, `data/stats.json`, `data/engine/`.
 
@@ -91,7 +107,7 @@ Rules:
 * Scenes: main window (sidebar filters · transfer list · properties
   pane), `Settings` (toolbar panes built from one settings catalog with
   tiers and search; see `docs/design/settings-ia.md`), RSS, Search, Execution Log, Torrent
-  Creator, Statistics, About; `MenuBarExtra` with speeds; Dock badge.
+  Creator, Statistics, Plugins, About; `MenuBarExtra` with speeds; Dock badge.
 * Hidden windows give their views back (`releasedWhileHidden`, see
   `docs/hidden-ui-memory.md`): the main window, Settings, Log, Statistics and
   About drop their view trees after 2 minutes closed or 10 minutes fully

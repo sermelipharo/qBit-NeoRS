@@ -831,6 +831,85 @@ Mitigations:
   torrent or category names, no pinned torrents and no picker entries, and
   the widgets' buttons are disabled.
 
+## Lua plugins (`crates/qbt-core/src/plugins`)
+
+qBittorrent 5.3's plugins engine (#24485). A plugin is Lua code that the
+user installs; its API includes `qBittorrent.exec` (start a program) and
+`qBittorrent.sendMail`, so an enabled plugin is code execution as the user.
+The aim is not to make a malicious plugin safe, but to make sure that only
+plugins the user chose can run, that they cannot be planted or swapped by
+others, that a buggy plugin cannot hurt the core, and that the user sees
+what each plugin does.
+
+Threats: another local account or process planting or replacing plugin
+files; a remote party (WebAPI client, RSS feed, torrent, search plugin)
+getting a plugin installed or the engine switched on; a plugin escaping the
+Lua API (files, shell, native code, bytecode); a buggy or hostile plugin
+hanging or bloating the app, flooding the log or spawning programs without
+end; plugin callbacks slowing the session.
+
+Mitigations:
+* Global switch `advanced.plugins_enabled` (Settings > Privacy > Plugins),
+  off by default and not part of the WebAPI preferences (a WebAPI client can
+  neither read nor change it). While it is off no plugin thread runs, no Lua
+  state exists and the plugins folder is not touched; the session's only
+  cost is one relaxed atomic load per event.
+* Plugins load only from `<profile>/data/plugins` (created 0700). The folder
+  and its parent must be real directories owned by the user and not
+  group/world-writable, or nothing loads; each `<id>.lua` is opened with
+  `O_NOFOLLOW`, checked on the open descriptor (regular file, owned by the
+  user, not group/world-writable, at most 1 MiB) and read through it, so it
+  cannot be swapped between check and read. Refused files are listed in the
+  Plugins window and logged.
+* Installation only from a local file the user picks (or drops) in the
+  Plugins window: absolute path, `<id>.lua` name (no hidden names,
+  separators or control characters), 1 MiB limit, must load and declare a
+  valid `NAME` and `VERSION`; an update needs a higher version. The copy is
+  written atomically with mode 0600. There is no URL install, no WebAPI and
+  no Web UI for plugins. New plugins are installed disabled.
+* Sandbox: each plugin has its own Lua 5.4 state with only the base,
+  string, table, math, utf8 and coroutine libraries (no `io`, `os`, `debug`,
+  `package`/`require`); `load`, `loadfile`, `dofile`, `collectgarbage`,
+  `getmetatable`, `setmetatable`, `raw*`, `warn` and `string.dump` are
+  removed; plugins load as text only (bytecode is refused). The
+  `qBittorrent` API is registered after the main chunk ran, so code at the
+  top level of a file (run when it is installed or loaded) has no API.
+* Budgets: every callback (and the main chunk) gets 1 s of wall time and
+  200 million VM instructions (checked every 1000 instructions, coroutines
+  included), and each state is capped at 16 MiB. `pcall`/`xpcall` are
+  replaced so they stop catching errors once the budget is spent or memory
+  ran out: a plugin cannot swallow its own timeout. A plugin that runs out
+  of time three calls in a row is disabled. Per callback a plugin may write
+  200 log lines, start 8 programs and send 4 e-mails; the rest are dropped
+  with one warning.
+* Off the hot paths: all Lua runs on one dedicated thread. The session
+  queues an event (a torrent ID, a copy of its `TorrentInfo` and the
+  handler's arguments) only when an enabled plugin defines that handler,
+  with a non-blocking send into a 256-entry queue; when full the event is
+  dropped and logged. Torrent changes made by plugins go through the normal
+  session methods; slow ones (moving files, starting) run as tasks.
+* `qBittorrent.exec` never uses a shell: the command line is split into
+  arguments like "Run external program" (`autorun::split_program`, shared
+  code), stdin/stdout/stderr go to `/dev/null`, a program is killed after
+  10 minutes and at most 16 plugin programs run at once. `sendMail` uses the
+  e-mail notification settings and the same SMTP code as completion mails.
+* Every action is logged to the execution log: engine start/stop, loaded,
+  refused, installed, updated, uninstalled, enabled, disabled, invoked,
+  every program started (with its command line), every e-mail (with its
+  subject), every failed or stopped callback, dropped events. The Plugins
+  window shows each plugin's file, size, SHA-256, the handlers it defines,
+  whether it is invocable, and its programs, e-mails and failures since the
+  engine started, with a warning that an enabled plugin can run programs.
+* The macOS app is not sandboxed (it needs arbitrary download folders and
+  already runs external programs for "Run external program"), so `exec`
+  adds no capability the user did not already grant through that setting.
+
+Known limits: Lua's string pattern functions run in C and are not
+interrupted by the instruction hook, so a hostile pattern can keep the
+plugins thread busy; the core is unaffected (events are dropped, and the
+switch still stops the engine, whose thread then ends after that call).
+A plugin's programs run with the user's rights; that is the feature.
+
 ## Audit (2026-10-15)
 
 Independent review of every network-facing component on `main`: WebUI

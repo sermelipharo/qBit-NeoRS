@@ -57,7 +57,7 @@ impl Harness {
             assert_eq!(mgr.status().python_path, python, "QBT_TEST_PYTHON was not used");
         }
         if !mgr.status().python_found {
-            eprintln!("skipping search integration test: no Python 3.9+ found");
+            eprintln!("skipping search integration test: no Python 3.13+ found");
             mgr.shutdown().await;
             return None;
         }
@@ -203,7 +203,7 @@ async fn python_end_to_end() {
     h.mgr.install_plugins(vec![dummy.clone()]).await.unwrap();
     let p = h.plugin("dummy").expect("dummy installed");
     assert_eq!(p.full_name, "Dummy Engine");
-    assert_eq!(p.version, "1.0");
+    assert_eq!(p.version, "1", "trailing zero components are omitted, as in 5.3");
     assert!(p.enabled);
     let cats: Vec<&str> = p.supported_categories.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(cats, ["all", "movies"]);
@@ -254,7 +254,8 @@ async fn python_end_to_end() {
     let mut results = page.results;
     results.sort_by(|a, b| a.file_name.cmp(&b.file_name));
     let r = &results[0];
-    assert_eq!(r.file_name, "Result 0 foo%20bar   piped");
+    // Since novaprinter 1.56 a `|` in a name survives (it is percent-encoded on the way).
+    assert_eq!(r.file_name, "Result 0 foo%20bar | piped");
     assert_eq!(r.file_url, format!("magnet:?xt=urn:btih:{:040}", 0));
     assert_eq!(r.file_size, 1_610_612_736);
     assert_eq!(r.seeders, 10);

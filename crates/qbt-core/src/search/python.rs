@@ -28,7 +28,7 @@ pub(crate) struct PythonVersion(pub [i32; 3]);
 
 impl PythonVersion {
     /// `PythonInfo::MINIMUM_SUPPORTED_VERSION`.
-    pub const MINIMUM: PythonVersion = PythonVersion([3, 9, 0]);
+    pub const MINIMUM: PythonVersion = PythonVersion([3, 13, 0]);
 
     pub fn parse(s: &str) -> Option<Self> {
         let parts: Vec<&str> = s.split('.').collect();
@@ -314,8 +314,10 @@ mod tests {
 
     #[test]
     fn version_support() {
-        assert!(PythonVersion([3, 9, 0]).is_supported());
+        assert!(PythonVersion([3, 13, 0]).is_supported());
         assert!(PythonVersion([3, 14, 2]).is_supported());
+        assert!(!PythonVersion([3, 12, 9]).is_supported());
+        assert!(!PythonVersion([3, 9, 6]).is_supported(), "macOS's own Python");
         assert!(PythonVersion([4, 0, 0]).is_supported());
         assert!(!PythonVersion([3, 8, 18]).is_supported());
         assert!(!PythonVersion([2, 7, 18]).is_supported());

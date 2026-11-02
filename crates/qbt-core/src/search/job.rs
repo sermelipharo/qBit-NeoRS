@@ -40,25 +40,28 @@ const ERROR_TEXT_CAP: usize = 4096;
 /// Parses one `nova2.py` output line:
 /// `link|name|size|seeds|leech|engine_url[|desc_link[|pub_date]]`.
 /// Lines with fewer than 6 fields are rejected; extra fields are ignored.
+/// The name is percent-encoded (novaprinter 1.56, qBittorrent 5.3), so it
+/// may contain `|`.
 pub(crate) fn parse_result_line(line: &[u8], engine_of: impl Fn(&str) -> String) -> Option<SearchResult> {
     let parts: Vec<&[u8]> = line.split(|&b| b == b'|').collect();
     if parts.len() < 6 {
         return None;
     }
-    let text = |i: usize| -> String {
-        let s = String::from_utf8_lossy(parts[i].trim_ascii());
+    let clean = |bytes: &[u8]| -> String {
+        let s = String::from_utf8_lossy(bytes);
         if s.chars().any(char::is_control) {
             s.chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
         } else {
             s.into_owned()
         }
     };
+    let text = |i: usize| clean(parts[i].trim_ascii());
     let int = |i: usize| std::str::from_utf8(parts[i].trim_ascii()).ok().and_then(|s| s.parse::<i64>().ok());
 
     let site_url = text(5);
     Some(SearchResult {
         file_url: text(0),
-        file_name: text(1),
+        file_name: clean(&crate::webui::http::percent_decode(parts[1].trim_ascii(), false)),
         // Unparsable sizes become 0; -1 (unknown) passes through.
         file_size: int(2).unwrap_or(0),
         seeders: int(3).filter(|&v| v >= 0).unwrap_or(-1),
@@ -455,6 +458,10 @@ mod tests {
         assert_eq!(r.leechers, 0);
         assert_eq!(r.descr_link, "d");
         assert_eq!(r.pub_date, -1, "non-positive dates are unknown");
+
+        // The name is percent-decoded; decoded control characters become spaces.
+        let r = parse_result_line(b"l|A%7CB%20C%0AD%E2%9C%93 100%|1|1|1|u", engine_of).unwrap();
+        assert_eq!(r.file_name, "A|B C D\u{2713} 100%");
 
         let r = parse_result_line(b"l|n|1|1|1|u|d|-1\r", engine_of).unwrap();
         assert_eq!(r.pub_date, -1);

@@ -4,7 +4,8 @@ extension DemoClient: SearchClient {
     private var store: DemoFeatureStore { .shared }
 
     func searchEngineStatus() -> SearchEngineStatus {
-        SearchEngineStatus(pythonFound: true, pythonPath: "/usr/bin/python3", pythonVersion: "3.9.6", message: "")
+        SearchEngineStatus(pythonFound: true, pythonPath: "/Applications/qBit NeoRS.app/Contents/Resources/python/bin/python3.13",
+                           pythonVersion: "3.13.16", message: "")
     }
 
     func searchPlugins() -> [SearchPlugin] {

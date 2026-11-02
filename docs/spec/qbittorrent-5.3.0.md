@@ -94,7 +94,7 @@ Things to know before reading:
 | #24084, #24152 | Statistics rows for the new metrics | ⬜ | After the core metrics: `Features/Statistics/StatisticsWindow.swift:23` (queued announces; latency only if measured) |
 | #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
 | #24740 | Detect redundant quotes in the Python path | ✅ | Settings drops a matching pair of surrounding quotes as you type; the core uses a quoted path without them and logs a warning (5.3 refuses it in the Web UI form) |
-| #24279 | Python minimum becomes 3.13 | 🟡 | The app bundles a trimmed Python 3.13 (`scripts/embed-python.sh`, `Contents/Resources/python`, 37 MB); search tries the Settings path, then the bundled interpreter, then PATH. Left: raise `PythonVersion::MINIMUM` with the 5.3 nova3 scripts (group 4) |
+| #24279 | Python minimum becomes 3.13 | ✅ | The app bundles a trimmed Python 3.13 (`scripts/embed-python.sh`); `PythonVersion::MINIMUM` is 3.13 with the 5.3 nova3 scripts |
 | #23825 | "North Macedonia" instead of FYR Macedonia | ✅ | `net/geoip/countries.rs` |
 | #25037 | Re-sort when Remaining changes | ✅ | Nothing to do: every sync with changed torrents re-sorts the list (`TransferListModel.storeDidChange` → `refilter`), Remaining included |
 | #23949 | E-mail examples as placeholder text | ✅ | Prompts `qBittorrent_notification@example.com` and `smtp.example.com:465` (`NotificationsGroup.swift`) |
@@ -196,9 +196,9 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #24912 | Keep cookies across HTTP redirects | ⬜ | Port `git show 9b0e9311f` into `crates/qbt-core/resources/nova3/helpers.py` |
-| #24933 | Escape pipe characters properly | ⬜ | Port `git show 4ab1a06d1` into `resources/nova3/novaprinter.py` and the result parser in `search/nova.rs` if it splits on `|` |
-| #25017 | Relaxed plugin versioning | ⬜ | `PluginVersion` accepts exactly two components (`search/nova.rs:29-52`) and a short header line; accept 1 to 3 components and a line up to 23 chars (`# VERSION: 999.999.999`) |
+| #24912 | Keep cookies across HTTP redirects | ✅ | nova3 scripts from 5.3 (`helpers.py` 1.59 keeps cookies across redirects) |
+| #24933 | Escape pipe characters properly | ✅ | `novaprinter.py` 1.56 percent-encodes the name and refuses `|` in other fields; `search/job.rs` decodes the name (test `field_rules`) |
+| #25017 | Relaxed plugin versioning | ✅ | `PluginVersion` takes 1 to 3 components and prints without trailing zeros; the header is read in 22-byte chunks (tests in `search/nova.rs`) |
 | #24548 | Revised plugin install procedure (unlisted: more checks, new log format) | ⬜ | Compare `search/plugins.rs` with `git show d3e8abede`: unknown file format, same or newer already installed, post-install verification, new log lines |
 | #24776 | Middle-click closes search tabs | ⬜ | See macOS app UI |
 | #23911 | Search docs format | ➖ | Docs only |

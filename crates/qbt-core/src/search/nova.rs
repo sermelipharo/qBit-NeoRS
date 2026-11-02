@@ -2,7 +2,6 @@
 //! (`SearchPluginManager::updateNova()`), plugin version headers and Python
 //! cache cleanup.
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -23,55 +22,52 @@ pub(crate) const BUNDLED_FILES: &[(&str, &str)] = &[
 /// Plugin files larger than this are not read (official plugins are a few KiB).
 pub(crate) const MAX_PLUGIN_FILE_SIZE: u64 = 2 * 1024 * 1024;
 
-/// `PluginVersion` (`Utils::Version<2>`): exactly `major.minor`, numeric.
-/// The default value (0.0) is the "invalid" version.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub(crate) struct PluginVersion {
-    pub major: i32,
-    pub minor: i32,
-}
+/// `SearchPluginVersion` (`Utils::Version<3, 1>`, qBittorrent 5.3): one to
+/// three numeric components, compared component-wise. The default value
+/// (0) is the "invalid" version.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct PluginVersion(pub [i32; 3]);
 
 impl PluginVersion {
     #[cfg(test)]
     pub fn new(major: i32, minor: i32) -> Self {
-        Self { major, minor }
+        Self([major, minor, 0])
     }
 
-    /// `Version::fromString`: two dot-separated integers (surrounding
-    /// whitespace allowed per component). Returns `None` when malformed or
-    /// not valid (negative component, or 0.0).
+    /// `Version::fromString`: one to three dot-separated integers
+    /// (surrounding whitespace allowed per component). Returns `None` when
+    /// malformed or not valid (negative component, or all zero).
     pub fn parse(s: &str) -> Option<Self> {
-        let mut parts = s.split('.');
-        let major = parts.next()?.trim().parse::<i32>().ok()?;
-        let minor = parts.next()?.trim().parse::<i32>().ok()?;
-        if parts.next().is_some() {
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts.len() > 3 {
             return None;
         }
-        let v = Self { major, minor };
-        v.is_valid().then_some(v)
+        let mut v = [0i32; 3];
+        for (i, p) in parts.iter().enumerate() {
+            v[i] = p.trim().parse().ok()?;
+        }
+        let version = Self(v);
+        version.is_valid().then_some(version)
     }
 
     pub fn is_valid(&self) -> bool {
-        self.major >= 0 && self.minor >= 0 && (self.major > 0 || self.minor > 0)
-    }
-}
-
-impl PartialOrd for PluginVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PluginVersion {
-    fn cmp(&self, other: &Self) -> Ordering {
-        (self.major, self.minor).cmp(&(other.major, other.minor))
+        self.0.iter().all(|&c| c >= 0) && self.0.iter().any(|&c| c > 0)
     }
 }
 
 impl fmt::Display for PluginVersion {
-    /// `Version<2>::toString()` always prints both components ("1.0", "2.5").
+    /// `Version<3, 1>::toString()`: trailing zero components are omitted
+    /// ("1", "2.5", "1.2.3").
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.major, self.minor)
+        let mut last = 2;
+        while last > 0 && self.0[last] == 0 {
+            last -= 1;
+        }
+        write!(f, "{}", self.0[0])?;
+        for c in &self.0[1..=last] {
+            write!(f, ".{c}")?;
+        }
+        Ok(())
     }
 }
 
@@ -95,11 +91,12 @@ impl VersionHeader {
 }
 
 /// `SearchPluginManager::getPluginVersion()`: the file is read like Qt's
-/// `readLine(16)` (at most 15 bytes per read, stopping after `\n`), spaces
+/// `readLine(23)` (at most 22 bytes per read, room for
+/// `# VERSION: 999.999.999`, stopping after `\n`), spaces
 /// are removed, and the first chunk starting with `#VERSION:`
 /// (case-insensitive) holds the version.
 pub(crate) fn parse_version_header(content: &[u8]) -> VersionHeader {
-    const CHUNK: usize = 15;
+    const CHUNK: usize = 22;
     let mut pos = 0;
     while pos < content.len() {
         let window = &content[pos..content.len().min(pos + CHUNK)];
@@ -226,13 +223,18 @@ mod tests {
         assert_eq!(PluginVersion::parse(" 2.05\n"), Some(PluginVersion::new(2, 5)));
         assert_eq!(PluginVersion::parse("0.1"), Some(PluginVersion::new(0, 1)));
         assert_eq!(PluginVersion::parse("0.0"), None);
-        assert_eq!(PluginVersion::parse("1"), None);
-        assert_eq!(PluginVersion::parse("1.2.3"), None);
+        assert_eq!(PluginVersion::parse("1"), Some(PluginVersion([1, 0, 0])));
+        assert_eq!(PluginVersion::parse("1.2.3"), Some(PluginVersion([1, 2, 3])));
+        assert_eq!(PluginVersion::parse("999.999.999"), Some(PluginVersion([999, 999, 999])));
+        assert_eq!(PluginVersion::parse("1.2.3.4"), None);
+        assert_eq!(PluginVersion::parse("0.0.0"), None);
         assert_eq!(PluginVersion::parse("1.x"), None);
         assert_eq!(PluginVersion::parse("-1.2"), None);
         assert_eq!(PluginVersion::parse(""), None);
         assert_eq!(PluginVersion::new(2, 5).to_string(), "2.5");
-        assert_eq!(PluginVersion::new(1, 0).to_string(), "1.0");
+        assert_eq!(PluginVersion::new(1, 0).to_string(), "1");
+        assert_eq!(PluginVersion([1, 2, 3]).to_string(), "1.2.3");
+        assert_eq!(PluginVersion([1, 0, 3]).to_string(), "1.0.3");
     }
 
     #[test]
@@ -240,6 +242,7 @@ mod tests {
         assert!(PluginVersion::new(1, 10) > PluginVersion::new(1, 9));
         assert!(PluginVersion::new(2, 0) > PluginVersion::new(1, 99));
         assert!(PluginVersion::default() < PluginVersion::new(0, 1));
+        assert!(PluginVersion([1, 2, 1]) > PluginVersion::new(1, 2));
         assert_eq!(PluginVersion::parse("1.05"), PluginVersion::parse("1.5"));
     }
 
@@ -252,8 +255,11 @@ mod tests {
         assert_eq!(v("import os\n"), VersionHeader::Missing);
         assert_eq!(v(""), VersionHeader::Missing);
         assert_eq!(v("# VERSION: abc\n"), VersionHeader::Invalid("abc".into()));
-        // Qt reads at most 15 bytes per line: trailing text is ignored.
-        assert_eq!(v("# VERSION: 1.53 # comment\n"), VersionHeader::Valid(PluginVersion::new(1, 53)));
+        // Three components fit in the 22 bytes Qt reads per line.
+        assert_eq!(v("# VERSION: 999.999.999\n"), VersionHeader::Valid(PluginVersion([999, 999, 999])));
+        assert_eq!(v("# VERSION: 2\n"), VersionHeader::Valid(PluginVersion([2, 0, 0])));
+        // Text after the version within those 22 bytes spoils it (as in 5.3).
+        assert_eq!(v("# VERSION: 1.53 # comment\n"), VersionHeader::Invalid("1.53#comm".into()));
         // A header that is not at the start of a line chunk does not count.
         assert_eq!(v("x = 1 # VERSION: 1.0\n"), VersionHeader::Missing);
     }

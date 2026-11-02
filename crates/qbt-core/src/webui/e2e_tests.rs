@@ -1283,3 +1283,54 @@ fn search_jobs_are_restored_and_shared_by_sessions() {
         assert!(!folder.exists());
     });
 }
+
+/// 5.3 (#24246): `parseMetadata` / `fetchMetadata` file entries carry
+/// `priority` (0 = excluded by name) while excluded file names are on, and
+/// the Add sheet's changed selection is added through the cached metadata.
+#[test]
+fn metadata_priorities_follow_excluded_file_names() {
+    let h = Harness::new(|p| {
+        p.downloads.excluded_file_names_enabled = true;
+        p.downloads.excluded_file_names = vec!["*.nfo".into()];
+    });
+    let save = h._dir.path().join("dl").to_string_lossy().into_owned();
+    h.block(async {
+        let c = h.login().await;
+        let tor = crate::migrate::libtorrent::tests::sample_torrent(16, &[7u8; 48], b"nfo!");
+        let id = crate::bittorrent::metainfo::parse_torrent(&tor, Default::default()).unwrap().meta.id();
+        let parse = || {
+            let form = reqwest::multipart::Form::new().part("torrents", reqwest::multipart::Part::bytes(tor.clone()).file_name("x.torrent"));
+            let rb = h.client.post(h.url("/api/v2/torrents/parseMetadata")).header("Cookie", &c).multipart(form);
+            async move { rb.send().await.unwrap().json::<Value>().await.unwrap() }
+        };
+        let v = parse().await;
+        let files = &v[0]["info"]["files"];
+        assert_eq!((files[0]["path"].as_str(), files[0]["priority"].as_i64()), (Some("dir/a.mkv"), Some(1)));
+        assert_eq!((files[1]["path"].as_str(), files[1]["priority"].as_i64()), (Some("dir/b.nfo"), Some(0)));
+        let r = h.post("/api/v2/torrents/fetchMetadata", &[("source", &id)], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        assert_eq!(r.json::<Value>().await.unwrap()["info"]["files"][1]["priority"], 0);
+
+        let r = h.post("/api/v2/app/setPreferences", &[("json", r#"{"excluded_file_names_enabled":false}"#)], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let v = parse().await;
+        assert!(v[0]["info"]["files"][1].get("priority").is_none(), "no key while the setting is off (5.2 output)");
+
+        // The sheet keeps the excluded file: add by hash with priorities.
+        let form = [("urls", id.as_str()), ("filePriorities", "1,0"), ("savepath", save.as_str()), ("stopped", "true")];
+        assert_eq!(h.post("/api/v2/torrents/add", &form, Some(&c)).await.status(), 200);
+        let mut prios = Vec::new();
+        for _ in 0..200 {
+            let r = h.get(&format!("/api/v2/torrents/files?hash={id}"), Some(&c)).await;
+            if r.status() == 200 {
+                let list = r.json::<Value>().await.unwrap();
+                prios = list.as_array().unwrap().iter().map(|f| f["priority"].as_i64().unwrap()).collect();
+                if !prios.is_empty() {
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(prios, vec![1, 0]);
+    });
+}

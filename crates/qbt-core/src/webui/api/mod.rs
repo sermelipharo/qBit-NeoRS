@@ -412,8 +412,25 @@ pub fn info_hash_json(v1: &str, v2: &str, id: &str) -> Value {
 }
 
 /// Full `fetchMetadata` / `parseMetadata` info object.
-pub fn metadata_json(m: &TorrentMetadataInfo) -> Value {
-    let files: Vec<Value> = m.files.iter().map(|f| json!({"path": f.path, "length": f.size})).collect();
+/// `excluded` is the excluded file names list when that setting is on: each
+/// file then carries `priority` (0 = excluded, 1 = Normal), as 5.3 does. A
+/// magnet's `so` selection also yields a `priority` (0 for left-out files).
+pub fn metadata_json(m: &TorrentMetadataInfo, excluded: Option<&[String]>) -> Value {
+    use crate::bittorrent::paths::is_excluded;
+    use crate::model::FilePriority;
+    let with_priority = excluded.is_some() || m.files.iter().any(|f| f.priority != FilePriority::Normal);
+    let files: Vec<Value> = m
+        .files
+        .iter()
+        .map(|f| {
+            if !with_priority {
+                return json!({"path": f.path, "length": f.size});
+            }
+            let skip = f.priority == FilePriority::Ignored || excluded.is_some_and(|x| is_excluded(&f.path, x));
+            let prio = if skip { FilePriority::Ignored } else { f.priority };
+            json!({"path": f.path, "length": f.size, "priority": prio.as_i32()})
+        })
+        .collect();
     let length: i64 = m.files.iter().map(|f| f.size).sum();
     json!({
         "infohash_v1": m.infohash_v1,
@@ -501,6 +518,26 @@ pub fn parse_info_hash(source: &str) -> Option<(String, String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_file_priorities_follow_excluded_names() {
+        use crate::model::{FilePriority, MetadataFile};
+        let file = |i: i64, path: &str, priority| MetadataFile { index: i, path: path.into(), size: 10, priority };
+        let mut m = TorrentMetadataInfo {
+            files: vec![file(0, "a/movie.mkv", FilePriority::Normal), file(1, "a/Sample/s.mkv", FilePriority::Normal), file(2, "a/x.nfo", FilePriority::Normal)],
+            ..Default::default()
+        };
+        let prios = |v: &Value| -> Vec<Option<i64>> { v["info"]["files"].as_array().unwrap().iter().map(|f| f["priority"].as_i64()).collect() };
+        // Setting off and no `so`: no `priority` key (5.2 output).
+        assert_eq!(prios(&metadata_json(&m, None)), vec![None, None, None]);
+        let pats = vec!["sample".to_owned(), "*.nfo".to_owned()];
+        assert_eq!(prios(&metadata_json(&m, Some(&pats))), vec![Some(1), Some(0), Some(0)]);
+        // Setting on with no patterns: every file Normal, key present.
+        assert_eq!(prios(&metadata_json(&m, Some(&[]))), vec![Some(1), Some(1), Some(1)]);
+        // A magnet's `so` leaves file 0 out.
+        m.files[0].priority = FilePriority::Ignored;
+        assert_eq!(prios(&metadata_json(&m, None)), vec![Some(0), Some(1), Some(1)]);
+    }
 
     #[test]
     fn endpoint_table() {

@@ -633,7 +633,7 @@ async fn fetch_metadata(c: &mut Call<'_>) -> ApiResult {
 
     if let Some(id) = id {
         match data.metadata_for(&id) {
-            Some(Some(info)) => return Ok(Reply::Json(metadata_json(info))),
+            Some(Some(info)) => return Ok(Reply::Json(metadata_json(info, excluded_names(c).as_deref()))),
             Some(None) => {
                 let (v1, v2) = parsed.map(|p| (p.0, p.1)).unwrap_or_default();
                 return Ok(Reply::Async(info_hash_json(&v1, &v2, &id)));
@@ -700,6 +700,12 @@ fn spawn_fetch(c: &Call<'_>, src: TorrentSource, id: Option<String>, source_key:
     });
 }
 
+/// The excluded file names patterns when the setting is on.
+fn excluded_names(c: &Call<'_>) -> Option<Vec<String>> {
+    let d = c.app.preferences().downloads;
+    d.excluded_file_names_enabled.then_some(d.excluded_file_names)
+}
+
 fn file_too_large(c: &Call<'_>, len: usize) -> bool {
     let limit = c.app.preferences().advanced.torrent_file_size_limit;
     limit > 0 && len as i64 > limit
@@ -710,6 +716,7 @@ async fn parse_metadata(c: &mut Call<'_>) -> ApiResult {
         return Err(ApiError::bad_params("Must specify torrent file(s)"));
     }
     let files = std::mem::take(&mut c.files);
+    let excluded = excluded_names(c);
     let mut out = Vec::with_capacity(files.len());
     for (name, data) in files {
         if file_too_large(c, data.len()) {
@@ -717,7 +724,7 @@ async fn parse_metadata(c: &mut Call<'_>) -> ApiResult {
         }
         match c.app.fetch_metadata(TorrentSource::Bytes { data }).await {
             Ok(info) => {
-                out.push(metadata_json(&info));
+                out.push(metadata_json(&info, excluded.as_deref()));
                 let hash = info.hash.clone();
                 c.session.data.lock().await.set_metadata(&hash, Some(info));
             }

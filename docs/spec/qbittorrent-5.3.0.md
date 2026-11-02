@@ -84,11 +84,11 @@ Things to know before reading:
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #23829 | Filter the torrent list by info hash | ⬜ | Search scopes are name, save path, tracker (`apps/macos/QBTNeo/MainWindow/TransferList/TransferListModel.swift:215-221`); match the hash (v1/v2, prefix) in the name scope |
-| #23973 | "Copy path" in the Content tab | ⬜ | `Properties/Content/ContentContextMenu.swift` has Open, Open Containing Folder, Rename only; add Copy Path |
-| #24090 | "Open Destination Folder" toolbar button | ⬜ | Exists in the context menu (`TransferContextMenu.swift:73`), missing from `MainToolbar.swift`; add an optional toolbar item |
-| #24260 | "Force start" in filter context menus | ⬜ | `MainWindow/Sidebar/SidebarMenu.swift:35-37` has Start/Stop/Remove only; add Force Start Torrents |
-| #23989 | "Contribution" column in the peers list | ⬜ | Core computes `contribution` (also for `sync/torrentPeers`), new column in `Properties/Peers/PeerTable.swift` |
+| #23829 | Filter the torrent list by info hash | ✅ | Info Hash v1 / v2 scopes in the filter field menu (`TransferSearchScope`), matched like the other scopes |
+| #23973 | "Copy path" in the Content tab | ✅ | Copy Path in `ContentContextMenu` (single item), the full on-disk path |
+| #24090 | "Open Destination Folder" toolbar button | ✅ | Optional "openDestination" toolbar item (Customize Toolbar); hidden by default, unlike upstream |
+| #24260 | "Force start" in filter context menus | ✅ | Force Start Torrents in every sidebar row menu, on the visible torrents |
+| #23989 | "Contribution" column in the peers list | ✅ | `PeerInfo.contribution` (`peers::peer_contribution`, same formula), Peers tab column after Files; also in `sync/torrentPeers` |
 | #24023 | Clickable "speed graphs disabled" warning | ✅ | The Speed tab's hint is a link that opens Settings on "Show speed graphs" (`SpeedTab.swift`) |
 | #24117 | Better "Deletion confirmation" dialog | ✅ | The confirm button says "Remove torrent" or "Remove torrent and content" as the checkbox changes (`RemoveTorrentsSheet.swift`) |
 | #24084, #24152 | Statistics rows for the new metrics | ⬜ | After the core metrics: `Features/Statistics/StatisticsWindow.swift:23` (queued announces; latency only if measured) |
@@ -127,7 +127,7 @@ Things to know before reading:
 | #24720 | `web_ui_sessions_count_limit` | ✅ | Pref `web_ui_sessions_count_limit` (default 15, 0 = unlimited; `MAX_SESSIONS` still caps) drops the least recently used login; API-key sessions do not count (`webui/session.rs`); Settings field + WebUI settings page |
 | #24641 | New backup prefs, `export_dir*` removed | ⬜ | See Core/engine |
 | #24684 | `enable_multi_connections_from_same_peer_id` | ⬜ | See Core/engine |
-| #23989 | `contribution` in `sync/torrentPeers` | ⬜ | See macOS app UI |
+| #23989 | `contribution` in `sync/torrentPeers` | ✅ | Serialized from `PeerInfo.contribution` |
 | #24346 | `ignoreDotfiles` in `torrentcreator/addTask` and `status` | ⬜ | See Core/engine |
 | #24246 | File `priority` in `torrents/fetchMetadata`/`parseMetadata` when excluded names apply | ⬜ | Check the handlers in `webui/api/torrents.rs` return priority 0 for excluded names (the excluded-names list is in the core) |
 | #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |

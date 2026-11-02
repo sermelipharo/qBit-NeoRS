@@ -1,7 +1,7 @@
 import AppKit
 
 /// Context menus of the sidebar rows (features.md §1.5): category and tag
-/// management, Remove Tracker on hosts, and Start/Stop/Remove torrents,
+/// management, Remove Tracker on hosts, and Start/Force Start/Stop/Remove torrents,
 /// which act on the torrents currently visible in the list.
 @MainActor
 enum SidebarMenu {
@@ -34,6 +34,7 @@ enum SidebarMenu {
             break
         }
         menu.addAction(String(localized: "Start Torrents"), symbol: Symbol.playFill) { model.start(model.visibleIDs) }
+        menu.addAction(String(localized: "Force Start Torrents"), symbol: Symbol.forwardFill) { model.forceStart(model.visibleIDs) }
         menu.addAction(String(localized: "Stop Torrents"), symbol: Symbol.pauseFill) { model.stop(model.visibleIDs) }
         menu.addAction(String(localized: "Remove Torrents"), symbol: Symbol.trash) { model.requestRemove(model.visibleIDs) }
         menu.addDivider()

@@ -220,6 +220,8 @@ final class TransferListModel {
         case .name: return matcher.matches(item.name)
         case .savePath: return matcher.matches(item.savePath)
         case .tracker: return trackers.hostTorrents.contains { matcher.matches($0.key) && $0.value.contains(item.id) }
+        case .infohashV1: return matcher.matches(item.infohashV1)
+        case .infohashV2: return matcher.matches(item.infohashV2)
         }
     }
 

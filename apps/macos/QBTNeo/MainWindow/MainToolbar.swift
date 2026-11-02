@@ -63,20 +63,28 @@ struct MainToolbar: CustomizableToolbarContent {
                 }
             }
         }
+        optionalTransferItems
+        ToolbarItem(id: "lock") {
+            CommandToolbarButton(.lock, model: model, label: String(localized: "Lock"))
+        }
+        ToolbarItem(id: "options") {
+            CommandToolbarButton(.options, model: model)
+        }
+    }
+
+    /// Hidden until added with Customize Toolbar.
+    @ToolbarContentBuilder private var optionalTransferItems: some CustomizableToolbarContent {
         ToolbarItem(id: "forceStart", showsByDefault: false) {
             CommandToolbarButton(.forceStart, model: model)
         }
         ToolbarItem(id: "recheck", showsByDefault: false) {
             CommandToolbarButton(.forceRecheck, model: model)
         }
+        ToolbarItem(id: "openDestination", showsByDefault: false) {
+            CommandToolbarButton(.openDestination, model: model)
+        }
         ToolbarItem(id: "altSpeed", showsByDefault: false) {
             CommandToolbarButton(.alternativeSpeedLimits, model: model)
-        }
-        ToolbarItem(id: "lock") {
-            CommandToolbarButton(.lock, model: model, label: String(localized: "Lock"))
-        }
-        ToolbarItem(id: "options") {
-            CommandToolbarButton(.options, model: model)
         }
     }
 

@@ -18,6 +18,9 @@ struct ContentContextMenu {
         if nodes.count == 1, let node = nodes.first {
             menu.addAction(String(localized: "Open"), symbol: Symbol.arrowUpForwardApp) { model.openContent(item, node) }
             menu.addAction(String(localized: "Open Containing Folder"), symbol: Symbol.folder) { model.revealContent(item, node) }
+            menu.addAction(String(localized: "Copy Path"), symbol: Symbol.docOnDoc) {
+                model.copyToPasteboard(model.contentURL(item, node).path(percentEncoded: false))
+            }
             menu.addAction(String(localized: "Rename…"), symbol: Symbol.pencil) { model.requestRenameContent(item, node) }
             menu.addDivider()
             menu.addSubmenu(String(localized: "Priority")) { submenu in

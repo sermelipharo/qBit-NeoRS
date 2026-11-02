@@ -64,6 +64,7 @@ Actions in order (`mainwindow.ui`, plus widgets inserted in code):
 | — | separator | | | |
 | 4 | actionStart | "Sta&rt" | `torrent-start` (`media-playback-start`) | Ctrl+S |
 | 5 | actionStop | "Sto&p" | `torrent-stop` (`media-playback-pause`) | Ctrl+P |
+| 5a | actionOpenDestinationFolder (5.3) | "Open Destination Folder" (iconText "Open Folder") | `directory` | — |
 | — | queue separator (inserted in code; hidden with queue actions) | | | |
 | 6 | actionTopQueuePos | "Top of Queue", tooltip "Move to the top of the queue" | `go-top` | Ctrl+Shift+Plus |
 | 7 | actionIncreaseQueuePos | "Move Up Queue", tooltip "Move up in the queue" | `go-up` | Ctrl+Plus |
@@ -86,7 +87,7 @@ Notes:
 - **Filter widget** (right-aligned in the toolbar, inserted before actionLock):
   - `LineEdit` with placeholder `"Filter torrents..."`, fixed width 200 px, a leading search icon (`edit-find`) and a clear button. Text changes are debounced by **400 ms** before the filter applies. Esc (no modifiers) clears the text.
   - Label `"Filter by:"`.
-  - Combo box with items taken from the column headers: `"Name"` (TR_NAME) and `"Save Path"` (TR_SAVE_PATH).
+  - Combo box with items taken from the column headers: `"Name"` (TR_NAME), `"Save Path"` (TR_SAVE_PATH), and since 5.3 `"Info Hash v1"` (TR_INFOHASH_V1) and `"Info Hash v2"` (TR_INFOHASH_V2).
   - Filtering: a case-insensitive `QRegularExpression` on the chosen column's display text. If "Use regular expressions" is off (default), the text is converted with `wildcardToRegularExpression(pattern, UnanchoredWildcardConversion | NonPathWildcardConversion)`. So it is a substring match where `*` and `?` are wildcards that also match `/`.
   - Right-click on the line edit: the standard edit menu, then a separator, then a checkable `"Use regular expressions"` (pref `TransferList/UseRegexAsFilteringPattern`, default false). Toggling it re-applies the filter immediately.
   - The filter text is cleared when the toolbar is hidden.
@@ -291,7 +292,7 @@ All sidebar filters combine (AND) with each other and with the toolbar text filt
 - The selected row persists in `TransferListFilters/selectedFilterIndex` (default 0) when the widget is destroyed.
 - **"Auto hide zero status filters"** (`TransferListFilters/HideZeroStatusFilters`, default false) hides every row except All whose count is 0. If the current row becomes hidden, the selection jumps to All.
 - When a status filter is applied and nothing is selected in the list, the first visible row is selected.
-- Context menu: `"Start torrents"` (`torrent-start`), `"Stop torrents"` (`torrent-stop`), `"Remove torrents"` (`list-remove`). All act on **all torrents currently visible** in the list, i.e. after every active filter. Remove shows the deletion confirmation with content-removal defaulting to the pref.
+- Context menu: `"Start torrents"` (`torrent-start`), `"Force start torrents"` (`torrent-start-forced`, 5.3), `"Stop torrents"` (`torrent-stop`), `"Remove torrents"` (`list-remove`). All act on **all torrents currently visible** in the list, i.e. after every active filter. Remove shows the deletion confirmation with content-removal defaulting to the pref.
 
 #### 1.5.2 Categories (`CategoryFilterWidget`, a tree view)
 
@@ -307,7 +308,7 @@ All sidebar filters combine (AND) with each other and with the toolbar text filt
     - `"Edit category..."`: edits the save path and download path.
     - `"Remove category"`: no confirmation. Removes the category and all its subcategories. Torrents in it or its subcategories move to the removed category's **parent** category ("" for top level).
   - `"Remove unused categories"` (always): removes every category whose count is 0.
-  - separator, `"Start torrents"`, `"Stop torrents"`, `"Remove torrents"` (on visible torrents).
+  - separator, `"Start torrents"`, `"Force start torrents"`, `"Stop torrents"`, `"Remove torrents"` (on visible torrents).
 - Category name validity regex: `^([^\\\/]|[^\\\/]([^\\\/]|\/(?=[^\/]))*[^\\\/])$`. In words: no backslash, no leading or trailing `/`, no `//`.
 
 #### 1.5.3 Tags (`TagFilterWidget`)
@@ -318,7 +319,7 @@ All sidebar filters combine (AND) with each other and with the toolbar text filt
   - `"Add tag..."`: prompt `"Add tag"` / `"Tag:"`, which loops until the name is valid. Invalid → `"Invalid tag name"` / `"Tag name '%1' is invalid"`. Duplicate → `"Tag exists"` / `"Tag name already exists."`.
   - `"Remove tag"` (only on a real tag, no confirmation).
   - `"Remove unused tags"`.
-  - separator, `"Start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
+  - separator, `"Start torrents"`, `"Force start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
 - Tag validity: the name is trimmed; it must be non-empty and contain no `,`.
 
 #### 1.5.4 Trackers (`TrackersFilterWidget`)
@@ -351,7 +352,7 @@ Announce status flags (`TorrentAnnounceStatusFlag`): HasNoProblem=0, HasWarning=
 
 Context menu:
 - If a host row is selected: `"Remove tracker"` (`edit-clear`), then a separator. It removes every tracker URL with that host from **all** torrents. If `GUI/ConfirmActions/RemoveTrackerFromAllTorrents` (default true), it first asks `"Removal confirmation"` / `"Are you sure you want to remove tracker \"%1\" from all torrents?"` with a `"Don't ask me again."` checkbox, which clears the pref.
-- Then `"Start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
+- Then `"Start torrents"`, `"Force start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
 
 #### 1.5.5 Tracker status (only with SeparateTrackerStatusFilter = true)
 
@@ -363,7 +364,7 @@ Rows:
 
 These filter by announce-status flag and combine (AND) with the Trackers host filter. When combined with a host filter, matching becomes per tracker on that host: Working with a warning message → HasWarning; NotWorking/Unreachable → HasOtherError; TrackerError → HasTrackerError; NotContacted never matches; and filter "no problem" matches Working without a message.
 
-Context menu: `"Start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
+Context menu: `"Start torrents"`, `"Force start torrents"`, `"Stop torrents"`, `"Remove torrents"`.
 
 ### 1.6 Torrent list (`TransferListWidget` / `TransferListModel`)
 
@@ -980,10 +981,12 @@ A flat QTreeView with:
 | 11 `TOT_UP` | `Uploaded` | Total uploaded to the peer | int | Right |
 | 12 `RELEVANCE` | `Relevance` (how many pieces it has that we don't) | Relevance × 100, 1 decimal, then `%` | real | Right |
 | 13 `DOWNLOADING_PIECE` | `Files` (files being downloaded right now) | Files spanned by the piece currently downloading from this peer, joined by `;`; tooltip joined by newlines | string | — |
-| 14 `IP_HIDDEN` | (always hidden) | Raw IP, used for copy/ban | — | — |
+| 14 `CONTRIBUTION` (5.3) | `Contribution` (how much of this peer's progress we provided) | Contribution × 100, 1 decimal, then `%` | real | Right |
+| 15 `IP_HIDDEN` | (always hidden) | Raw IP, used for copy/ban | — | — |
 
 **Value rules**
 - **Relevance** = (pieces the peer has that we lack) / (our missing piece count). It is 0 if we are missing nothing.
+- **Contribution** (5.3) = total uploaded to the peer / (peer progress × torrent total size); over the total size while the peer has nothing; with no metadata the total size is taken as the upload itself. 0 when nothing was uploaded.
 - **Hide zero values**: when Options › Behavior `Hide zero and infinity values` is on **and** its combo is index 0 (`Always`), the four speed and total columns show blank for values ≤ 0. Combo index 1 is `Stopped torrents only`, which does not apply here.
 
 **Country column**
@@ -1161,7 +1164,7 @@ Every priority change calls `prioritizeFiles(full list)` on the torrent. The cor
 Shown only when at least one row is selected. The menu closes automatically if the model resets.
 
 **Single selection**
-- `Open` (icon `folder-documents`), and `Open containing folder` (icon `directory`). These appear only if the torrent has an actual storage location.
+- `Open` (icon `folder-documents`), `Open containing folder` (icon `directory`) and, since 5.3, `Copy path` (icon `edit-copy`, puts the full path on the clipboard). These appear only if the torrent has an actual storage location.
   - **Open**: flushes the disk cache, then opens the full path with the OS default app. For a file the path is the actual file path, including any `.!qB` or `.unwanted` component. For a folder it is storage location / relative folder path.
   - **Open containing folder**: on macOS, reveals the item in Finder (`MacUtils::openFiles`). Elsewhere it opens the parent folder with the item selected.
 - `Rename...` (icon `edit-rename`)
@@ -3595,6 +3598,7 @@ Peer object:
 | `flags` | string | space-separated flag letters (see below) |
 | `flags_desc` | string | `\n`-separated lines `<letter> = <explanation>` |
 | `relevance` | float | (#pieces the peer has that we lack) / (#pieces we lack); 0 if we lack nothing |
+| `contribution` | float | (5.3) uploaded to peer / (peer progress × total size), see the Peers tab value rules |
 | `files` | string | `\n`-separated paths of the file(s) containing the piece currently being downloaded from this peer (only if metadata present) |
 | `ip` | string | IP (non-I2P peers only) |
 | `port` | int | port (non-I2P only) |

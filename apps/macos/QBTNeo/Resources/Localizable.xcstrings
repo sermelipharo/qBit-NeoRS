@@ -139403,6 +139403,16 @@
         }
       }
     },
+    "If checked, filenames starting with a period punctuation mark `.` will not be added to the created torrent.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Если отмечено, файлы и папки, имена которых начинаются с точки «.», не будут добавлены в создаваемый торрент."
+          }
+        }
+      }
+    },
     "If checked, hostname lookups are done via the proxy": {
       "localizations": {
         "ar": {
@@ -140203,6 +140213,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "忽略後續符合（0 以停用）"
+          }
+        }
+      }
+    },
+    "Ignore dotfiles": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропускать файлы с точкой в начале имени"
           }
         }
       }

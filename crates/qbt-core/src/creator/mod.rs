@@ -218,9 +218,14 @@ impl CreatorManager {
     }
 
     /// "Calculate number of pieces" in the creator dialog.
-    pub fn calculate_total_pieces(source: &Path, piece_size: i64, format: TorrentFormat) -> QbtResult<i64> {
+    pub fn calculate_total_pieces(
+        source: &Path,
+        piece_size: i64,
+        ignore_dotfiles: bool,
+        format: TorrentFormat,
+    ) -> QbtResult<i64> {
         let cancel = AtomicBool::new(false);
-        let c = layout::collect_files(source, &cancel).map_err(QbtError::invalid)?;
+        let c = layout::collect_files(source, ignore_dotfiles, &cancel).map_err(QbtError::invalid)?;
         let total: u64 = c.files.iter().map(|f| f.size).sum();
         if total == 0 {
             return Ok(0);
@@ -313,6 +318,7 @@ impl CreatorManager {
             piece_size: p.piece_size,
             optimize_alignment: p.optimize_alignment,
             padding_file_limit: p.padding_file_limit,
+            ignore_dotfiles: p.ignore_dotfiles,
             private: p.private,
             trackers: &p.trackers,
             url_seeds: &p.url_seeds,

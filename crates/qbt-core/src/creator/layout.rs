@@ -3,9 +3,11 @@
 //! Collection follows qBittorrent's `TorrentCreator::run`: a single file is
 //! taken as is; a folder is walked recursively, directories are ordered by
 //! natural case-insensitive comparison of their paths and the files of each
-//! directory are ordered the same way. Names starting with `.` are skipped
-//! (and, on macOS, entries carrying the "hidden" flag, which Qt also treats
-//! as hidden). FIFOs, sockets and devices are skipped like `QDir::Files`.
+//! directory are ordered the same way. With "Ignore dotfiles" (qBittorrent
+//! 5.3) files and folders whose names start with `.` are left out, folders
+//! with everything in them; otherwise hidden entries are included, as 5.3
+//! lists them with `QDir::Hidden`. FIFOs, sockets and devices are skipped
+//! like `QDir::Files`.
 //!
 //! Symbolic links: libtorrent/qBittorrent read through symlinks. To avoid
 //! accidentally publishing data from outside the selected folder (e.g. a
@@ -62,24 +64,15 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), String> {
     if cancel.load(AtomicOrdering::Relaxed) { Err(ABORTED.to_string()) } else { Ok(()) }
 }
 
-fn is_hidden_name(name: &str) -> bool {
+fn is_dotfile(name: &str) -> bool {
     name.starts_with('.')
 }
 
-#[cfg(target_os = "macos")]
-fn has_hidden_flag(meta: &std::fs::Metadata) -> bool {
-    use std::os::macos::fs::MetadataExt;
-    const UF_HIDDEN: u32 = 0x0000_8000;
-    meta.st_flags() & UF_HIDDEN != 0
-}
-
-#[cfg(not(target_os = "macos"))]
-fn has_hidden_flag(_meta: &std::fs::Metadata) -> bool {
-    false
-}
+/// qBittorrent 5.3's error when "Ignore dotfiles" leaves nothing to add.
+pub const ALL_FILTERED: &str = "All files have been filtered out by 'Ignore dotfiles' option";
 
 /// Collects the files of `source` (absolute path to a file or folder).
-pub fn collect_files(source: &Path, cancel: &AtomicBool) -> Result<Collected, String> {
+pub fn collect_files(source: &Path, ignore_dotfiles: bool, cancel: &AtomicBool) -> Result<Collected, String> {
     const NOT_READABLE: &str = "Path to file/folder is not readable.";
     if !source.is_absolute() {
         return Err(NOT_READABLE.to_string());
@@ -93,7 +86,7 @@ pub fn collect_files(source: &Path, cancel: &AtomicBool) -> Result<Collected, St
 
     if meta.is_file() {
         // `lt::add_files` applies qBittorrent's filter to the selected file too.
-        let files = if is_hidden_name(&name) {
+        let files = if ignore_dotfiles && is_dotfile(&name) {
             Vec::new()
         } else {
             let disk_path = std::fs::canonicalize(source).map_err(|e| e.to_string())?;
@@ -129,14 +122,11 @@ pub fn collect_files(source: &Path, cancel: &AtomicBool) -> Result<Collected, St
             let Some(name) = os_name.to_str().map(str::to_string) else {
                 return Err(format!("File name is not valid UTF-8: {}", entry.path().display()));
             };
-            if is_hidden_name(&name) {
+            if ignore_dotfiles && is_dotfile(&name) {
                 continue;
             }
             // `DirEntry::metadata` does not traverse symlinks.
             let lmeta = entry.metadata().map_err(|e| format!("{}: {e}", entry.path().display()))?;
-            if has_hidden_flag(&lmeta) {
-                continue;
-            }
             let ft = lmeta.file_type();
             if ft.is_dir() {
                 let mut sub = rel.clone();
@@ -331,7 +321,7 @@ mod tests {
         std::os::unix::fs::symlink(&outside, root.join("leak.txt")).unwrap();
         std::os::unix::fs::symlink(root.join("season 2"), root.join("loop")).unwrap();
 
-        let c = collect_files(&root, &AtomicBool::new(false)).unwrap();
+        let c = collect_files(&root, true, &AtomicBool::new(false)).unwrap();
         assert_eq!(c.name, "Show");
         assert!(c.multi_file);
         let paths: Vec<String> = c.files.iter().map(|f| f.path.join("/")).collect();
@@ -345,14 +335,25 @@ mod tests {
         skipped.sort();
         assert_eq!(skipped, ["leak.txt", "loop"]);
 
-        let single = collect_files(&root.join("b.txt"), &AtomicBool::new(false)).unwrap();
+        // Without "Ignore dotfiles": dotfiles and dot folders are included.
+        let all = collect_files(&root, false, &AtomicBool::new(false)).unwrap();
+        let paths: Vec<String> = all.files.iter().map(|f| f.path.join("/")).collect();
+        assert_eq!(
+            paths,
+            [".hidden", "A.txt", "b.txt", "link.txt", ".git/config", "season 2/e9.mkv", "season 2/e10.mkv", "Season 10/e1.mkv"]
+        );
+        // A selected dotfile is filtered too, like libtorrent's add_files.
+        assert!(collect_files(&root.join(".hidden"), true, &AtomicBool::new(false)).unwrap().files.is_empty());
+        assert_eq!(collect_files(&root.join(".hidden"), false, &AtomicBool::new(false)).unwrap().files.len(), 1);
+
+        let single = collect_files(&root.join("b.txt"), true, &AtomicBool::new(false)).unwrap();
         assert!(!single.multi_file);
         assert_eq!(single.files.len(), 1);
         assert_eq!(single.files[0].path, ["b.txt"]);
 
-        assert!(collect_files(Path::new("relative"), &AtomicBool::new(false)).is_err());
-        assert!(collect_files(&dir.path().join("missing"), &AtomicBool::new(false)).is_err());
-        assert_eq!(collect_files(&root, &AtomicBool::new(true)).unwrap_err(), ABORTED);
+        assert!(collect_files(Path::new("relative"), true, &AtomicBool::new(false)).is_err());
+        assert!(collect_files(&dir.path().join("missing"), true, &AtomicBool::new(false)).is_err());
+        assert_eq!(collect_files(&root, true, &AtomicBool::new(true)).unwrap_err(), ABORTED);
     }
 
     #[test]

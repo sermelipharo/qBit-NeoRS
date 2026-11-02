@@ -160,6 +160,7 @@ pub struct BuildParams<'a> {
     pub optimize_alignment: bool,
     /// Bytes, -1 = disabled (v1 + optimize alignment only).
     pub padding_file_limit: i64,
+    pub ignore_dotfiles: bool,
     pub private: bool,
     /// Tracker URLs; an empty (or blank) entry starts a new tier.
     pub trackers: &'a [String],
@@ -395,9 +396,9 @@ pub fn build_torrent(
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(f64),
 ) -> Result<BuildResult, String> {
-    let collected = layout::collect_files(p.source, cancel)?;
+    let collected = layout::collect_files(p.source, p.ignore_dotfiles, cancel)?;
     if collected.files.is_empty() {
-        return Err("no files in torrent".to_string());
+        return Err(if p.ignore_dotfiles { layout::ALL_FILTERED } else { "no files in torrent" }.to_string());
     }
     let total_size: u64 = collected.files.iter().map(|f| f.size).sum();
     if total_size == 0 {
@@ -675,6 +676,7 @@ mod tests {
             format,
             piece_size: 32 * 1024,
             optimize_alignment: false,
+            ignore_dotfiles: true,
             padding_file_limit: -1,
             private: true,
             trackers,
@@ -967,7 +969,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let empty = dir.path().join("empty");
         std::fs::create_dir(&empty).unwrap();
-        let p = params(&empty, TorrentFormat::V1, &[], &[]);
+        let mut p = params(&empty, TorrentFormat::V1, &[], &[]);
+        std::fs::write(empty.join(".DS_Store"), b"x").unwrap();
+        assert_eq!(build_torrent(&p, &AtomicBool::new(false), &mut |_| {}).unwrap_err(), layout::ALL_FILTERED);
+        std::fs::remove_file(empty.join(".DS_Store")).unwrap();
+        p.ignore_dotfiles = false;
         assert_eq!(build_torrent(&p, &AtomicBool::new(false), &mut |_| {}).unwrap_err(), "no files in torrent");
         std::fs::write(empty.join("zero"), b"").unwrap();
         assert_eq!(build_torrent(&p, &AtomicBool::new(false), &mut |_| {}).unwrap_err(), "invalid length of torrent");

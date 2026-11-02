@@ -37,6 +37,7 @@ impl App {
         &self,
         source_path: String,
         piece_size: i64,
+        ignore_dotfiles: bool,
         format: TorrentFormat,
     ) -> QbtResult<i64> {
         self.spawn_on_rt(async move {
@@ -44,6 +45,7 @@ impl App {
                 crate::creator::CreatorManager::calculate_total_pieces(
                     std::path::Path::new(&source_path),
                     piece_size,
+                    ignore_dotfiles,
                     format,
                 )
             })

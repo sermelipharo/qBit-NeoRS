@@ -98,6 +98,7 @@ const GUI_KEYS: &[(&str, Kind)] = &[
     ("Search/HistoryLength", Int),
     ("SearchTab/UseRegexAsFilteringPattern", Bool),
     ("TorrentCreator/PieceSize", Int),
+    ("TorrentCreator/IgnoreDotfiles", Bool),
     ("TorrentCreator/PrivateTorrent", Bool),
     ("TorrentCreator/StartSeeding", Bool),
     ("TorrentCreator/IgnoreRatio", Bool),

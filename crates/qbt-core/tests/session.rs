@@ -529,6 +529,7 @@ fn make_hybrid(dir: &Path) -> qbt_core::creator::builder::BuildResult {
             format: TorrentFormat::Hybrid,
             piece_size: 32 * 1024,
             optimize_alignment: false,
+            ignore_dotfiles: true,
             padding_file_limit: -1,
             private: false,
             trackers: &[],

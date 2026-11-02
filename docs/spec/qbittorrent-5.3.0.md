@@ -62,7 +62,7 @@ Things to know before reading:
 | #24641 | Revamp .torrent backup management | ⬜ | Replace `export_dir`/`export_dir_fin` (`prefs/api_json.rs:220`) with `torrent_files_backup_enabled`, `torrent_files_backup_dir`, `torrent_files_finished_backup_dir_enabled`, `torrent_files_finished_backup_dir`, `remove_torrent_file_backup`; migrate old keys; the export code is `export_to` in `bittorrent/adding.rs`; Swift Downloads prefs |
 | #24724 | `seedMode` replaces `skip_checking` | ✅ | `torrents/add` takes `seedMode` and still `skip_checking` for older clients; saved add parameters (RSS rules) write `seed_mode` and read either name. The core field keeps its name. The Mac app keeps the label "Skip hash check": it says what the option does and is translated, while 5.3 has no translations for "Seed mode" yet |
 | #24336 | Magnet `so` (select only) parameter | ⬜ | `parse_magnet` ignores `so` (`bittorrent/metainfo.rs:488`); map indexes/ranges to file priorities (rest "do not download") on add; Add Torrent dialog preselection |
-| #24346 | Torrent Creator "Ignore dotfiles" (default on) | ⬜ | Creator always skips hidden names and the macOS hidden flag (`creator/layout.rs:96,132`); add the option (`ignoreDotfiles` in `torrentcreator/addTask` and `status`); when on, filter by name only; when off, include hidden files |
+| #24346 | Torrent Creator "Ignore dotfiles" (default on) | ✅ | `ignore_dotfiles` in the creator params, `collect_files` and piece counting; dot folders are skipped with their whole subtree (5.3 descends into them); hidden-flag files are included like 5.3; checkbox in the creator window (`TorrentCreator/IgnoreDotfiles`) |
 | #24173 | Dotfiles filtered on all platforms | ✅ | `creator/layout.rs:65,96,132` |
 | #24159 | "Force reannounce" really reannounces | ✅ | `engine/tracker_comms/src/tiers.rs:471-486` clears the timers, DHT too (`engine/librqbit/src/torrent_state/trackers.rs:304`) |
 | #24605 | No failed add result after a tracker merge | ✅ | Duplicates return a conflict plus a `DuplicateTorrent` event (`bittorrent/adding.rs:394-453`); RSS treats it as already added (`rss/tests.rs:166`) |
@@ -128,7 +128,7 @@ Things to know before reading:
 | #24641 | New backup prefs, `export_dir*` removed | ⬜ | See Core/engine |
 | #24684 | `enable_multi_connections_from_same_peer_id` | ⬜ | See Core/engine |
 | #23989 | `contribution` in `sync/torrentPeers` | ✅ | Serialized from `PeerInfo.contribution` |
-| #24346 | `ignoreDotfiles` in `torrentcreator/addTask` and `status` | ⬜ | See Core/engine |
+| #24346 | `ignoreDotfiles` in `torrentcreator/addTask` and `status` | ✅ | Default true; reported by `status` |
 | #24246 | File `priority` in `torrents/fetchMetadata`/`parseMetadata` when excluded names apply | ⬜ | Check the handlers in `webui/api/torrents.rs` return priority 0 for excluded names (the excluded-names list is in the core) |
 | #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |
 | #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |

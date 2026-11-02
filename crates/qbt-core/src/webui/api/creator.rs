@@ -12,6 +12,7 @@ use crate::webui::http::{parse_int32, percent_decode_str};
 #[derive(Clone, Debug, Default)]
 pub struct CreatorExtras {
     pub private: bool,
+    pub ignore_dotfiles: bool,
     pub comment: String,
     pub source: String,
     pub trackers: Vec<String>,
@@ -48,6 +49,7 @@ fn task_json(t: &CreatorTask, extras: Option<&CreatorExtras>) -> Value {
     m.insert("taskID".into(), json!(t.id));
     m.insert("sourcePath".into(), json!(t.source_path));
     m.insert("pieceSize".into(), json!(t.piece_size));
+    m.insert("ignoreDotfiles".into(), json!(x.ignore_dotfiles));
     m.insert("private".into(), json!(x.private));
     m.insert("timeAdded".into(), json!(t.time_added));
     m.insert("format".into(), json!(format_str(t.format)));
@@ -140,6 +142,7 @@ pub fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
                 piece_size: parse_int32(p.str("pieceSize")).unwrap_or(0),
                 optimize_alignment: p.bool_or("optimizeAlignment", true),
                 padding_file_limit: parse_int32(p.str("paddedFileSizeLimit")).unwrap_or(-1),
+                ignore_dotfiles: p.bool_or("ignoreDotfiles", true),
                 private: p.bool_or("private", false),
                 start_seeding: p.bool_or("startSeeding", torrent_file_path.is_empty()),
                 ignore_share_limits: false,
@@ -150,6 +153,7 @@ pub fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             };
             let extras = CreatorExtras {
                 private: params.private,
+                ignore_dotfiles: params.ignore_dotfiles,
                 comment: params.comment.clone(),
                 source: params.source.clone(),
                 trackers,
@@ -230,8 +234,14 @@ mod tests {
             time_added: 1_700_000_000,
             ..Default::default()
         };
-        let x = CreatorExtras { comment: "c".into(), trackers: vec!["u".into(), "".into()], ..Default::default() };
+        let x = CreatorExtras {
+            comment: "c".into(),
+            ignore_dotfiles: true,
+            trackers: vec!["u".into(), "".into()],
+            ..Default::default()
+        };
         let j = task_json(&t, Some(&x));
+        assert_eq!(j["ignoreDotfiles"], true);
         assert_eq!(j["progress"], 42);
         assert_eq!(j["status"], "Running");
         assert_eq!(j["comment"], "c");

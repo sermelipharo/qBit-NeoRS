@@ -1516,7 +1516,8 @@ Window title `Torrent Creator`. Non-modal, scrollable. Accepts drag-and-drop of 
 | `Select folder` | button | | `getExistingDirectory` titled `Select folder`. |
 | group `Settings` → `Torrent format:` | combo | index from `TorrentCreator/TorrentFormat`, default **1 = Hybrid** | Items in order: `V2` (0), `Hybrid` (1), `V1` (2). Shown only with libtorrent 2.x. Maps to `TorrentFormat {V1, V2, Hybrid}`; lt flags: V1 → `v1_only`, V2 → `v2_only`, Hybrid → none. |
 | `Piece size:` | combo | index from `TorrentCreator/PieceSize`, default 0 (`Auto`) | Items: `Auto` (0 → libtorrent chooses), then `16 KiB`, `32 KiB`, `64 KiB`, `128 KiB`, `256 KiB`, `512 KiB`, `1 MiB`, `2 MiB`, `4 MiB`, `8 MiB`, `16 MiB`, `32 MiB`, `64 MiB`, `128 MiB` (= `1024 << i` for i = 4..17). |
-| `Calculate number of pieces:` | button + result label | | Runs `TorrentCreator::calculateTotalPieces(path, pieceSize, format)` in a background thread; label shows `Calculating...` then the integer; button disabled meanwhile. |
+| `Calculate number of pieces:` | button + result label | | Runs `TorrentCreator::calculateTotalPieces(path, pieceSize, ignoreDotfiles, format)` in a background thread; label shows `Calculating...` then the integer; button disabled meanwhile. |
+| `Ignore dotfiles` (5.3) | check box | `TorrentCreator/IgnoreDotfiles` (true) | Tooltip `If checked, filenames starting with a period punctuation mark \`.\` will not be added to the created torrent.` See step 5. |
 | `Private torrent (Won't distribute on DHT network)` | check box | `TorrentCreator/PrivateTorrent` (false) | Sets `private` flag. |
 | `Start seeding immediately` | check box | `TorrentCreator/StartSeeding` (false) | Enables the next box. |
 | `Ignore share ratio limits for this torrent` | check box | `TorrentCreator/IgnoreRatio` (false) | Enabled only when Start seeding is checked. |
@@ -1534,7 +1535,7 @@ Window title `Torrent Creator`. Non-modal, scrollable. Accepts drag-and-drop of 
 2. Save dialog `Select where to save the new torrent`, default `<TorrentCreator/LastSavePath or home>/<input name>.torrent`, filter `Torrent Files (*.torrent)`; `.torrent` appended if missing; parent dir stored to `TorrentCreator/LastSavePath`.
 3. All inputs disabled + wait cursor; creator runs on a 1-thread pool. Cancel/close (`rejected`) requests interruption (error `Operation aborted`).
 4. Tracker text processing: trimmed, runs of 3+ newlines collapsed to exactly one blank line, split by `\n`; an empty line increments the tier (tier starts at 0), each non-empty line trimmed and added with the current tier.
-5. File collection: for a single file → that file. For a folder → all sub-directories recursively, **sorted by natural case-insensitive order**, files within each directory sorted the same way; **files and folders whose name starts with `.` are excluded**; Windows `.lnk` shortcuts skipped. Paths are relative to the input's parent dir.
+5. File collection: for a single file → that file. For a folder → all sub-directories recursively, **sorted by natural case-insensitive order**, files within each directory sorted the same way; with "Ignore dotfiles" (5.3; always before 5.3) **files and folders whose name starts with `.` are excluded** (a selected single file too); hidden entries are otherwise included (5.3 lists with `QDir::Hidden`). If nothing is left with "Ignore dotfiles" on, creation fails with `All files have been filtered out by 'Ignore dotfiles' option`. (5.3 still descends into the subfolders of a skipped dot folder, so `.git/objects/...` would be added; qBit NeoRS skips the whole subtree.) Windows `.lnk` shortcuts skipped. Paths are relative to the input's parent dir.
 6. Piece hashing reports progress `piece_index * 100 / num_pieces`.
 7. `created by` = `qBittorrent v5.2.4` (literally `"qBittorrent " QBT_VERSION`), comment, private flag; creation date set by libtorrent.
 8. Success → info box `Torrent creator` with text `Torrent created:\n<path>`. If "Start seeding immediately": the .torrent is loaded and added with forced params: addStopped=false, contentLayout=Original, savePath = input's parent dir, **skipChecking=true**, stopCondition=None, useAutoTMM=false, useDownloadPath=false; if "Ignore share ratio limits" → ratioLimit=−1, seedingTimeLimit=−1, inactiveSeedingTimeLimit=−1 (unlimited). Load failure → critical `Add torrent failed` / `Add torrent to transfer list failed.\nReason: "%1"`.
@@ -4042,6 +4043,7 @@ Manager limits: max 256 tasks retained (`TorrentCreator/Manager/MaxTasks`); when
 | `private` | bool | false | private flag |
 | `format` | string | `hybrid` | libtorrent 2.x only: `v1`, `v2`, `hybrid` (anything else -> hybrid) |
 | `optimizeAlignment` | bool | true | libtorrent 1.2 only |
+| `ignoreDotfiles` | bool | true | (5.3) leave out files and folders whose names start with `.` |
 | `paddedFileSizeLimit` | int | -1 | libtorrent 1.2 only |
 | `pieceSize` | int | 0 | bytes; 0 = auto |
 | `comment` | string | "" | |
@@ -4055,7 +4057,7 @@ Response `{"taskID": "<uuid>"}`.
 Param `taskID` (optional; empty = all tasks; unknown -> `404`). Array of:
 | Key | Presence | Meaning |
 |---|---|---|
-| `taskID`, `sourcePath`, `pieceSize`, `private`, `timeAdded`, `status` | always | `status`: `Queued`, `Running`, `Finished`, `Failed`; `timeAdded` = seconds since the epoch (qBittorrent 5.3, #24210; 5.2 sent the Qt text date, e.g. `Mon Oct 13 12:34:56 2026`) |
+| `taskID`, `sourcePath`, `pieceSize`, `ignoreDotfiles` (5.3), `private`, `timeAdded`, `status` | always | `status`: `Queued`, `Running`, `Finished`, `Failed`; `timeAdded` = seconds since the epoch (qBittorrent 5.3, #24210; 5.2 sent the Qt text date, e.g. `Mon Oct 13 12:34:56 2026`) |
 | `format` | lt2 | `v1`/`v2`/`hybrid` |
 | `optimizeAlignment`, `paddedFileSizeLimit` | lt1.2 | |
 | `comment`, `torrentFilePath`, `source`, `trackers` (array), `urlSeeds` (array) | if non-empty | |

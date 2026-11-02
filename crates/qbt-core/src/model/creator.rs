@@ -23,6 +23,9 @@ pub struct TorrentCreatorParams {
     pub optimize_alignment: bool,
     /// -1 = disabled.
     pub padding_file_limit: i64,
+    /// Leave out files and folders whose names start with `.` (qBittorrent
+    /// 5.3 "Ignore dotfiles", on by default).
+    pub ignore_dotfiles: bool,
     pub private: bool,
     pub start_seeding: bool,
     pub ignore_share_limits: bool,

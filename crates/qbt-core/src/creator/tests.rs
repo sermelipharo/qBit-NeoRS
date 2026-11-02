@@ -29,6 +29,7 @@ fn params(source: &Path, out: &Path) -> TorrentCreatorParams {
         torrent_file_path: out.to_string_lossy().into_owned(),
         format: TorrentFormat::Hybrid,
         padding_file_limit: -1,
+        ignore_dotfiles: true,
         trackers: vec!["http://tracker/announce".into()],
         ..Default::default()
     }
@@ -140,7 +141,7 @@ fn calculates_pieces() {
     std::fs::write(src.join("a"), vec![0u8; 20_000]).unwrap();
     std::fs::write(src.join("b"), vec![0u8; 20_000]).unwrap();
     // v1: 40000 bytes / 16 KiB = 3 pieces; hybrid pads each file to 2 pieces.
-    assert_eq!(CreatorManager::calculate_total_pieces(&src, 16384, TorrentFormat::V1).unwrap(), 3);
-    assert_eq!(CreatorManager::calculate_total_pieces(&src, 16384, TorrentFormat::Hybrid).unwrap(), 4);
+    assert_eq!(CreatorManager::calculate_total_pieces(&src, 16384, true, TorrentFormat::V1).unwrap(), 3);
+    assert_eq!(CreatorManager::calculate_total_pieces(&src, 16384, true, TorrentFormat::Hybrid).unwrap(), 4);
     assert_eq!(auto_piece_size(1 << 30, TorrentFormat::V1), 512 * 1024);
 }

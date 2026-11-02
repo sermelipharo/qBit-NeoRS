@@ -23,6 +23,8 @@ final class MainMenuController {
     var queueItems: [NSMenuItem] = []
     var pauseSessionItem: NSMenuItem?
     var resumeSessionItem: NSMenuItem?
+    /// Adds the invocable plugins to the Plugins menu when it opens.
+    var pluginsMenuDelegate: PluginsMenuDelegate?
     private var topLevelItems: [NSMenuItem] = []
     private var isRestoreScheduled = false
     private let symbolLoader = MenuSymbolLoader()
@@ -38,6 +40,7 @@ final class MainMenuController {
             submenuItem(makeEditMenu()),
             submenuItem(makeViewMenu()),
             submenuItem(makeToolsMenu()),
+            submenuItem(makePluginsMenu()),
             submenuItem(makeWindowMenu()),
             submenuItem(makeHelpMenu()),
         ]

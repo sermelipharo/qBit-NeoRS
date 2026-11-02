@@ -67,6 +67,7 @@ extension MainMenuController {
             (AppWindowID.cookies.title, AppWindowID.cookies.rawValue),
             (FeatureWindowID.rssDownloader.title, FeatureWindowID.rssDownloader.rawValue),
             (FeatureWindowID.searchPlugins.title, FeatureWindowID.searchPlugins.rawValue),
+            (FeatureWindowID.plugins.title, FeatureWindowID.plugins.rawValue),
             (AppWindowID.about.title, AppWindowID.about.rawValue),
         ]
         for (title, id) in scenes {

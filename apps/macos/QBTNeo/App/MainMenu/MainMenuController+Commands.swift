@@ -125,6 +125,24 @@ extension MainMenuController {
         return menu
     }
 
+    /// qBittorrent 5.3's Plugins menu: "Manage Plugins…", then the enabled
+    /// plugins that can be invoked (added when the menu opens).
+    func makePluginsMenu() -> NSMenu {
+        let menu = NSMenu(title: String(localized: "Plugins"))
+        let manage = MenuItemAction(
+            isEnabled: { [model] in !model.lock.isLocked },
+            perform: { [model] in model.openWindow?(id: FeatureWindowID.plugins.rawValue) }
+        )
+        let item = manage.makeItem(String(localized: "Manage Plugins…"), symbol: Symbol.puzzlepieceExtension)
+        item.toolTip = String(localized: "Manage installed plugins")
+        menu.addItem(item)
+        menu.addItem(.separator())
+        let delegate = PluginsMenuDelegate(model: model)
+        pluginsMenuDelegate = delegate
+        menu.delegate = delegate
+        return menu
+    }
+
     private func logMenuItem() -> NSMenuItem {
         let item = NSMenuItem(title: String(localized: "Log"), action: nil, keyEquivalent: "")
         item.keyEquivalentModifierMask = []

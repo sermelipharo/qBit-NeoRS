@@ -1149,6 +1149,30 @@ impl RssManager {
         })
     }
 
+    /// Copies a rule under a new name (qBittorrent 5.3
+    /// `AutoDownloader::cloneRule`): the copy is disabled, with no episode
+    /// history and no last match, so it never downloads by accident and
+    /// matches old articles once enabled. `NotFound` / `Conflict` like
+    /// [`Self::rename_rule`].
+    pub fn clone_rule(&self, source: &str, clone: &str) -> QbtResult<()> {
+        validate_rule_name(clone)?;
+        self.with_state(|me, st, fx| {
+            if st.rules.iter().any(|r| r.name == clone) {
+                return Err(QbtError::conflict("A rule with this name already exists, please choose another name."));
+            }
+            let Some(rule) = st.rules.iter().find(|r| r.name == source) else {
+                return Err(QbtError::not_found(format!("Rule doesn't exist: {source}.")));
+            };
+            let mut copy = rule.clone();
+            copy.name = clone.to_owned();
+            copy.enabled = false;
+            copy.previously_matched.clear();
+            copy.last_match = None;
+            me.set_rule_impl(st, fx, copy);
+            Ok(())
+        })
+    }
+
     /// Removes a rule (missing rules are ignored).
     pub fn remove_rule(&self, name: &str) -> QbtResult<()> {
         self.with_state(|_, st, fx| {

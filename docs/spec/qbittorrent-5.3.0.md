@@ -138,7 +138,7 @@ Things to know before reading:
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
 | #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ⬜ | Serve a completed file from torrent content. Security: resolve against the torrent's content root only, reject `..` and symlink escape, require the file complete, stream with `Content-Disposition` |
-| #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ⬜ | Not in `webui/api/mod.rs`; see RSS |
+| #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ✅ | `RssManager::clone_rule` |
 | #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ⬜ | See Core/engine |
 | #23856 (2.15.2) | `app/getFreeSpaceAtPath` | ✅ | `webui/api/app.rs:92`, route `webui/api/mod.rs:173` (the changelog line's `Action` suffix is the C++ method name; the real route is `getFreeSpaceAtPath`) |
 | #23784 (2.16.1) | `search/status` has `pattern`, `category`, `plugins`; prefs `store_search_jobs`, `store_search_job_results` | ⬜ | Add the fields in `webui/api/search.rs` and two prefs; Swift already restores tabs (`Features/Search/SearchSessionStore.swift`) |
@@ -184,7 +184,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 
 | PR | Change | Status | Notes |
 |---|---|---|---|
-| #24056 | "Clone rule" in the auto-downloader | ⬜ | Swift action in `Features/RSS/Downloader/RSSRuleListPane.swift` and a core `clone_rule`; WebAPI `rss/cloneRule` |
+| #24056 | "Clone rule" in the auto-downloader | ✅ | Toolbar button and context menu item "Clone rule…" with the "Rule cloning" prompt; the copy is disabled, history and last match cleared |
 | #23963 | Sticky "All" RSS item | ⬜ | `RSSFeedList.swift` has only the Unread node (`.unread`); add "All" showing every article |
 | #24120 | Add torrents from links in the article viewer | ⬜ | Verify `RSSArticleView.swift` / `RSSDescriptionRenderer.swift` make description links downloadable via `RSSLinkPolicy.isSupportedTorrentURL` |
 | #24519 | Persist feed list sort order | ⬜ | Low: `RSSFeedList` has no sort order to persist; add sorting and remember it |

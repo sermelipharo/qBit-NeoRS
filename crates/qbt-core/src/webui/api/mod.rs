@@ -260,6 +260,7 @@ pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("rss", "refreshItem", P),
     ("rss", "setRule", P),
     ("rss", "renameRule", P),
+    ("rss", "cloneRule", P),
     ("rss", "removeRule", P),
     ("rss", "rules", GP),
     ("rss", "matchingArticles", GP),
@@ -497,10 +498,10 @@ mod tests {
 
     #[test]
     fn endpoint_table() {
-        assert_eq!(ENDPOINTS.len(), 127);
+        assert_eq!(ENDPOINTS.len(), 128);
         let post = ENDPOINTS.iter().filter(|e| e.2 == Methods::PostOnly).count();
         let get = ENDPOINTS.len() - post;
-        assert_eq!(post, 81);
+        assert_eq!(post, 82);
         assert_eq!(get, 46);
         assert_eq!(method_filter("torrents", "SSLParameters"), Some(Methods::GetPost));
         assert_eq!(method_filter("torrents", "ssLParameters"), None);

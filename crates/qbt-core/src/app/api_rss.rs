@@ -63,6 +63,11 @@ impl App {
         self.rss.rename_rule(&old_name, &new_name)
     }
 
+    /// "Clone rule…" / `rss/cloneRule` (qBittorrent 5.3).
+    pub fn rss_clone_rule(&self, source_name: String, clone_name: String) -> QbtResult<()> {
+        self.rss.clone_rule(&source_name, &clone_name)
+    }
+
     pub fn rss_remove_rule(&self, name: String) -> QbtResult<()> {
         self.rss.remove_rule(&name)
     }

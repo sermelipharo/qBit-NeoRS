@@ -90,6 +90,14 @@ pub fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
                 _ => Ok(Reply::ok()),
             }
         }
+        "cloneRule" => {
+            c.params.require(&["sourceName", "cloneName"])?;
+            // Unknown sources and taken names are ignored (qBittorrent 5.3).
+            match c.app.rss_clone_rule(c.params.str("sourceName").to_owned(), c.params.str("cloneName").to_owned()) {
+                Err(e @ QbtError::Unsupported { .. }) => Err(e.into()),
+                _ => Ok(Reply::ok()),
+            }
+        }
         "removeRule" => {
             c.params.require(&["ruleName"])?;
             match c.app.rss_remove_rule(c.params.str("ruleName").to_owned()) {

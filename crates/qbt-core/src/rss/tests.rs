@@ -439,6 +439,16 @@ async fn rule_management_import_export() {
     assert!(matches!(mgr.rename_rule("B", "A"), Err(QbtError::Conflict { .. })));
     assert!(matches!(mgr.rename_rule("missing", "C"), Err(QbtError::NotFound { .. })));
     mgr.rename_rule("B", "C").unwrap();
+    // Clone (qBittorrent 5.3): disabled, no history, no last match.
+    assert!(matches!(mgr.clone_rule("A", "C"), Err(QbtError::Conflict { .. })));
+    assert!(matches!(mgr.clone_rule("missing", "F"), Err(QbtError::NotFound { .. })));
+    mgr.clone_rule("A", "A copy").unwrap();
+    let rules = mgr.rules();
+    let (orig, copy) = (rules.iter().find(|r| r.name == "A").unwrap(), rules.iter().find(|r| r.name == "A copy").unwrap());
+    assert!(!copy.enabled && orig.enabled);
+    assert!(copy.previously_matched_episodes.is_empty() && !orig.previously_matched_episodes.is_empty());
+    assert_eq!((copy.must_contain.as_str(), copy.episode_filter.as_str(), copy.priority), ("show*720p|other", "1x2-;", 2));
+    mgr.remove_rule("A copy").unwrap();
     mgr.clear_rule_history("A").unwrap();
     assert!(mgr.rules().iter().find(|r| r.name == "A").unwrap().previously_matched_episodes.is_empty());
     assert!(mgr.clear_rule_history("missing").is_err());

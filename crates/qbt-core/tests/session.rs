@@ -164,6 +164,11 @@ fn torrent_lifecycle_and_persistence() {
     assert!(!downloads.join("Album/01.bin").exists());
     let err = rt.block_on(app.rename_file(hash.clone(), "Album/first.bin".into(), "../escape.bin".into()));
     assert!(err.is_err());
+    // Every component is checked, not only the file name (qBittorrent 5.3, #23386).
+    for bad in ["Album/../../escape.bin", "Album/./x.bin", "Al:bum/x.bin", "Album/a\u{1}/x.bin"] {
+        let err = rt.block_on(app.rename_file(hash.clone(), "Album/first.bin".into(), bad.into()));
+        assert!(err.is_err(), "{bad}");
+    }
     let err = rt.block_on(app.rename_folder(hash.clone(), "Album/sub".into(), "Album/first.bin/x".into()));
     assert!(err.is_err(), "a file cannot become a folder");
     rt.block_on(app.rename_folder(hash.clone(), "Album/sub".into(), "Album/Sub2".into())).unwrap();

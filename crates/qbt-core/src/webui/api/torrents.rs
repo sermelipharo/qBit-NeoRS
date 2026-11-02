@@ -1168,11 +1168,12 @@ fn apply_share_limit_params(c: &Call<'_>, cat: &mut Category) -> Result<(), ApiE
     Ok(())
 }
 
-/// `Utils::Fs::isValidName` (non-Windows rules).
+/// `Utils::Fs::isValidFileName` (qBittorrent 5.3, #23386): the macOS rules,
+/// so `:` is refused too. Every component of the new path is checked again
+/// by the core (`paths::is_valid_relative_path`, which also refuses `.` and
+/// `..`).
 pub fn is_valid_file_name(name: &str) -> bool {
-    !(name.is_empty() || name == "." || name == "..")
-        && name.len() <= 255
-        && !name.chars().any(|c| (c as u32) < 32 || c as u32 == 127 || c == '/')
+    crate::bittorrent::paths::is_valid_name(name)
 }
 
 async fn rename_path(c: &mut Call<'_>, file: bool) -> ApiResult {
@@ -1244,8 +1245,8 @@ mod tests {
             assert!(!is_valid_category_name(bad), "{bad}");
         }
         assert!(is_valid_file_name("ok.mkv"));
-        for bad in ["", ".", "..", "a/b", "a\u{1}b", &"x".repeat(256)] {
-            assert!(!is_valid_file_name(bad));
+        for bad in ["", ".", "..", "a/b", "a\u{1}b", "a:b", &"x".repeat(256), &"é".repeat(128)] {
+            assert!(!is_valid_file_name(bad), "{bad}");
         }
     }
 

@@ -610,6 +610,13 @@ impl PexTrio {
             .unwrap();
         let bt = add_leech(&b, torrent.clone(), vec![]).await.unwrap();
         let b_addr = b.listen_addr().unwrap();
+        // As in `test_e2e_net_pex_toggle`: once A advertises them to each
+        // other, S and B may dial each other at once; with one connection
+        // per peer id the one S made could be kept, which B doesn't know
+        // from PeX (`b_knows_s` would never hold).
+        for session in [&s, &b] {
+            session.set_allow_multiple_connections_per_pid(true);
+        }
         wait_until(
             || {
                 ensure!(bt.stats().live.is_some(), "B not live");

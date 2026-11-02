@@ -70,6 +70,10 @@ fi
 
 mkdir -p "$DEST"
 rsync -a --delete "$TREE/" "$DEST/"
+# License texts of CPython and the libraries linked into this build (from
+# the release's full archive; see scripts/python-licenses).
+mkdir -p "$DEST/licenses"
+cp "$(dirname "$0")"/python-licenses/LICENSE.*.txt "$DEST/licenses/"
 
 # Inside out: extension modules, then the interpreter. Ad-hoc code has no
 # team, so library validation would refuse the modules under the hardened

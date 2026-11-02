@@ -31,11 +31,12 @@ It contains or is derived from the following third-party work:
 * Python 3.13 (https://www.python.org), Python Software Foundation License,
   Copyright the Python Software Foundation. The app bundles a trimmed build
   from python-build-standalone (https://github.com/astral-sh/python-build-standalone)
-  to run search plugins (Contents/Resources/python, license text in
-  lib/python3.13/LICENSE.txt). The interpreter links OpenSSL (Apache License
-  2.0), libffi (MIT), SQLite (public domain), XZ Utils (0BSD), bzip2
-  (bzip2 license), zlib (zlib license), mpdecimal (BSD-2-Clause) and Expat
-  (MIT), each under its own license.
+  to run search plugins (Contents/Resources/python). The interpreter links
+  OpenSSL (Apache License 2.0), libffi (MIT), SQLite (public domain), XZ
+  Utils (0BSD), bzip2 (bzip2 license), mpdecimal (BSD-2-Clause), Expat
+  (MIT) and libuuid (BSD-3-Clause). Their license
+  texts ship in Contents/Resources/python/licenses (scripts/python-licenses
+  in the sources).
 
 * DB-IP "IP to Country Lite" database (downloaded at runtime when peer country
   resolution is enabled), Creative Commons Attribution 4.0, https://db-ip.com.

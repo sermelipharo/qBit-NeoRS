@@ -1,14 +1,13 @@
-//! `search/*`. Search jobs are tracked per WebUI session like qBittorrent
-//! (a session only sees and controls the jobs it started).
+//! `search/*`. Search jobs are shared by every WebUI session and can be kept
+//! across restarts (qBittorrent 5.3 `SearchJobManager`, see
+//! `webui/search_jobs.rs`).
 
 use serde_json::{Value, json};
 
-use super::{ApiError, ApiResult, Call, MAX_SESSION_ITEMS, Reply};
+use super::{ApiError, ApiResult, Call, Reply};
 use crate::QbtError;
 use crate::model::*;
-
-/// qBittorrent's `MAX_CONCURRENT_SEARCHES` (per session).
-const MAX_CONCURRENT_SEARCHES: usize = 5;
+use crate::webui::search_jobs::JobInfo;
 
 fn category_name(id: &str) -> String {
     match id {
@@ -40,10 +39,16 @@ fn plugin_json(p: &SearchPlugin) -> Value {
     })
 }
 
-async fn owned_id(c: &Call<'_>) -> Result<i64, ApiError> {
-    c.params.require(&["id"])?;
-    let id = c.params.int("id");
-    if c.session.data.lock().await.searches.contains(&id) { Ok(id) } else { Err(ApiError::not_found()) }
+/// qBittorrent's `jobInfoToJSON` (same key order).
+fn job_json(j: &JobInfo) -> Value {
+    json!({
+        "id": j.id,
+        "status": if j.active { "Running" } else { "Stopped" },
+        "pattern": j.pattern,
+        "category": j.category,
+        "plugins": j.plugins,
+        "total": j.total,
+    })
 }
 
 fn status_str(s: SearchJobStatus) -> &'static str {
@@ -74,61 +79,30 @@ pub async fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             } else {
                 requested
             };
-            let jobs: Vec<i64> = c.session.data.lock().await.searches.iter().copied().collect();
-            let running = jobs
-                .iter()
-                .filter(|id| {
-                    c.app.search_status(Some(**id)).ok().and_then(|v| v.into_iter().next()).is_some_and(|j| j.status == SearchJobStatus::Running)
-                })
-                .count();
-            if running >= MAX_CONCURRENT_SEARCHES {
-                return Err(ApiError::conflict(format!(
-                    "Unable to create more than {MAX_CONCURRENT_SEARCHES} concurrent searches."
-                )));
-            }
-            let id = c.app.search_start(pattern, plugins, category)?;
-            let mut d = c.session.data.lock().await;
-            d.searches.push_back(id);
-            if d.searches.len() > MAX_SESSION_ITEMS
-                && let Some(old) = d.searches.pop_front()
-            {
-                let _ = c.app.search_delete(old);
-            }
+            let id = c.web.search_jobs().start_search(c.app.as_ref(), &pattern, &category, &plugins)?;
             Ok(Reply::Json(json!({"id": id})))
         }
         "stop" => {
-            let id = owned_id(c).await?;
-            c.app.search_stop(id)?;
+            c.params.require(&["id"])?;
+            if !c.web.search_jobs().stop_search(c.app.as_ref(), c.params.int("id")) {
+                return Err(ApiError::not_found());
+            }
             Ok(Reply::ok())
         }
         "status" => {
             let id = c.params.int("id");
-            let ids: Vec<i64> = {
-                let d = c.session.data.lock().await;
-                if id != 0 {
-                    if !d.searches.contains(&id) {
-                        return Err(ApiError::not_found());
-                    }
-                    vec![id]
-                } else {
-                    d.searches.iter().copied().collect()
-                }
+            let jobs = c.web.search_jobs();
+            let list: Vec<Value> = if id != 0 {
+                vec![job_json(&jobs.job_info(c.app.as_ref(), id).ok_or_else(ApiError::not_found)?)]
+            } else {
+                jobs.all_job_infos(c.app.as_ref()).iter().map(job_json).collect()
             };
-            let mut list = Vec::new();
-            for id in ids {
-                match c.app.search_status(Some(id)) {
-                    Ok(v) => list.extend(
-                        v.into_iter().map(|j| json!({"id": j.id, "status": status_str(j.status), "total": j.total})),
-                    ),
-                    Err(QbtError::NotFound { .. }) => {}
-                    Err(e) => return Err(e.into()),
-                }
-            }
             Ok(Reply::Json(Value::Array(list)))
         }
         "results" => {
-            let id = owned_id(c).await?;
-            let page = c.app.search_results(id, c.params.int("limit"), c.params.int("offset")).map_err(|e| match e {
+            c.params.require(&["id"])?;
+            let id = c.params.int("id");
+            let page = c.web.search_jobs().results(c.app.as_ref(), id, c.params.int("limit"), c.params.int("offset")).map_err(|e| match e {
                 QbtError::NotFound { .. } => ApiError::not_found(),
                 QbtError::InvalidArgument { .. } | QbtError::Conflict { .. } => ApiError::conflict("Offset is out of range"),
                 other => other.into(),
@@ -136,12 +110,10 @@ pub async fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             Ok(Reply::Json(json!({"status": status_str(page.status), "results": page.results, "total": page.total})))
         }
         "delete" => {
-            let id = owned_id(c).await?;
-            match c.app.search_delete(id) {
-                Ok(()) | Err(QbtError::NotFound { .. }) => {}
-                Err(e) => return Err(e.into()),
+            c.params.require(&["id"])?;
+            if !c.web.search_jobs().delete_search(c.app.as_ref(), c.params.int("id")) {
+                return Err(ApiError::not_found());
             }
-            c.session.data.lock().await.searches.retain(|x| *x != id);
             Ok(Reply::ok())
         }
         "downloadTorrent" => {

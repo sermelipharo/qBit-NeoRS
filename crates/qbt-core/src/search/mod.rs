@@ -36,8 +36,10 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use self::job::{Job, JobLaunch, cap_text};
+pub(crate) use self::job::{MAX_RESULTS_PER_JOB, page_range};
 use self::nova::{NovaDirs, PluginVersion, VersionHeader};
-use self::plugins::{PluginEntry, is_valid_plugin_name};
+use self::plugins::PluginEntry;
+pub(crate) use self::plugins::is_valid_plugin_name;
 use self::process::python_command;
 use self::proxy::ProxyEnv;
 use self::python::{PythonInfo, PythonVersion};

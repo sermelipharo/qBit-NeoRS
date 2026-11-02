@@ -19,7 +19,7 @@ extension Preferences {
 extension BehaviorPrefs {
     static let qbtDefaults = BehaviorPrefs(
         locale: "", performanceWarning: false, statusBarExternalIp: false, confirmTorrentDeletion: true,
-        fileLogEnabled: true, fileLogPath: "", fileLogBackupEnabled: true, fileLogMaxSize: 65,
+        storeSearchJobs: false, storeSearchJobResults: false, fileLogEnabled: true, fileLogPath: "", fileLogBackupEnabled: true, fileLogMaxSize: 65,
         fileLogDeleteOld: true, fileLogAge: 1, fileLogAgeType: .months, deleteTorrentContentFiles: false
     )
 }

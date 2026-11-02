@@ -12,6 +12,7 @@ pub(crate) mod assets;
 pub(crate) mod clientdata;
 pub mod http;
 pub mod password;
+pub(crate) mod search_jobs;
 pub(crate) mod security;
 pub(crate) mod server;
 pub(crate) mod session;
@@ -106,6 +107,7 @@ impl WebUiController {
         let me = app.webui.clone();
         let handle = self.ctx.rt.spawn(me.run());
         *self.manager.lock() = Some(handle);
+        self.ctx.rt.spawn(follow_search_jobs(self.ctx.clone(), self.web.clone(), Arc::downgrade(app), self.stop_tx.subscribe()));
     }
 
     /// Runs the WebUI even if the preference is off (headless daemon).
@@ -265,6 +267,44 @@ impl WebUiController {
         st.running = false;
         st.error = error;
         *self.status.lock() = st;
+    }
+}
+
+/// Keeps the WebUI search jobs in step with the search engine (a job's
+/// results are taken, and stored, as soon as it stops) and with the
+/// `store_search_jobs` / `store_search_job_results` preferences.
+async fn follow_search_jobs(ctx: CoreContext, web: Arc<WebApp>, app: std::sync::Weak<App>, mut stop_rx: watch::Receiver<bool>) {
+    use tokio::sync::broadcast::error::RecvError;
+
+    use crate::events::CoreEvent;
+
+    let mut prefs_rx = ctx.prefs.subscribe();
+    let mut events = ctx.events.subscribe();
+    loop {
+        tokio::select! {
+            r = prefs_rx.changed() => {
+                if r.is_err() {
+                    break;
+                }
+                let p = prefs_rx.borrow_and_update().clone();
+                web.search_jobs().preferences_changed(p.behavior.store_search_jobs, p.behavior.store_search_job_results);
+            }
+            e = events.recv() => match e {
+                Ok(CoreEvent::SearchUpdated { id }) => {
+                    if let Some(app) = app.upgrade() {
+                        web.search_jobs().engine_job_updated(app.as_ref(), id);
+                    }
+                }
+                Ok(_) => {}
+                Err(RecvError::Lagged(_)) => {
+                    if let Some(app) = app.upgrade() {
+                        web.search_jobs().refresh_all(app.as_ref());
+                    }
+                }
+                Err(RecvError::Closed) => break,
+            },
+            _ = stop_rx.changed() => break,
+        }
     }
 }
 

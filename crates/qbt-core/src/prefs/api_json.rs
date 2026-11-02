@@ -207,6 +207,8 @@ pub fn to_json(p: &Preferences) -> Value {
     put("performance_warning", json!(b.performance_warning));
     put("status_bar_external_ip", json!(b.status_bar_external_ip));
     put("confirm_torrent_deletion", json!(b.confirm_torrent_deletion));
+    put("store_search_jobs", json!(b.store_search_jobs));
+    put("store_search_job_results", json!(b.store_search_job_results));
     put("file_log_enabled", json!(b.file_log_enabled));
     put("file_log_path", json!(b.file_log_path));
     put("file_log_backup_enabled", json!(b.file_log_backup_enabled));
@@ -520,6 +522,8 @@ pub fn apply(p: &mut Preferences, obj: &Map<String, Value>) -> QbtResult<()> {
     set!("status_bar_external_ip", p.behavior.status_bar_external_ip, to_bool);
     set!("performance_warning", p.behavior.performance_warning, to_bool);
     set!("confirm_torrent_deletion", p.behavior.confirm_torrent_deletion, to_bool);
+    set!("store_search_jobs", p.behavior.store_search_jobs, to_bool);
+    set!("store_search_job_results", p.behavior.store_search_job_results, to_bool);
     set!("file_log_enabled", p.behavior.file_log_enabled, to_bool);
     set!("file_log_path", p.behavior.file_log_path, to_str);
     set!("file_log_backup_enabled", p.behavior.file_log_backup_enabled, to_bool);
@@ -972,8 +976,8 @@ mod tests {
 
     /// Appendix A of docs/spec/preferences.md, in order.
     const APPENDIX_A: &[&str] = &[
-        "locale", "performance_warning", "status_bar_external_ip", "confirm_torrent_deletion", "file_log_enabled",
-        "file_log_path", "file_log_backup_enabled", "file_log_max_size", "file_log_delete_old", "file_log_age",
+        "locale", "performance_warning", "status_bar_external_ip", "confirm_torrent_deletion", "store_search_jobs",
+        "store_search_job_results", "file_log_enabled", "file_log_path", "file_log_backup_enabled", "file_log_max_size", "file_log_delete_old", "file_log_age",
         "file_log_age_type", "delete_torrent_content_files", "torrent_content_layout", "add_to_top_of_queue",
         "add_stopped_enabled", "torrent_stop_condition", "merge_trackers", "auto_delete_mode", "preallocate_all",
         "incomplete_files_ext", "use_unwanted_folder", "auto_tmm_enabled", "torrent_changed_tmm_enabled",
@@ -1039,7 +1043,7 @@ mod tests {
     #[test]
     fn get_has_exact_key_order() {
         // 5.2.4's 223 keys plus the ones added for 5.3.
-        assert_eq!(APPENDIX_A.len(), 236);
+        assert_eq!(APPENDIX_A.len(), 238);
         let v = to_json(&Preferences::default());
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, APPENDIX_A);

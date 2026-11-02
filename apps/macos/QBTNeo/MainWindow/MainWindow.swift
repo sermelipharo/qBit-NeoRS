@@ -111,7 +111,8 @@ private struct MainTabFeeds: ViewModifier {
             .modifier(LogFeed(model: model.logTab))
             .task(id: SearchAttachKey(phase: model.phase, enabled: model.gui.searchEnabled)) {
                 guard model.gui.searchEnabled else { return }
-                await model.searchTab.attach(model.client, profileRoot: model.launch.isSnapshot ? nil : model.launch.profileDirectory)
+                await model.searchTab.attach(model.client, profileRoot: model.launch.isSnapshot ? nil : model.launch.profileDirectory,
+                                             preferences: model.corePreferencesReader)
                 runPendingPluginSearch()
             }
             .task(id: model.phase) {

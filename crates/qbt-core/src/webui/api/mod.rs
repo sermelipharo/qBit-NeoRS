@@ -299,7 +299,7 @@ pub fn method_filter(scope: &str, action: &str) -> Option<Methods> {
 
 // ---- Per-session state -----------------------------------------------------------
 
-/// Bound of per-session metadata caches and search job lists.
+/// Bound of per-session metadata caches.
 pub const MAX_SESSION_ITEMS: usize = 64;
 
 /// Per-session controller state (qBittorrent creates controllers per session).
@@ -307,8 +307,6 @@ pub const MAX_SESSION_ITEMS: usize = 64;
 pub struct SessionData {
     pub maindata: MaindataSync,
     pub peers: PeersSync,
-    /// Search jobs started by this session (oldest first).
-    pub searches: VecDeque<i64>,
     /// `fetchMetadata` / `parseMetadata` results: source -> torrent ID.
     pub metadata_sources: VecDeque<(String, String)>,
     /// Torrent ID -> metadata (`None` while still downloading).

@@ -178,12 +178,14 @@ extension AppModel {
     }
 
     /// Carries the two confirmations the app kept itself before qBittorrent 5.3 into the core.
-    func moveLegacyConfirmations() {
+    func moveLegacyPreferences() {
         let legacy = gui.takeLegacyConfirmations()
-        guard legacy.removeAllTags != nil || legacy.removeTrackerFromAll != nil else { return }
+        let search = gui.takeLegacySearchStorage()
         var prefs = corePreferences
         prefs.advanced.confirmRemoveAllTags = legacy.removeAllTags ?? prefs.advanced.confirmRemoveAllTags
         prefs.advanced.confirmRemoveTrackerFromAllTorrents = legacy.removeTrackerFromAll ?? prefs.advanced.confirmRemoveTrackerFromAllTorrents
+        prefs.behavior.storeSearchJobs = search.tabs ?? prefs.behavior.storeSearchJobs
+        prefs.behavior.storeSearchJobResults = search.results ?? prefs.behavior.storeSearchJobResults
         if prefs != corePreferences { savePreferences(prefs) }
     }
 

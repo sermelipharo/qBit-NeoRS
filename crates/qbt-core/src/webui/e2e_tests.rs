@@ -43,6 +43,16 @@ impl Harness {
     }
 
     fn build(tweak: impl FnOnce(&mut Preferences), expect_running: bool) -> Self {
+        Self::build_with(|_, _| {}, tweak, expect_running)
+    }
+
+    /// `prepare` edits the profile folder and the stored preferences before
+    /// the application starts.
+    fn build_with(
+        prepare: impl FnOnce(&std::path::Path, &mut Preferences),
+        tweak: impl FnOnce(&mut Preferences),
+        expect_running: bool,
+    ) -> Self {
         let dir = tempfile::tempdir().unwrap();
         // No DHT/LSD/UPnP: tests stay local and server_state stays stable.
         let mut initial = Preferences::default();
@@ -50,6 +60,7 @@ impl Harness {
         initial.bittorrent.lsd = false;
         initial.connection.upnp = false;
         initial.connection.listen_port = 0;
+        prepare(dir.path(), &mut initial);
         std::fs::create_dir_all(dir.path().join("config")).unwrap();
         std::fs::write(dir.path().join("config/preferences.json"), serde_json::to_vec(&initial).unwrap()).unwrap();
         let app = App::new(AppConfig { profile_dir: dir.path().to_string_lossy().into_owned(), ..Default::default() }).unwrap();
@@ -265,7 +276,11 @@ fn preferences_round_trip() {
         let text = r.text().await.unwrap();
         assert!(text.starts_with("{\"locale\":"));
         let prefs: Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(prefs.as_object().unwrap().len(), 236);
+        assert_eq!(prefs.as_object().unwrap().len(), 238);
+        // qBittorrent 5.3 (WebAPI 2.16.1): search job storage, after confirm_torrent_deletion.
+        let keys: Vec<&str> = prefs.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys[3..6], ["confirm_torrent_deletion", "store_search_jobs", "store_search_job_results"]);
+        assert_eq!((prefs["store_search_jobs"].clone(), prefs["store_search_job_results"].clone()), (json!(false), json!(false)));
         assert_eq!(prefs["web_ui_port"], h.port);
         assert!(prefs.get("web_ui_password").is_none());
 
@@ -1188,5 +1203,79 @@ fn download_completed_files() {
         let r = get("0").await;
         assert_eq!(r.status(), 409);
         assert!(!r.text().await.unwrap().contains("secret"));
+    });
+}
+
+#[test]
+fn search_jobs_are_restored_and_shared_by_sessions() {
+    let jobs = json!({"Jobs": [
+        {"ID": 1234, "SearchPattern": "ubuntu", "Category": "software", "Plugins": ["piratebay", "eztv"]},
+        {"ID": 42, "SearchPattern": "debian", "Category": "all", "Plugins": []},
+    ]});
+    let results = json!([
+        {"FileName": "ubuntu.iso", "FileURL": "magnet:?xt=urn:btih:0000000000000000000000000000000000000001",
+         "FileSize": 123, "SeedersCount": 4, "LeechersCount": 1, "EngineName": "piratebay",
+         "SiteURL": "https://example.org", "DescrLink": "https://example.org/1", "PubDate": 1_700_000_000},
+        {"FileName": "ubuntu2.iso", "FileURL": "u2", "FileSize": 5, "SeedersCount": 0, "LeechersCount": 0,
+         "EngineName": "eztv", "SiteURL": "", "DescrLink": "", "PubDate": -1},
+    ]);
+    let h = Harness::build_with(
+        |root, p| {
+            p.behavior.store_search_jobs = true;
+            p.behavior.store_search_job_results = true;
+            let folder = root.join("data/WebUI/Search");
+            std::fs::create_dir_all(&folder).unwrap();
+            std::fs::write(folder.join("Session.json"), jobs.to_string()).unwrap();
+            std::fs::write(folder.join("1234.json"), results.to_string()).unwrap();
+        },
+        |_| {},
+        true,
+    );
+    let folder = h._dir.path().join("data/WebUI/Search");
+    h.block(async {
+        let c = h.login().await;
+        let prefs: Value = h.get("/api/v2/app/preferences", Some(&c)).await.json().await.unwrap();
+        assert_eq!((prefs["store_search_jobs"].clone(), prefs["store_search_job_results"].clone()), (json!(true), json!(true)));
+
+        // Restored jobs are stopped and report what they were started with.
+        let text = h.get("/api/v2/search/status", Some(&c)).await.text().await.unwrap();
+        assert_eq!(
+            text,
+            concat!(
+                r#"[{"id":1234,"status":"Stopped","pattern":"ubuntu","category":"software","plugins":["piratebay","eztv"],"total":2},"#,
+                r#"{"id":42,"status":"Stopped","pattern":"debian","category":"all","plugins":[],"total":0}]"#
+            )
+        );
+        let one: Value = h.get("/api/v2/search/status?id=42", Some(&c)).await.json().await.unwrap();
+        assert_eq!(one.as_array().unwrap().len(), 1);
+        assert_eq!(h.get("/api/v2/search/status?id=7", Some(&c)).await.status(), 404);
+
+        let r: Value = h.get("/api/v2/search/results?id=1234&limit=1&offset=1", Some(&c)).await.json().await.unwrap();
+        assert_eq!((r["status"].clone(), r["total"].clone()), (json!("Stopped"), json!(2)));
+        assert_eq!(r["results"][0]["fileName"], "ubuntu2.iso");
+        assert_eq!(r["results"][0]["pubDate"], -1);
+        let r = h.get("/api/v2/search/results?id=1234&offset=3", Some(&c)).await;
+        assert_eq!((r.status().as_u16(), r.text().await.unwrap()), (409, "Offset is out of range".to_owned()));
+
+        // Jobs are shared: another session sees and deletes them.
+        let other = h.login().await;
+        let all: Value = h.get("/api/v2/search/status", Some(&other)).await.json().await.unwrap();
+        assert_eq!(all.as_array().unwrap().len(), 2);
+        assert_eq!(h.post("/api/v2/search/stop", &[("id", "1234")], Some(&other)).await.status(), 200);
+        assert_eq!(h.post("/api/v2/search/delete", &[("id", "1234")], Some(&other)).await.status(), 200);
+        assert!(!folder.join("1234.json").exists());
+        assert_eq!(h.post("/api/v2/search/delete", &[("id", "1234")], Some(&c)).await.status(), 404);
+        let session: Value = serde_json::from_slice(&std::fs::read(folder.join("Session.json")).unwrap()).unwrap();
+        assert_eq!(session["Jobs"].as_array().unwrap().len(), 1);
+        assert_eq!(session["Jobs"][0]["ID"], 42);
+
+        // Turning the option off deletes the stored jobs.
+        let r = h.post("/api/v2/app/setPreferences", &[("json", r#"{"store_search_jobs":false}"#)], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while folder.exists() && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(!folder.exists());
     });
 }

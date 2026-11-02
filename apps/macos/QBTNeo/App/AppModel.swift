@@ -38,6 +38,10 @@ final class AppModel {
     @ObservationIgnored private(set) var client: (any CoreClient)?
     /// The core's preferences (reloaded on `PreferencesChanged`).
     var corePreferences = Preferences.qbtDefaults
+    /// Reads `corePreferences` without keeping the model alive (feature models that outlive a call).
+    var corePreferencesReader: @MainActor () -> Preferences {
+        { [weak self] in self?.corePreferences ?? .qbtDefaults }
+    }
 
     // MARK: Main window presentation state
     /// The main window's detail area: transfers, search, RSS or the full-size log.
@@ -131,7 +135,7 @@ final class AppModel {
             }
         }
         corePreferences = client.preferences()
-        moveLegacyConfirmations()
+        moveLegacyPreferences()
         status.isPaused = client.isSessionPaused()
         log.append(contentsOf: client.mainLog(lastKnownId: -1, levels: []))
         names.pushToCore(after: .zero)

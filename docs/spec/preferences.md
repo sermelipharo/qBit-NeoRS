@@ -329,12 +329,12 @@ None. In the source, the macOS `"Show speed in Dock"` / `"Show qBittorrent in me
 
 ---
 
-## 6. Search page (GUI-only; no WebAPI keys)
+## 6. Search page
 
 | GUI label (exact) | ini key | Type | Default | Semantics |
 |---|---|---|---|---|
-| Group `"Search UI"` → checkable group `"Store opened tabs"` | `Search/StoreOpenedSearchTabs` | bool | `false` | Restores the open search tabs (their queries) at startup. |
-| `"Also store search results"` | `Search/StoreOpenedSearchTabResults` | bool | `false` | Also saves and restores each tab's results. |
+| Group `"Search UI"` → checkable group `"Store opened tabs"` | `Search/StoreSearchJobs` (5.2.4: `Search/StoreOpenedSearchTabs`) | bool | `false` | Restores the open search tabs (their queries) at startup. qBittorrent 5.3 (WebAPI 2.16.1, #23784): WebAPI key `store_search_jobs` (after `confirm_torrent_deletion`); the same setting keeps the WebUI's search jobs (`<Data>/WebUI/Search/Session.json`, see features.md). 5.3 migrates the old ini key. |
+| `"Also store search results"` | `Search/StoreSearchJobResults` (5.2.4: `Search/StoreOpenedSearchTabResults`) | bool | `false` | Also saves and restores each tab's results (and each WebUI search job's, `<Data>/WebUI/Search/NNNN.json`). WebAPI key `store_search_job_results`. |
 | `"History length"` (spin 0–99) | `Search/HistoryLength` | int | `50` (clamped 0–99) | Number of past queries kept in the search box's completer. |
 
 Other persisted search state (not on the page): `Preferences/Search/SearchEnabled` (View → Search Engine, default `false`), `SearchEngines/disabledEngines` (string list), `SearchTab/UseRegexAsFilteringPattern` (`false`), `Search/FilteringMode`, `GUI/Qt6/SearchTab/HeaderState`. The `python_executable_path` key (§9) also concerns search.
@@ -755,8 +755,10 @@ These are not in the WebAPI. A native client still has to implement them for par
 223 dht_bootstrap_nodes
 ```
 
-qBittorrent 5.3 changes this list (236 keys; `APPENDIX_A` in
-`crates/qbt-core/src/prefs/api_json.rs` is the exact order): 39 is
+qBittorrent 5.3 changes this list (238 keys; `APPENDIX_A` in
+`crates/qbt-core/src/prefs/api_json.rs` is the exact order):
+`store_search_jobs` and `store_search_job_results` follow
+`confirm_torrent_deletion` (WebAPI 2.16.1, #23784); 39 is
 `mail_notification_encryption_type` instead of `mail_notification_ssl_enabled`;
 30–31 (`export_dir`, `export_dir_fin`) are replaced by
 `torrent_files_backup_enabled`, `torrent_files_backup_dir`,

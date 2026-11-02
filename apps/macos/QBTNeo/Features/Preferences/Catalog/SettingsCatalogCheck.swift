@@ -8,7 +8,8 @@ import Foundation
 enum SettingsCatalogCheck {
     /// `/api/v2/app/preferences` GET keys plus `web_ui_password` (preferences.md Appendix A).
     static let apiKeys: [String] = [
-        "locale", "performance_warning", "status_bar_external_ip", "confirm_torrent_deletion", "file_log_enabled", "file_log_path",
+        "locale", "performance_warning", "status_bar_external_ip", "confirm_torrent_deletion", "store_search_jobs",
+        "store_search_job_results", "file_log_enabled", "file_log_path",
         "file_log_backup_enabled", "file_log_max_size", "file_log_delete_old", "file_log_age", "file_log_age_type",
         "delete_torrent_content_files", "torrent_content_layout", "add_to_top_of_queue", "add_stopped_enabled", "torrent_stop_condition",
         "merge_trackers", "auto_delete_mode", "preallocate_all", "incomplete_files_ext", "use_unwanted_folder", "auto_tmm_enabled",
@@ -74,7 +75,7 @@ enum SettingsCatalogCheck {
             .torrentNameRules,
         ]
         return gui.map(\.rawValue) + [
-            FeatureDefaults.storeSearchTabs, FeatureDefaults.storeSearchResults, FeatureDefaults.searchHistoryLength,
+            FeatureDefaults.searchHistoryLength,
             SettingsNavigator.showAdvancedKey, "watched_folders.json", "Preferences/WebUI/Enabled",
             "LaunchServices (.torrent)", "LaunchServices (magnet:)",
         ]

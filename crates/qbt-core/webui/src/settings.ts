@@ -132,6 +132,10 @@ const PANES: Pane[] = [
       ["rss_auto_downloading_enabled", "Automatic downloading"],
       ["rss_download_repack_proper_episodes", "Download REPACK/PROPER episodes"],
     ]],
+    ["Search", [
+      ["store_search_jobs", "Save search tabs"],
+      ["store_search_job_results", "Also save search results"],
+    ]],
   ]],
   ["webui", "Web UI", "globe", [
     ["Server", [

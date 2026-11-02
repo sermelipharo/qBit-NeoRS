@@ -1147,8 +1147,8 @@ Keys qBittorrent keeps outside the WebAPI that have a Settings control, plus the
 | `SpeedWidget/Enabled` | Enable speed graphs | Advanced › qBittorrent Section | Interface › Torrent Details | B | new: "Show speed graphs" |
 | `start_paused` (5.3 WebAPI; `BitTorrent/Session/StartPaused`) | Start BitTorrent session in paused state | Advanced › qBittorrent Section | General › Startup | A | new: "Start with all transfers paused" |
 | `shutdown_timeout` (5.3 WebAPI; `BitTorrent/Session/ShutdownTimeout`) | BitTorrent session shutdown timeout [-1: unlimited] | Advanced › qBittorrent Section | Advanced › Data & Recovery | X | kept |
-| `Search/StoreOpenedSearchTabs` | Store opened tabs | Search › Search UI | Search & RSS › Search Tabs | B | new: "Reopen search tabs at launch" |
-| `Search/StoreOpenedSearchTabResults` | Also store search results | Search › Search UI | Search & RSS › Search Tabs | R | kept |
+| `store_search_jobs` (5.3 WebAPI; `Search/StoreSearchJobs`, was GUI-only `Search/StoreOpenedSearchTabs`) | Store opened tabs | Search › Search UI | Search & RSS › Search Tabs | B | new: "Reopen search tabs at launch" |
+| `store_search_job_results` (5.3 WebAPI; `Search/StoreSearchJobResults`, was `Search/StoreOpenedSearchTabResults`) | Also store search results | Search › Search UI | Search & RSS › Search Tabs | R | kept |
 | `Search/HistoryLength` | History length | Search › Search UI | Search & RSS › Search Tabs | A | kept |
 | `Preferences/WebUI/Enabled` | Web User Interface (Remote control) | WebUI › (group) | Remote › (page switch) | B | new: "Allow control from a web browser" |
 | `Settings/ShowAdvanced (new)` | — | — | Advanced › (page switch) | B | new key: "Show advanced settings" |
@@ -1289,7 +1289,7 @@ translation, and their qBittorrent strings stay as a fallback until then.
 | `Preferences/WebUI/Enabled` | Web User Interface (Remote control) | Allow control from a web browser | Разрешить управление через веб-браузер |
 | `SearchEnabled` | (View menu) Search Engine | Show search engine | Показывать поисковик |
 | `GUI/RSSWidget/Enabled` | (View menu) RSS Reader | Show RSS reader | Показывать RSS-ленты |
-| `Search/StoreOpenedSearchTabs` | Store opened tabs | Reopen search tabs at launch | Восстанавливать вкладки поиска при запуске |
+| `store_search_jobs` | Store opened tabs | Reopen search tabs at launch | Восстанавливать вкладки поиска при запуске |
 | `python_executable_path` | Python executable path (may require restart) | Python executable: | Исполняемый файл Python: |
 | — | — | Test Port | Проверить порт |
 | — | — | Connected — peers can reach you | Подключено — пиры могут подключиться к вам |

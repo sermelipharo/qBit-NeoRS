@@ -54,6 +54,11 @@ const INI_MAP: &[(&str, &str, Conv)] = &[
     ("performance_warning", "BitTorrent/Session/PerformanceWarning", Bool),
     ("status_bar_external_ip", "Preferences/General/StatusbarExternalIPDisplayed", Bool),
     ("confirm_torrent_deletion", "Preferences/Advanced/confirmTorrentDeletion", Bool),
+    ("store_search_jobs", "Search/StoreSearchJobs", Bool),
+    ("store_search_job_results", "Search/StoreSearchJobResults", Bool),
+    // Before qBittorrent 5.3 (GUI only); turned into the keys above in `build`.
+    ("store_opened_search_tabs", "Search/StoreOpenedSearchTabs", Bool),
+    ("store_opened_search_tab_results", "Search/StoreOpenedSearchTabResults", Bool),
     ("file_log_enabled", "Application/FileLogger/Enabled", Bool),
     ("file_log_path", "Application/FileLogger/Path", Str),
     ("file_log_backup_enabled", "Application/FileLogger/Backup", Bool),
@@ -446,6 +451,15 @@ pub fn build(api: &Map<String, Value>, ini: &IniFile, watched: Option<Vec<Watche
         let t = if ssl.as_bool().unwrap_or(false) { "SMTPS" } else { "None" };
         api.insert("mail_notification_encryption_type".into(), json!(t));
     }
+    // qBittorrent before 5.3 (its `migrateSearchSettingKeys`): the GUI's
+    // "Store opened tabs" settings became the shared search job settings.
+    for (old, new) in [("store_opened_search_tabs", "store_search_jobs"), ("store_opened_search_tab_results", "store_search_job_results")] {
+        if let Some(v) = api.remove(old)
+            && !api.contains_key(new)
+        {
+            api.insert(new.into(), v);
+        }
+    }
     // qBittorrent before 5.3 (its `migrateTorrentExportFolderSettings`): a
     // set export folder becomes the enabled backup folder.
     for (old, dir, enabled) in [
@@ -552,6 +566,9 @@ pub fn known_difference(key: &str) -> Option<&'static str> {
         "bypass_auth_subnet_whitelist" => "subnets are normalised (CIDR form)",
         "banned_IPs" => "addresses are normalised, sorted and de-duplicated",
         "mail_notification_ssl_enabled" => "qBittorrent 5.3 replaced it by mail_notification_encryption_type (on = SMTPS, off = None)",
+        "store_opened_search_tabs" | "store_opened_search_tab_results" => {
+            "qBittorrent 5.3 renamed it to Search/StoreSearchJobs / Search/StoreSearchJobResults (store_search_jobs / store_search_job_results)"
+        }
         "export_dir" | "export_dir_fin" => {
             "qBittorrent 5.3 replaced it by the .torrent backup folders (torrent_files_backup_dir / torrent_files_finished_backup_dir)"
         }
@@ -664,6 +681,23 @@ mod tests {
         assert_eq!(m["rss_smart_episode_filters"], json!("s(\\d+)e(\\d+)\n(\\d{1,2})"));
         assert!(!m.contains_key("upnp"), "absent keys keep our defaults");
         assert!(used.contains(&"BitTorrent/Session/Port".to_string()));
+    }
+
+    #[test]
+    fn imports_search_job_settings() {
+        let prefs = |text: &str| {
+            let f = ini(text);
+            let (api, _) = api_json_from_ini(&f);
+            let b = build(&api, &f, None, "").unwrap().prefs.behavior;
+            (b.store_search_jobs, b.store_search_job_results)
+        };
+        assert_eq!(prefs(""), (false, false));
+        // qBittorrent 5.3 keys.
+        assert_eq!(prefs("[Search]\nStoreSearchJobs=true\nStoreSearchJobResults=true\n"), (true, true));
+        // Before 5.3: the GUI's "Store opened tabs" keys.
+        assert_eq!(prefs("[Search]\nStoreOpenedSearchTabs=true\nStoreOpenedSearchTabResults=false\n"), (true, false));
+        // The new keys win.
+        assert_eq!(prefs("[Search]\nStoreOpenedSearchTabs=true\nStoreSearchJobs=false\n"), (false, false));
     }
 
     #[test]

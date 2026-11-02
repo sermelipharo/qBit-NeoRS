@@ -93,8 +93,6 @@ const GUI_KEYS: &[(&str, Kind)] = &[
     ("GUI/AddNewTorrentDialog/FilterPatternFormat", Enum(FILTER_FORMAT)),
     ("AddTrackersDialog/TrackersListURL", Text),
     // Feature windows (`FeatureDefaults`).
-    ("Search/StoreOpenedSearchTabs", Bool),
-    ("Search/StoreOpenedSearchTabResults", Bool),
     ("Search/HistoryLength", Int),
     ("SearchTab/UseRegexAsFilteringPattern", Bool),
     ("TorrentCreator/PieceSize", Int),

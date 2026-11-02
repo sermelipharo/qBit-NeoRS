@@ -12,7 +12,8 @@ struct SearchWindow: View {
             .frame(minWidth: FeatureDesign.Window.searchMin.width, minHeight: FeatureDesign.Window.searchMin.height)
             .navigationTitle(AppWindowID.search.title)
             .task(id: app.phase) {
-                await model.attach(app.client, profileRoot: app.launch.isSnapshot ? nil : app.launch.profileDirectory)
+                await model.attach(app.client, profileRoot: app.launch.isSnapshot ? nil : app.launch.profileDirectory,
+                                   preferences: app.corePreferencesReader)
                 if let initialPattern, model.tabs.isEmpty {
                     model.pattern = initialPattern
                     model.search()
@@ -29,8 +30,6 @@ struct SearchPane: View {
     @Environment(\.openWindow) private var openWindow
     @Bindable var model: SearchModel
     var showsPatternField = true
-    @AppStorage(FeatureDefaults.storeSearchTabs, store: AppDefaults.store) private var storesTabs = false
-    @AppStorage(FeatureDefaults.storeSearchResults, store: AppDefaults.store) private var storesResults = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,8 +61,8 @@ struct SearchPane: View {
                 if case .searchPluginsUpdated = event { await model.reloadPlugins() }
             }
         }
-        .onChange(of: storesTabs) { model.storageSettingsChanged() }
-        .onChange(of: storesResults) { model.storageSettingsChanged() }
+        .onChange(of: app.corePreferences.behavior.storeSearchJobs) { model.storageSettingsChanged() }
+        .onChange(of: app.corePreferences.behavior.storeSearchJobResults) { model.storageSettingsChanged() }
     }
 
     @ViewBuilder private var content: some View {

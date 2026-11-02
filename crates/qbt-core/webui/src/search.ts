@@ -137,10 +137,14 @@ export function createSearch() {
   async function poll(): Promise<void> {
     clearTimeout(timer);
     if (id == null) return;
+    const job = id;
+    let more = false;
     try {
       const r = await get("search/results", { id, offset: results.length, limit: 500 });
+      if (job !== id) return;
       for (const x of r.results ?? []) results.push({ ...x, _i: results.length });
       running = r.status === "Running";
+      more = (r.results?.length ?? 0) > 0 && results.length < r.total;
       apply();
     } catch (e) {
       running = false;
@@ -148,7 +152,7 @@ export function createSearch() {
       if ((e as ApiError).status !== 404) toast((e as Error).message, true);
       return;
     }
-    if (running && app.section === "search") timer = window.setTimeout(poll, Math.max(1000, app.interval));
+    if ((running || more) && app.section === "search") timer = window.setTimeout(poll, more ? 0 : Math.max(1000, app.interval));
   }
 
   form.addEventListener("submit", async (e) => {
@@ -244,13 +248,38 @@ export function createSearch() {
     });
   }
 
-  on("section", () => {
+  // Searches are kept by the server (across restarts with "Save search
+  // tabs"): the first visit shows the latest one again.
+  let restored = false;
+  async function restore(): Promise<void> {
+    restored = true;
+    if (id != null) return;
+    let jobs: { id: number; status: string; pattern?: string; category?: string; plugins?: string[] }[];
+    try {
+      jobs = await get("search/status");
+    } catch {
+      return;
+    }
+    const last = Array.isArray(jobs) ? jobs[jobs.length - 1] : undefined;
+    if (!last || id != null) return;
+    id = last.id;
+    running = last.status === "Running";
+    results = [];
+    if (!pattern.value && last.pattern) pattern.value = last.pattern;
+    if (last.category && [...cat.options].some((o) => o.value === last.category)) cat.value = last.category;
+    const p = last.plugins ?? [];
+    if (p.length === 1 && [...plug.options].some((o) => o.value === p[0])) plug.value = p[0];
+    await poll();
+  }
+
+  on("section", async () => {
     el.hidden = app.section !== "search";
     if (!el.hidden) {
-      loadPlugins();
+      await loadPlugins();
       list.relayout();
       apply();
-      if (running) poll();
+      if (!restored) await restore();
+      else if (running) poll();
     }
   });
 

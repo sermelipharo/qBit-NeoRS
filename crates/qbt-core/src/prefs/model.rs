@@ -35,6 +35,12 @@ pub struct BehaviorPrefs {
     pub performance_warning: bool,
     pub status_bar_external_ip: bool,
     pub confirm_torrent_deletion: bool,
+    /// Keep search tabs/jobs (GUI search tabs and WebUI search jobs) across
+    /// restarts (qBittorrent 5.3 `Search/StoreSearchJobs`).
+    pub store_search_jobs: bool,
+    /// Also keep their results (`Search/StoreSearchJobResults`; only with
+    /// `store_search_jobs`).
+    pub store_search_job_results: bool,
     pub file_log_enabled: bool,
     /// Empty = `<profile>/data/logs`.
     pub file_log_path: String,
@@ -55,6 +61,8 @@ impl Default for BehaviorPrefs {
             performance_warning: false,
             status_bar_external_ip: false,
             confirm_torrent_deletion: true,
+            store_search_jobs: false,
+            store_search_job_results: false,
             file_log_enabled: true,
             file_log_path: String::new(),
             file_log_backup_enabled: true,

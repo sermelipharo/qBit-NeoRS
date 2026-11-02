@@ -24,6 +24,7 @@ use super::api::{self, ApiError, Call, Methods, Reply};
 use super::api::CreatorExtras;
 use super::assets::{self, AltCache, EmbeddedCache, Substitutions};
 use super::clientdata::ClientDataStorage;
+use super::search_jobs::SearchJobManager;
 use super::http::{accepts_gzip, authorization, cookie_value, gunzip, gzip, http_date, parse_body, parse_query};
 use super::password::{slow_equals, verify_password};
 use super::security::{self, BypassPolicy, CsrfVerdict, HostVerdict, sanitize_for_log};
@@ -239,6 +240,7 @@ pub struct WebApp {
     auth_slots: Arc<Semaphore>,
     body_budget: Arc<Semaphore>,
     clientdata: ClientDataStorage,
+    search_jobs: SearchJobManager,
     ssl: Mutex<HashMap<String, SslParameters>>,
     creator: Mutex<HashMap<String, CreatorExtras>>,
     embedded_cache: Mutex<EmbeddedCache>,
@@ -257,6 +259,13 @@ impl WebApp {
         let mut id = [0u8; 8];
         super::password::random_bytes(&mut id);
         let prefs = ctx.prefs.current();
+        let logger = ctx.logger.clone();
+        let search_jobs = SearchJobManager::new(
+            &ctx.profile.data_dir,
+            prefs.behavior.store_search_jobs,
+            prefs.behavior.store_search_job_results,
+            move |m| logger.warning(m),
+        );
         let port = u16::try_from(prefs.webui.web_ui_port).unwrap_or(8080);
         let (cfg, _) = WebConfig::build(&prefs, port, false, None, 0);
         Arc::new(Self {
@@ -271,6 +280,7 @@ impl WebApp {
             auth_slots: Arc::new(Semaphore::new(AUTH_SLOTS)),
             body_budget: Arc::new(Semaphore::new(BODY_BUDGET_KIB)),
             clientdata,
+            search_jobs,
             ssl: Mutex::default(),
             creator: Mutex::default(),
             embedded_cache: Mutex::default(),
@@ -303,6 +313,11 @@ impl WebApp {
 
     pub fn clientdata(&self) -> &ClientDataStorage {
         &self.clientdata
+    }
+
+    /// WebUI search jobs (shared by every session).
+    pub fn search_jobs(&self) -> &SearchJobManager {
+        &self.search_jobs
     }
 
     pub fn log_info(&self, m: String) {

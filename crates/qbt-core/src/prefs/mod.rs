@@ -119,9 +119,22 @@ impl PreferencesStore {
         if self.path.as_os_str().is_empty() {
             return Ok(());
         }
+        // A file without write permission is left alone (qBittorrent 5.3,
+        // #23817): a user can lock the settings this way. The atomic rename
+        // would otherwise replace it regardless of its permissions.
+        if is_read_only(&self.path) {
+            return Ok(());
+        }
         let data = serde_json::to_vec_pretty(prefs).map_err(|e| QbtError::other(e.to_string()))?;
         crate::utils::fs::write_atomic(&self.path, &data)
     }
+}
+
+/// An existing file the current user may not write.
+fn is_read_only(path: &std::path::Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(path.as_os_str().as_bytes()) else { return false };
+    path.exists() && unsafe { libc::access(c.as_ptr(), libc::W_OK) } != 0
 }
 
 fn validate(p: &Preferences) -> QbtResult<()> {
@@ -204,6 +217,25 @@ fn random_port(avoid: Option<i64>) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_only_preferences_are_not_overwritten() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let config = crate::AppConfig { profile_dir: dir.path().to_string_lossy().into_owned(), ..Default::default() };
+        let profile = Profile::resolve(&config);
+        let store = PreferencesStore::load(&profile).unwrap();
+        let path = profile.preferences_file();
+        store.update(|p| p.connection.listen_port = 12345).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+        store.update(|p| p.connection.listen_port = 23456).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before, "a read-only file is kept");
+        assert_eq!(store.get().connection.listen_port, 23456, "the running session still uses the change");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        store.update(|p| p.connection.listen_port = 34567).unwrap();
+        assert_ne!(std::fs::read(&path).unwrap(), before);
+    }
 
     #[test]
     fn migrates_the_old_export_folders() {

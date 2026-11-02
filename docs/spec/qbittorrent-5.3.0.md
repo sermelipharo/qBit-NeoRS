@@ -66,12 +66,12 @@ Things to know before reading:
 | #24173 | Dotfiles filtered on all platforms | ✅ | `creator/layout.rs:65,96,132` |
 | #24159 | "Force reannounce" really reannounces | ✅ | `engine/tracker_comms/src/tiers.rs:471-486` clears the timers, DHT too (`engine/librqbit/src/torrent_state/trackers.rs:304`) |
 | #24605 | No failed add result after a tracker merge | ✅ | Duplicates return a conflict plus a `DuplicateTorrent` event (`bittorrent/adding.rs:394-453`); RSS treats it as already added (`rss/tests.rs:166`) |
-| #24866 | Completion with ignored files | ⬜ | Verify: `is_finished` is `rt.finished` (`bittorrent/torrent.rs:455`); check the engine marks a torrent finished when only "do not download" files remain |
+| #24866 | Completion with ignored files | ✅ | Verified, no change: `rt.finished` is set when every file not set to "Do not download" is complete (`TorrentEntry::wanted_complete`, unit-tested in torrent.rs), independent of the engine's own finished flag |
 | #24670 | Update share limits timer when limits change | ✅ | Limits are evaluated by the session tick (`bittorrent/policy.rs:865`); no stale timer to refresh |
 | #25040 | Free space of the parent path when the path is missing | ✅ | `utils/fs.rs:16-20` walks up to an existing parent |
 | #24304 | Several recipients for e-mail notifications | ✅ | `net/smtp.rs` sends one e-mail per `;` group, to the group's `,`-separated addresses (as `SMTPClient::sendMail`); tests `parses_settings`, `sends_through_local_server` |
 | #24000 | Session speed = sum of per-torrent payload rates | ✅ | Came from the engine's session-wide estimator; now the sum of the torrents' rates each tick (`policy.rs` tick), also for the speed graph's payload series |
-| #23817 | Do not overwrite config without write permission | ⬜ | Low, verify: profile files go through `write_atomic` (`utils/fs.rs:35`); check a read-only profile does not lose data or loop on errors |
+| #23817 | Do not overwrite config without write permission | ✅ | `preferences.json` is skipped when it exists and is not writable (`access(W_OK)`), as `SettingsStorage`; the atomic rename used to replace it regardless. Unit test `read_only_preferences_are_not_overwritten` |
 | #24671 | Relative logs folder | ✅ | Was resolved against the process' working directory; now inside the profile's data folder (`logger::log_dir`, unit test) |
 | #24505 | "Resolve peer countries" off by default | ✅ | Off for new profiles (saved settings keep their value); demo mode keeps flags on |
 | #24711 | Disk queue default 100 MiB | ✅ | Default changed; the engine does not use the value, it is reported for clients |

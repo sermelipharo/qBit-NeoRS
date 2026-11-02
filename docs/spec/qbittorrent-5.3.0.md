@@ -69,7 +69,7 @@ Things to know before reading:
 | #24866 | Completion with ignored files | ⬜ | Verify: `is_finished` is `rt.finished` (`bittorrent/torrent.rs:455`); check the engine marks a torrent finished when only "do not download" files remain |
 | #24670 | Update share limits timer when limits change | ✅ | Limits are evaluated by the session tick (`bittorrent/policy.rs:865`); no stale timer to refresh |
 | #25040 | Free space of the parent path when the path is missing | ✅ | `utils/fs.rs:16-20` walks up to an existing parent |
-| #24304 | Several recipients for e-mail notifications | ✅ | `net/smtp.rs:90` splits on `,`/`;`, test at `:244` |
+| #24304 | Several recipients for e-mail notifications | ✅ | `net/smtp.rs` sends one e-mail per `;` group, to the group's `,`-separated addresses (as `SMTPClient::sendMail`); tests `parses_settings`, `sends_through_local_server` |
 | #24000 | Session speed = sum of per-torrent payload rates | ⬜ | Verify how the global rate is computed (`bittorrent/speed.rs`, `transfer/info`); sum per-torrent smoothed rates if it comes from raw byte deltas |
 | #23817 | Do not overwrite config without write permission | ⬜ | Low, verify: profile files go through `write_atomic` (`utils/fs.rs:35`); check a read-only profile does not lose data or loop on errors |
 | #24671 | Relative logs folder | ⬜ | Low, verify: resolve a relative file-log path against the profile (`logger.rs`) |
@@ -89,16 +89,16 @@ Things to know before reading:
 | #24090 | "Open Destination Folder" toolbar button | ⬜ | Exists in the context menu (`TransferContextMenu.swift:73`), missing from `MainToolbar.swift`; add an optional toolbar item |
 | #24260 | "Force start" in filter context menus | ⬜ | `MainWindow/Sidebar/SidebarMenu.swift:35-37` has Start/Stop/Remove only; add Force Start Torrents |
 | #23989 | "Contribution" column in the peers list | ⬜ | Core computes `contribution` (also for `sync/torrentPeers`), new column in `Properties/Peers/PeerTable.swift` |
-| #24023 | Clickable "speed graphs disabled" warning | ⬜ | Trivial: button in `Properties/Speed/SpeedTab.swift:29` opening the matching preference |
-| #24117 | Better "Deletion confirmation" dialog | ⬜ | Trivial: confirm button says "Remove torrent" / "Remove torrent and content" and the text states the count; check the sheet behind `AppModel+Actions.swift:66` |
+| #24023 | Clickable "speed graphs disabled" warning | ✅ | The Speed tab's hint is a link that opens Settings on "Show speed graphs" (`SpeedTab.swift`) |
+| #24117 | Better "Deletion confirmation" dialog | ✅ | The confirm button says "Remove torrent" or "Remove torrent and content" as the checkbox changes (`RemoveTorrentsSheet.swift`) |
 | #24084, #24152 | Statistics rows for the new metrics | ⬜ | After the core metrics: `Features/Statistics/StatisticsWindow.swift:23` (queued announces; latency only if measured) |
 | #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
 | #24740 | Detect redundant quotes in the Python path | ✅ | Settings drops a matching pair of surrounding quotes as you type; the core uses a quoted path without them and logs a warning (5.3 refuses it in the Web UI form) |
 | #24279 | Python minimum becomes 3.13 | 🟡 | The app bundles a trimmed Python 3.13 (`scripts/embed-python.sh`, `Contents/Resources/python`, 37 MB); search tries the Settings path, then the bundled interpreter, then PATH. Left: raise `PythonVersion::MINIMUM` with the 5.3 nova3 scripts (group 4) |
 | #23825 | "North Macedonia" instead of FYR Macedonia | ✅ | `net/geoip/countries.rs` |
-| #25037 | Re-sort when Remaining changes | ⬜ | Verify: `TransferSort.swift:51` compares `amountLeft`; make sure the table re-sorts as the value changes |
-| #23949 | E-mail examples as placeholder text | ⬜ | Trivial: prompts in the Downloads prefs e-mail fields |
-| #24061 | Tooltips on e-mail option fields | ⬜ | Trivial: `.help()` on the same fields |
+| #25037 | Re-sort when Remaining changes | ✅ | Nothing to do: every sync with changed torrents re-sorts the list (`TransferListModel.storeDidChange` → `refilter`), Remaining included |
+| #23949 | E-mail examples as placeholder text | ✅ | Prompts `qBittorrent_notification@example.com` and `smtp.example.com:465` (`NotificationsGroup.swift`) |
+| #24061 | Tooltips on e-mail option fields | ✅ | `.help()` on the sender, recipient and SMTP server fields with qBittorrent's texts (Russian added; upstream has no translations yet). The encryption picker's tooltip comes with the SMTP encryption setting |
 | #23908 | macOS delete shortcuts | ➖ | Qt keyboard fix; AppKit/SwiftUI use native Delete handling |
 | #23905, #23909, #23916 | Toolbar separators, dark line-edit corners, comment background (Qt styling on macOS) | ➖ | Qt-only styling |
 | #24775, #24083, #24127 | Status bar / tray icon follows appearance or colour scheme | ➖ | `MenuBarExtra` (`apps/macos/QBTNeo/QBTNeoApp.swift:50`) is drawn by the system and adapts to appearance |

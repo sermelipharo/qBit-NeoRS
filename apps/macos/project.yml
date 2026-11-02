@@ -173,8 +173,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: qBit NeoRS
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_NSHumanReadableCopyright: "GPL-3.0-or-later"
-        MARKETING_VERSION: "0.2.3"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "6"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
         OTHER_LDFLAGS: ["-lresolv"]
@@ -212,8 +212,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: qBit NeoRS
         INFOPLIST_KEY_NSHumanReadableCopyright: "GPL-3.0-or-later"
-        MARKETING_VERSION: "0.2.3"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "6"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES

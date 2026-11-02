@@ -30,6 +30,32 @@ use crate::prefs::{
 
 pub type EngineHandle = Arc<ManagedTorrent>;
 
+/// The app version as Azureus-style peer ID digits (`-NR0300-` for 0.3.0),
+/// from the crate version so it never goes stale.
+pub(crate) fn client_version() -> (u8, u8, u8, u8) {
+    let digit = |s: &str| s.parse::<u8>().unwrap_or(0).min(35);
+    (
+        digit(env!("CARGO_PKG_VERSION_MAJOR")),
+        digit(env!("CARGO_PKG_VERSION_MINOR")),
+        digit(env!("CARGO_PKG_VERSION_PATCH")),
+        0,
+    )
+}
+
+/// The peer ID prefix logged at start-up, e.g. `-NR0300-`.
+pub(crate) fn peer_id_prefix() -> String {
+    let (a, b, c, d) = client_version();
+    let ch = |n: u8| char::from_digit(u32::from(n), 36).unwrap_or('0').to_ascii_uppercase();
+    format!("-NR{}{}{}{}-", ch(a), ch(b), ch(c), ch(d))
+}
+
+#[cfg(test)]
+#[test]
+fn peer_id_follows_the_crate_version() {
+    let v = env!("CARGO_PKG_VERSION").replace('.', "");
+    assert_eq!(peer_id_prefix(), format!("-NR{v}0-"));
+}
+
 /// Settings that still require a new engine session when they change.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EngineConfig {
@@ -465,7 +491,7 @@ impl Engine {
             bind_device_name: net.interface.clone(),
             fastresume: true,
             persistence: Some(SessionPersistenceConfig::FastResumeOnly { folder: resume_dir.clone() }),
-            peer_id: Some(librqbit::generate_azereus_style(*b"NR", (0, 2, 3, 0))),
+            peer_id: Some(librqbit::generate_azereus_style(*b"NR", client_version())),
             listen: with_listener.then(|| net.listener(None)),
             net: net.net.clone(),
             port_mapping: Some(net.port_mapping.clone()),

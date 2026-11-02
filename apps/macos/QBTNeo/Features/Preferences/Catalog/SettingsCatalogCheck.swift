@@ -72,7 +72,8 @@ enum SettingsCatalogCheck {
             .preventSuspendWhenDownloading, .preventSuspendWhenSeeding, .statusBarFreeDiskSpace, .checkForUpdates,
             .addTorrentDialogEnabled, .addTorrentDialogTopLevel, .confirmMergeTrackers, .disableRecursiveDownload,
             .notificationsEnabled, .notifyTorrentAdded,
-            .downloadTrackerFavicon, .savePathHistoryLength, .speedGraphsEnabled, .rssEnabled, .searchEnabled, .lockPasswordHash,
+            .downloadTrackerFavicon, .savePathHistoryLength, .speedGraphsEnabled, .rssEnabled, .searchEnabled,
+            .closeSearchTabWithMiddleClick, .lockPasswordHash,
             .transferViewMode, .parseTorrentNames, .torrentNamesSemiboldTitles, .torrentNamesCardTags, .torrentNamesYearAsTag,
             .torrentNameRules,
         ]

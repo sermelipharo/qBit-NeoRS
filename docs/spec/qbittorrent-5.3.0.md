@@ -92,7 +92,7 @@ Things to know before reading:
 | #24023 | Clickable "speed graphs disabled" warning | ✅ | The Speed tab's hint is a link that opens Settings on "Show speed graphs" (`SpeedTab.swift`) |
 | #24117 | Better "Deletion confirmation" dialog | ✅ | The confirm button says "Remove torrent" or "Remove torrent and content" as the checkbox changes (`RemoveTorrentsSheet.swift`) |
 | #24084, #24152 | Statistics rows for the new metrics | ✅ | "Tracker statistics" › "Queued tracker announces:" in the Statistics window; request latency is not measured (shown nowhere, 0 in the WebAPI) |
-| #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
+| #24776 | Option: close search tabs with middle click | ✅ | GUI pref `Search/CloseSearchTabWithMiddleClick` (default on) in Settings › Search ("Allow closing tabs with middle-click"); `MiddleClickCatcher` overlay on each tab chip passes other clicks through |
 | #24740 | Detect redundant quotes in the Python path | ✅ | Settings drops a matching pair of surrounding quotes as you type; the core uses a quoted path without them and logs a warning (5.3 refuses it in the Web UI form) |
 | #24279 | Python minimum becomes 3.13 | ✅ | The app bundles a trimmed Python 3.13 (`scripts/embed-python.sh`); `PythonVersion::MINIMUM` is 3.13 with the 5.3 nova3 scripts |
 | #23825 | "North Macedonia" instead of FYR Macedonia | ✅ | `net/geoip/countries.rs` |
@@ -200,7 +200,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24933 | Escape pipe characters properly | ✅ | `novaprinter.py` 1.56 percent-encodes the name and refuses `|` in other fields; `search/job.rs` decodes the name (test `field_rules`) |
 | #25017 | Relaxed plugin versioning | ✅ | `PluginVersion` takes 1 to 3 components and prints without trailing zeros; the header is read in 22-byte chunks (tests in `search/nova.rs`) |
 | #24548 | Revised plugin install procedure (unlisted: more checks, new log format) | ✅ | The install was already staged, syntax-checked and rolled back; now with 5.3's log lines ("Same or newer version…", "Search plugin has been updated…" for new plugins too, "Search plugin installation failed…"). The search HTTP proxy URL percent-encodes its credentials, as 5.3's QUrl does; SOCKS ones stay raw because helpers.py does not decode them |
-| #24776 | Middle-click closes search tabs | ⬜ | See macOS app UI |
+| #24776 | Middle-click closes search tabs | ✅ | See macOS app UI |
 | #23911 | Search docs format | ➖ | Docs only |
 
 ## Plugins (Lua)

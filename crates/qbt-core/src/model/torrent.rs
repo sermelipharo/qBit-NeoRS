@@ -698,6 +698,10 @@ pub struct MetadataFile {
     pub path: String,
     #[serde(rename = "length")]
     pub size: i64,
+    /// Initial priority in the Add dialog: Normal, or Do not download for a
+    /// file the magnet link's `so` leaves out.
+    #[serde(skip)]
+    pub priority: FilePriority,
 }
 
 /// Parsed torrent metadata for the "Add new torrent" dialog and

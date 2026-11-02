@@ -33,6 +33,9 @@ pub struct FastResume {
     /// is missing (the id is then the truncated v2 hash).
     #[serde(skip_serializing_if = "String::is_empty")]
     pub info_hash_v1: String,
+    /// Magnet `so` file indexes while metadata is missing.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub select_only: Vec<u32>,
     /// Comment override (None = from metadata).
     pub comment: Option<String>,
     pub category: String,
@@ -97,6 +100,7 @@ impl Default for FastResume {
             magnet_name: String::new(),
             info_hash_v2: String::new(),
             info_hash_v1: String::new(),
+            select_only: Vec::new(),
             comment: None,
             category: String::new(),
             tags: Vec::new(),
@@ -392,6 +396,7 @@ mod tests {
             tags: vec!["a".into()],
             file_paths: vec!["d/f".into()],
             file_priorities: vec![0],
+            select_only: vec![1, 3],
             ratio_limit: 1.5,
             queue_position: 3,
             trackers: vec![TrackerTierEntry { url: "http://t".into(), tier: 1 }],

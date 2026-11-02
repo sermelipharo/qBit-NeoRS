@@ -1676,7 +1676,8 @@ impl Session {
     }
 
     /// Info of torrent metadata for the add dialog.
-    pub(super) fn metadata_info(&self, meta: &TorrentMeta) -> TorrentMetadataInfo {
+    /// `select_only`: the magnet link's `so` (empty = every file).
+    pub(super) fn metadata_info(&self, meta: &TorrentMeta, select_only: &[u32]) -> TorrentMetadataInfo {
         let id = meta.id();
         TorrentMetadataInfo {
             hash: id.clone(),
@@ -1695,7 +1696,16 @@ impl Session {
                 .files
                 .iter()
                 .enumerate()
-                .map(|(i, f)| MetadataFile { index: i as i64, path: f.path.clone(), size: f.size as i64 })
+                .map(|(i, f)| MetadataFile {
+                    index: i as i64,
+                    path: f.path.clone(),
+                    size: f.size as i64,
+                    priority: if select_only.is_empty() || select_only.binary_search(&f.engine_index).is_ok() {
+                        FilePriority::Normal
+                    } else {
+                        FilePriority::Ignored
+                    },
+                })
                 .collect(),
             trackers: meta.trackers.clone(),
             url_seeds: meta.url_seeds.clone(),

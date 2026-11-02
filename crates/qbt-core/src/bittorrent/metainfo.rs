@@ -111,6 +111,9 @@ pub struct ParsedTorrent {
     pub meta: TorrentMeta,
     /// Raw bencoded `info` dictionary.
     pub info_bytes: Vec<u8>,
+    /// `so` of the magnet link this metadata was fetched for (empty for a
+    /// .torrent file).
+    pub select_only: Vec<u32>,
 }
 
 pub fn hex(b: &[u8]) -> String {
@@ -319,6 +322,7 @@ pub fn parse_torrent(bytes: &[u8], limits: Limits) -> Result<ParsedTorrent, Stri
             missing_piece_layers,
         },
         info_bytes,
+        select_only: Vec::new(),
     })
 }
 
@@ -445,6 +449,38 @@ pub struct MagnetLink {
     pub trackers: Vec<TrackerTierEntry>,
     pub url_seeds: Vec<String>,
     pub peers: Vec<SocketAddr>,
+    /// `so` (BEP 53 select-only): file indexes (libtorrent's file storage
+    /// order, pad files included), sorted, at most [`MAX_SELECT_ONLY_INDEX`].
+    /// The other files start as "Do not download"; empty = no selection.
+    pub select_only: Vec<u32>,
+}
+
+/// libtorrent's bound on `so` indexes ("can't risk out of memory").
+pub const MAX_SELECT_ONLY_INDEX: u32 = 10_000;
+
+/// libtorrent `parse_magnet_uri` "so": comma-separated indexes and
+/// `a-b` ranges; the whole value is ignored if it holds anything but
+/// digits, `-` and `,`; malformed or out-of-range tokens are skipped.
+pub fn parse_select_only(value: &str, out: &mut Vec<u32>) {
+    if !value.bytes().all(|c| c.is_ascii_digit() || c == b'-' || c == b',') {
+        return;
+    }
+    let index = |s: &str| s.parse::<u32>().ok().filter(|&i| i <= MAX_SELECT_ONLY_INDEX);
+    for token in value.split(',').filter(|t| !t.is_empty()) {
+        let range = match token.split_once('-') {
+            Some((a, b)) => match (index(a), index(b)) {
+                (Some(a), Some(b)) if a <= b => a..=b,
+                _ => continue,
+            },
+            None => match index(token) {
+                Some(i) => i..=i,
+                None => continue,
+            },
+        };
+        out.extend(range);
+    }
+    out.sort_unstable();
+    out.dedup();
 }
 
 pub fn pct_decode(s: &str, plus_as_space: bool) -> String {
@@ -496,8 +532,8 @@ pub fn pct_encode(s: &str) -> String {
 /// Parses a `magnet:` URI (BEP 9) or a bare info hash (v1, or 64 hex
 /// characters for v2). A link with a v2 hash is identified by the
 /// truncated v2 hash (with or without a v1 hash, like qBittorrent's
-/// `TorrentID`), a v1-only link by the v1 hash. The `so` parameter is
-/// deliberately ignored (it is applied as file priorities).
+/// `TorrentID`), a v1-only link by the v1 hash. `so` selects the files to
+/// download (see [`MagnetLink::select_only`]).
 pub fn parse_magnet(input: &str) -> Result<MagnetLink, String> {
     let input = input.trim();
     if let Some(h) = parse_bare_hash(input) {
@@ -548,6 +584,7 @@ pub fn parse_magnet(input: &str) -> Result<MagnetLink, String> {
                     link.url_seeds.push(url);
                 }
             }
+            "so" => parse_select_only(v, &mut link.select_only),
             "x" if k.eq_ignore_ascii_case("x.pe") => {
                 if let Some(a) = parse_peer_address(&pct_decode(v, false))
                     && link.peers.len() < 1000
@@ -735,6 +772,24 @@ pub(crate) mod tests {
         assert_eq!(urls, ["udp://t.example:80", "HTTPS://T2.example/a", "http://h.example/announce"]);
         let tiers: Vec<_> = m.trackers.iter().map(|t| t.tier).collect();
         assert_eq!(tiers, [0, 1, 2]);
+    }
+
+    #[test]
+    fn magnet_select_only_follows_libtorrent() {
+        let h = "0123456789abcdef0123456789abcdef01234567";
+        let so = |v: &str| parse_magnet(&format!("magnet:?xt=urn:btih:{h}&so={v}")).unwrap().select_only;
+        assert_eq!(so("0,2,4-6"), [0, 2, 4, 5, 6]);
+        assert_eq!(so("6-4,3,3,,1"), [1, 3], "reversed range skipped, duplicates merged");
+        assert_eq!(so("-2,5-,9"), [9], "open ranges skipped");
+        assert_eq!(so("10000,10001,0-99999"), [10_000], "indexes above 10000 skipped");
+        assert!(so("1%2C2").is_empty(), "anything but digits, '-' and ',' voids the value");
+        assert!(so("").is_empty());
+        let indexed = parse_magnet(&format!("magnet:?xt=urn:btih:{h}&so.1=3")).unwrap();
+        assert_eq!(indexed.select_only, [3]);
+        assert!(parse_magnet(&format!("magnet:?xt=urn:btih:{h}")).unwrap().select_only.is_empty());
+        // A huge range stays bounded.
+        assert_eq!(so("0-4294967295").len(), 0);
+        assert_eq!(so("0-10000").len(), 10_001);
     }
 
     #[test]

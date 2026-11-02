@@ -134,6 +134,8 @@ pub struct TorrentEntry {
     pub meta: Option<Arc<TorrentMeta>>,
     pub name: String,
     pub magnet_name: String,
+    /// Magnet `so` file indexes, until the metadata is known.
+    pub select_only: Vec<u32>,
     /// v2 hash (hex) from a magnet link, until the metadata is known.
     pub magnet_v2: String,
     /// v1 hash (hex) of a magnet link with both hashes (its id is the
@@ -224,6 +226,7 @@ impl TorrentEntry {
             meta: None,
             name: String::new(),
             magnet_name: String::new(),
+            select_only: Vec::new(),
             magnet_v2: String::new(),
             magnet_v1: String::new(),
             comment: None,
@@ -274,6 +277,12 @@ impl TorrentEntry {
         let mut e = Self::new(r.info_hash.to_ascii_lowercase());
         e.name = r.name;
         e.magnet_name = r.magnet_name;
+        if meta.is_none() {
+            e.select_only = r.select_only;
+            e.select_only.retain(|&i| i <= metainfo::MAX_SELECT_ONLY_INDEX);
+            e.select_only.sort_unstable();
+            e.select_only.dedup();
+        }
         if metainfo::parse_hex32(&r.info_hash_v2).is_some() {
             e.magnet_v2 = r.info_hash_v2.to_ascii_lowercase();
             if metainfo::parse_hex20(&r.info_hash_v1).is_some() {
@@ -341,6 +350,7 @@ impl TorrentEntry {
             magnet_name: self.magnet_name.clone(),
             info_hash_v2: if self.meta.is_some() { String::new() } else { self.magnet_v2.clone() },
             info_hash_v1: if self.meta.is_some() { String::new() } else { self.magnet_v1.clone() },
+            select_only: if self.meta.is_some() { Vec::new() } else { self.select_only.clone() },
             comment: self.comment.clone(),
             category: self.category.clone(),
             tags: self.tags.clone(),

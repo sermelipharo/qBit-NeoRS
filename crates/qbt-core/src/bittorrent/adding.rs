@@ -70,6 +70,7 @@ impl Session {
                         let mut desc = self.parse_descriptor(bytes)?;
                         if let Descriptor::Meta { parsed, .. } = &mut desc {
                             merge_magnet_sources(&mut parsed.meta, &link);
+                            parsed.select_only = link.select_only;
                         }
                         return Ok(desc);
                     }
@@ -246,6 +247,7 @@ impl Session {
         let private;
         match desc {
             Descriptor::Meta { bytes, parsed } => {
+                let select_only = parsed.select_only;
                 let meta = Arc::new(parsed.meta);
                 private = meta.private;
                 if e.stop_condition == StopCondition::MetadataReceived {
@@ -279,7 +281,9 @@ impl Session {
                 e.file_priorities = if params.file_priorities.len() == n {
                     params.file_priorities.clone()
                 } else {
-                    default_priorities(&meta, &e.file_paths, &prefs)
+                    let mut p = default_priorities(&meta, &e.file_paths, &prefs);
+                    apply_select_only(&mut p, &meta, &select_only);
+                    p
                 };
                 if params.skip_checking {
                     // ENGINE: hash checks cannot be skipped; the data is
@@ -299,6 +303,7 @@ impl Session {
                 e.trackers = link.trackers.clone();
                 e.url_seeds = link.url_seeds.clone();
                 e.peers = link.peers.clone();
+                e.select_only = link.select_only.clone();
             }
         }
         let extra: Vec<TrackerTierEntry> =
@@ -677,7 +682,9 @@ impl Session {
             }
             if e.file_priorities.len() != meta.files.len() {
                 e.file_priorities = default_priorities(&meta, &e.file_paths, &prefs);
+                apply_select_only(&mut e.file_priorities, &meta, &e.select_only);
             }
+            e.select_only = Vec::new();
             trackers::add_trackers(&mut e.trackers, &meta.trackers);
             for s in &meta.url_seeds {
                 if !e.url_seeds.contains(s) {
@@ -731,14 +738,14 @@ impl Session {
             Descriptor::Meta { bytes, parsed } => {
                 let id = parsed.meta.id();
                 self.cache_metadata(&id, bytes);
-                Ok(self.metadata_info(&parsed.meta))
+                Ok(self.metadata_info(&parsed.meta, &parsed.select_only))
             }
             Descriptor::Magnet(link) => {
                 let id = metainfo::hex(&link.info_hash);
                 if let Ok(bytes) = self.fetched_metadata_torrent(&id)
                     && let Ok(Descriptor::Meta { parsed, .. }) = self.parse_descriptor(Arc::new(bytes))
                 {
-                    return Ok(self.metadata_info(&parsed.meta));
+                    return Ok(self.metadata_info(&parsed.meta, &link.select_only));
                 }
                 let engine = self.engine().ok_or_else(|| QbtError::engine("the BitTorrent engine is not running"))?;
                 let prefs = self.ctx.prefs.current();
@@ -762,7 +769,7 @@ impl Session {
                             self.cache_metadata(&real, bytes.clone());
                         }
                         self.cache_metadata(&id, bytes);
-                        Ok(self.metadata_info(&parsed.meta))
+                        Ok(self.metadata_info(&parsed.meta, &link.select_only))
                     }
                     _ => Err(QbtError::other("metadata does not match the info hash")),
                 }
@@ -784,6 +791,19 @@ pub(super) fn default_priorities(meta: &TorrentMeta, file_paths: &[String], pref
             }
         })
         .collect()
+}
+
+/// Magnet `so`: files whose (engine) index is not listed are not
+/// downloaded; nothing changes without a selection.
+pub(super) fn apply_select_only(priorities: &mut [FilePriority], meta: &TorrentMeta, select_only: &[u32]) {
+    if select_only.is_empty() {
+        return;
+    }
+    for (p, f) in priorities.iter_mut().zip(&meta.files) {
+        if select_only.binary_search(&f.engine_index).is_err() {
+            *p = FilePriority::Ignored;
+        }
+    }
 }
 
 /// Save path / download path / ATM resolution at add time
@@ -870,6 +890,20 @@ mod tests {
         merge_magnet_sources(&mut meta, &link);
         assert_eq!(meta.url_seeds, vec!["https://seed.example/f/".to_string()]);
         assert_eq!(meta.trackers.iter().filter(|t| t.url == "udp://t:1").count(), 1);
+    }
+
+    #[test]
+    fn select_only_leaves_out_unlisted_files() {
+        // `so` counts in the engine's file list (pad files included).
+        let bytes = metainfo::tests::make_torrent("T", &[(&["a.bin"], 100), (&["b.bin"], 100), (&["c.bin"], 100)], 16, &[]);
+        let meta = metainfo::parse_torrent(&bytes, Default::default()).unwrap().meta;
+        let engine: Vec<u32> = meta.files.iter().map(|f| f.engine_index).collect();
+        let mut p = vec![FilePriority::Normal, FilePriority::High, FilePriority::Normal];
+        apply_select_only(&mut p, &meta, &[engine[1]]);
+        assert_eq!(p, [FilePriority::Ignored, FilePriority::High, FilePriority::Ignored]);
+        let mut all = vec![FilePriority::Normal; 3];
+        apply_select_only(&mut all, &meta, &[]);
+        assert_eq!(all, [FilePriority::Normal; 3], "no selection, no change");
     }
 
     #[test]

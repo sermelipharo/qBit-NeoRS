@@ -3,10 +3,10 @@
 import { remove, selected, start, stop, torrentMenu } from "./actions";
 import { app, emit, on } from "./app";
 import { icon } from "./icons";
-import { type Change, filter, kind, makePredicate, sort, sortList, STATUS, stateText, torrents, trackerHosts, type Torrent } from "./store";
+import { type Change, filter, kind, makePredicate, sort, sortBy, sortList, STATUS, stateText, torrents, trackerHosts, type Torrent } from "./store";
 import { type Chip, contentKind, emphasizesTitles, parsedName, showsCardTags } from "./names";
 import { KIND_TITLES } from "./contentkind";
-import { menu } from "./ui";
+import { type MenuEntry, menu } from "./ui";
 import { bytes, debounce, eta, h, isNarrow, pct, ratio, save, setText, shortDate, speed, toggle } from "./util";
 import { VList } from "./vlist";
 
@@ -199,7 +199,7 @@ export function createTransfers() {
   const bStart = btn("play", "Start", () => start());
   const bStop = btn("stop", "Stop", () => stop());
   const bDel = btn("trash", "Remove", () => remove());
-  const bMore = btn("more", "More actions", (e) => menu(torrentMenu(), e.currentTarget as HTMLElement));
+  const bMore = btn("more", "More actions", (e) => menu(moreMenu(), e.currentTarget as HTMLElement));
   const bList = btn("list", "List", () => setView("list"));
   const bCards = btn("cards", "Cards", () => setView("cards"));
   const bSort = btn("arrows", "Sort", (e) =>
@@ -208,6 +208,13 @@ export function createTransfers() {
       "-",
       { label: "Ascending", checked: sort.asc, run: () => setSort(sort.key, true) },
       { label: "Descending", checked: !sort.asc, run: () => setSort(sort.key, false) },
+      "-",
+      {
+        label: "Then by", sub: () => [
+          { label: "Name only", checked: !sort.then, run: () => setThen(null) },
+          ...SORTS.filter(([k]) => k !== sort.key && k !== "name").map(([k, l]) => ({ label: l, checked: sort.then?.key === k, run: () => setThen(k) })),
+        ],
+      },
     ], e.currentTarget as HTMLElement, "Sort by"),
   );
   const bInfo = btn("info", "Show details", () => {
@@ -217,6 +224,7 @@ export function createTransfers() {
     syncToolbar();
   }, "wide-only");
   const bSelect = h("button", { class: "text-btn narrow-only", onclick: () => setSelectMode(!app.selectMode) }, "Select");
+  const bSelectAll = h("button", { class: "text-btn narrow-only select-all", onclick: () => (allSelected() ? invertSelection() : selectAll()) }, "Select All");
   const bAdd = btn("plus", "Add torrents", () => emit("add"), "accent");
   const bSidebar = btn("sidebar", "Sidebar", () => emit("sidebar"));
 
@@ -237,6 +245,7 @@ export function createTransfers() {
       ),
       h("label", { class: "searchbox" }, icon("search"), search),
       h("div", { class: "tb-group wide-only" }, bInfo),
+      bSelectAll,
       bSelect,
     ),
     thead,
@@ -246,7 +255,7 @@ export function createTransfers() {
   const empty = h("div", { class: "empty", hidden: true }, icon("tray"), h("p", null, "No torrents"), h("small", null, "Drop .torrent files here or press + to add."));
   const selbar = h("div", { class: "selbar" },
     btn("play", "Start", () => start()), btn("stop", "Stop", () => stop()), btn("trash", "Remove", () => remove()),
-    btn("more", "More actions", (e) => menu(torrentMenu(), e.currentTarget as HTMLElement)),
+    btn("more", "More actions", (e) => menu(moreMenu(), e.currentTarget as HTMLElement)),
   );
   const el = h("section", { class: "view transfers" }, header, scroller, empty, selbar);
 
@@ -274,10 +283,46 @@ export function createTransfers() {
   }
 
   function setSort(k: string, asc: boolean): void {
-    sort.key = k;
-    sort.asc = asc;
+    sortBy(sort, k, asc);
     save("sort", sort);
     refresh();
+  }
+
+  /** The tie-breaking column; descending for numbers, as a fresh column. */
+  function setThen(k: string | null): void {
+    sort.then = k ? { key: k, asc: k === "name" || k === "state" || k === "priority" } : null;
+    save("sort", sort);
+    refresh();
+  }
+
+  // ---- select all / invert (qBittorrent 5.3) ---------------------------------------
+
+  const allSelected = () => items.length > 0 && items.every((t) => app.selection.has(t.hash));
+
+  function selectAll(): void {
+    for (const t of items) app.selection.add(t.hash);
+    selectionChanged();
+  }
+
+  /** Inverts the selection among the listed torrents; hidden ones are dropped. */
+  function invertSelection(): void {
+    const next = items.filter((t) => !app.selection.has(t.hash)).map((t) => t.hash);
+    app.selection.clear();
+    for (const x of next) app.selection.add(x);
+    if (app.anchor && !app.selection.has(app.anchor)) app.anchor = next[0] ?? null;
+    selectionChanged();
+  }
+
+  function selectMenu(): MenuEntry[] {
+    return [
+      { label: "Select All", icon: "check", disabled: !items.length || allSelected(), run: selectAll },
+      { label: "Invert Selection", icon: "arrows", disabled: !items.length, run: invertSelection },
+    ];
+  }
+
+  function moreMenu(): MenuEntry[] {
+    const t = torrentMenu();
+    return t.length ? [...t, "-", ...selectMenu()] : selectMenu();
   }
 
   function setSelectMode(on: boolean): void {
@@ -289,7 +334,9 @@ export function createTransfers() {
 
   function syncToolbar(): void {
     const n = app.selection.size;
-    for (const b of [bStart, bStop, bDel, bMore]) b.disabled = n === 0;
+    for (const b of [bStart, bStop, bDel]) b.disabled = n === 0;
+    bMore.disabled = n === 0 && items.length === 0;
+    setText(bSelectAll, allSelected() ? "Deselect All" : "Select All");
     toggle(bList, "on", app.view === "list");
     toggle(bCards, "on", app.view === "cards");
     bList.setAttribute("aria-pressed", String(app.view === "list"));
@@ -321,10 +368,10 @@ export function createTransfers() {
 
   let lastFilterSig = "";
   function refresh(ch?: Change): void {
-    const sig = JSON.stringify(filter) + sort.key + sort.asc;
+    const sig = JSON.stringify(filter) + JSON.stringify(sort);
     const keys = ch?.keys;
     const needs = !ch || ch.structure || sig !== lastFilterSig || (ch.labels && filter.tracker !== null) ||
-      !!keys && (keys.has(sort.key) || keys.has("state") || keys.has("category") || keys.has("tags") || keys.has("name") ||
+      !!keys && (keys.has(sort.key) || (!!sort.then && keys.has(sort.then.key)) || keys.has("state") || keys.has("category") || keys.has("tags") || keys.has("name") ||
         (keys.has("upspeed") && (filter.status === "active" || filter.status === "inactive")));
     lastFilterSig = sig;
     if (needs) {
@@ -396,7 +443,12 @@ export function createTransfers() {
 
   scroller.addEventListener("contextmenu", (e) => {
     const x = hashAt(e);
-    if (!x) return;
+    if (!x) {
+      if ((e.target !== scroller && e.target !== active().canvas) || !items.length) return;
+      e.preventDefault();
+      menu(selectMenu(), { x: e.clientX, y: e.clientY });
+      return;
+    }
     e.preventDefault();
     if (!app.selection.has(x)) {
       selectOnly(x);
@@ -420,8 +472,8 @@ export function createTransfers() {
       selectionChanged();
     } else if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      for (const t of items) app.selection.add(t.hash);
-      selectionChanged();
+      if (e.shiftKey) invertSelection();
+      else selectAll();
     } else if (e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || !e.ctrlKey))) {
       if (app.selection.size) {
         e.preventDefault();

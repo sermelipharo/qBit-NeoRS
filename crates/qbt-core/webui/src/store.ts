@@ -305,9 +305,19 @@ export function makePredicate(f: Filter, hosts: Map<string, Set<string>>, skip?:
 export interface Sort {
   key: string;
   asc: boolean;
+  /** The previous sort column breaks ties (qBittorrent 5.3's secondary sort). */
+  then?: { key: string; asc: boolean } | null;
 }
 
 export const sort: Sort = load("sort", { key: "added_on", asc: false });
+
+/** A new primary column: the old one becomes the secondary. */
+export function sortBy(s: Sort, key: string, asc: boolean): void {
+  if (key !== s.key) s.then = { key: s.key, asc: s.asc };
+  s.key = key;
+  s.asc = asc;
+  if (s.then?.key === key) s.then = null;
+}
 
 export function compare(key: string): (a: Torrent, b: Torrent) => number {
   if (key === "name" || key === "category" || key === "tags" || key === "tracker" || key === "save_path") {
@@ -325,7 +335,13 @@ export function compare(key: string): (a: Torrent, b: Torrent) => number {
   return (a, b) => (a[key] ?? 0) - (b[key] ?? 0);
 }
 
+export function comparator(s: Sort): (a: Torrent, b: Torrent) => number {
+  const c = compare(s.key), dir = s.asc ? 1 : -1, name = compare("name");
+  const t = s.then && s.then.key !== s.key ? s.then : null;
+  const c2 = t ? compare(t.key) : null, dir2 = t?.asc ? 1 : -1;
+  return (a, b) => c(a, b) * dir || (c2 ? c2(a, b) * dir2 : 0) || name(a, b);
+}
+
 export function sortList(list: Torrent[]): void {
-  const c = compare(sort.key), name = compare("name"), dir = sort.asc ? 1 : -1;
-  list.sort((a, b) => c(a, b) * dir || name(a, b));
+  list.sort(comparator(sort));
 }

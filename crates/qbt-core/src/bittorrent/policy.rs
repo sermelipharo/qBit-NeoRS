@@ -442,6 +442,7 @@ impl Session {
             }
             m.peers_live = s.peers as i64;
             m.dht_nodes = s.dht_nodes;
+            m.queued_tracker_announces = s.queued_tracker_announces;
             let secs = (dt_ms.max(1) as f64) / 1000.0;
             total_rates = ((tu as f64 / secs) as i64, (td as f64 / secs) as i64);
         }

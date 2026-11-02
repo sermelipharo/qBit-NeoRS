@@ -65,6 +65,10 @@ pub struct ServerState {
     pub queued_io_jobs: i64,
     pub average_time_queue: i64,
     pub total_queued_size: i64,
+    /// HTTP tracker announces waiting for a free slot under "Max concurrent
+    /// HTTP announces" (qBittorrent 5.3, statistics "Queued tracker
+    /// announces").
+    pub queued_tracker_announces: i64,
 }
 
 /// One sample of the "Speed" graph (bytes/s), taken every second.

@@ -238,6 +238,8 @@ pub struct SessionTransferStats {
     pub unchoked_peers: u32,
     /// Nodes in the DHT routing tables (0 without DHT).
     pub dht_nodes: usize,
+    /// HTTP tracker announces waiting for a free slot.
+    pub queued_tracker_announces: usize,
 }
 
 impl Session {
@@ -387,6 +389,7 @@ impl Session {
                     s.routing_table_size + s.routing_table_size_v6
                 })
                 .unwrap_or(0),
+            queued_tracker_announces: self.tracker_ctx.client.queued_http_announces(),
         }
     }
 

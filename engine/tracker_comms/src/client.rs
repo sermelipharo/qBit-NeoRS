@@ -115,6 +115,19 @@ pub type HttpClientFactory = Arc<
 struct Limiter {
     state: Mutex<(usize, usize)>,
     notify: Notify,
+    /// Announces waiting for a free slot (libtorrent's
+    /// `tracker.num_queued_tracker_announces`).
+    waiting: std::sync::atomic::AtomicUsize,
+}
+
+/// Counts one waiting announce until dropped (also when the waiting
+/// future is cancelled).
+struct WaitGuard<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl Drop for WaitGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 struct LimiterGuard<'a>(&'a Limiter);
@@ -131,6 +144,7 @@ impl Limiter {
         Self {
             state: Mutex::new((0, limit)),
             notify: Notify::new(),
+            waiting: Default::default(),
         }
     }
 
@@ -139,7 +153,12 @@ impl Limiter {
         self.notify.notify_waiters();
     }
 
+    fn waiting(&self) -> usize {
+        self.waiting.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     async fn acquire(&self) -> LimiterGuard<'_> {
+        let mut queued: Option<WaitGuard<'_>> = None;
         loop {
             let notified = self.notify.notified();
             tokio::pin!(notified);
@@ -148,8 +167,13 @@ impl Limiter {
                 let mut g = self.state.lock();
                 if g.1 == 0 || g.0 < g.1 {
                     g.0 += 1;
+                    drop(queued);
                     return LimiterGuard(self);
                 }
+            }
+            if queued.is_none() {
+                self.waiting.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                queued = Some(WaitGuard(&self.waiting));
             }
             notified.await;
         }
@@ -311,6 +335,12 @@ impl TrackerClient {
         self.udp_disabled
             .load(std::sync::atomic::Ordering::Relaxed)
             .then(|| TrackerError::skipped("UDP trackers are not used through the proxy"))
+    }
+
+    /// HTTP announces waiting for a free slot under
+    /// `max_concurrent_http_announces`.
+    pub fn queued_http_announces(&self) -> usize {
+        self.http_limiter.waiting()
     }
 
     pub fn set_max_concurrent_http_announces(&self, limit: usize) {
@@ -580,11 +610,26 @@ mod tests {
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert!(!waiter.is_finished());
+        assert_eq!(l.waiting(), 1, "one announce queued");
         drop(g1);
         tokio::time::timeout(Duration::from_secs(1), waiter)
             .await
             .unwrap()
             .unwrap();
+        assert_eq!(l.waiting(), 0);
+
+        // A cancelled waiter is not counted any more.
+        let g1 = l.acquire().await;
+        let l2 = l.clone();
+        let waiter = tokio::spawn(async move {
+            let _g = l2.acquire().await;
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(l.waiting(), 1);
+        waiter.abort();
+        let _ = waiter.await;
+        assert_eq!(l.waiting(), 0);
+        drop(g1);
 
         let g1 = l.acquire().await;
         let l2 = l.clone();

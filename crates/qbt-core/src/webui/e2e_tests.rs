@@ -992,6 +992,8 @@ fn pause_and_resume_session() {
         };
         let first = maindata(0).await;
         assert_eq!(first["server_state"]["session_state"], false);
+        // qBittorrent 5.3: HTTP announces waiting for a slot (none here).
+        assert_eq!(first["server_state"]["queued_tracker_announces"], 0);
         let rid = first["rid"].as_i64().unwrap();
 
         assert_eq!(h.get("/api/v2/transfer/pauseSession", Some(&c)).await.status(), 405);

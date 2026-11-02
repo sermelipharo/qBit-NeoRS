@@ -75,7 +75,7 @@ Things to know before reading:
 | #24671 | Relative logs folder | ✅ | Was resolved against the process' working directory; now inside the profile's data folder (`logger::log_dir`, unit test) |
 | #24505 | "Resolve peer countries" off by default | ✅ | Off for new profiles (saved settings keep their value); demo mode keeps flags on |
 | #24711 | Disk queue default 100 MiB | ✅ | Default changed; the engine does not use the value, it is reported for clients |
-| #24084 | "Queued tracker announces" session metric | ⬜ | Count announces waiting on `max_concurrent_http_announces` (`prefs/model.rs:573`); needs a counter in `engine/tracker_comms`; show in Statistics and `server_state` |
+| #24084 | "Queued tracker announces" session metric | ✅ | `tracker_comms` limiter counts announces waiting for a slot (cancel-safe guard, unit-tested) → `SessionTransferStats.queued_tracker_announces` → `ServerState.queued_tracker_announces` |
 | #24152 | "Request latency" metric | ➖ | The engine does not measure it; `server_state.request_latency` is always 0 |
 | #24675 | Fix IP address comparison | ➖ | C++ `lt::address` bug; Rust `IpAddr` ordering is correct |
 | #25047 | Avoid heavy work in a callback | ➖ | Qt/libtorrent callback internals |
@@ -91,7 +91,7 @@ Things to know before reading:
 | #23989 | "Contribution" column in the peers list | ✅ | `PeerInfo.contribution` (`peers::peer_contribution`, same formula), Peers tab column after Files; also in `sync/torrentPeers` |
 | #24023 | Clickable "speed graphs disabled" warning | ✅ | The Speed tab's hint is a link that opens Settings on "Show speed graphs" (`SpeedTab.swift`) |
 | #24117 | Better "Deletion confirmation" dialog | ✅ | The confirm button says "Remove torrent" or "Remove torrent and content" as the checkbox changes (`RemoveTorrentsSheet.swift`) |
-| #24084, #24152 | Statistics rows for the new metrics | ⬜ | After the core metrics: `Features/Statistics/StatisticsWindow.swift:23` (queued announces; latency only if measured) |
+| #24084, #24152 | Statistics rows for the new metrics | ✅ | "Tracker statistics" › "Queued tracker announces:" in the Statistics window; request latency is not measured (shown nowhere, 0 in the WebAPI) |
 | #24776 | Option: close search tabs with middle click | ⬜ | Low: pref + gesture in `Features/Search/SearchTabChip.swift` |
 | #24740 | Detect redundant quotes in the Python path | ✅ | Settings drops a matching pair of surrounding quotes as you type; the core uses a quoted path without them and logs a warning (5.3 refuses it in the Web UI form) |
 | #24279 | Python minimum becomes 3.13 | ✅ | The app bundles a trimmed Python 3.13 (`scripts/embed-python.sh`); `PythonVersion::MINIMUM` is 3.13 with the 5.3 nova3 scripts |
@@ -133,7 +133,7 @@ Things to know before reading:
 | #24210 | `torrentcreator/status` times as Unix timestamps | ✅ | `timeAdded`, `timeStarted`, `timeFinished` are epoch seconds; the NeoRS Web UI and the Mac app do not read them |
 | #24158 | `seeding_outgoing_connections` key | ⬜ | See Core/engine |
 | #24152 | `request_latency` in `sync/maindata` | ✅ | Always 0 |
-| #24084 | `queued_tracker_announces` in `sync/maindata` | ⬜ | See Core/engine |
+| #24084 | `queued_tracker_announces` in `sync/maindata` | ✅ | In `server_state` (not in `transfer/info`, as upstream); e2e assertion |
 | #23838 | `mail_notification_encryption_type` | ✅ | Replaces `mail_notification_ssl_enabled` in `app/preferences` |
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |

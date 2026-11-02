@@ -58,6 +58,7 @@ pub(super) struct Misc {
     pub ul_rate: i64,
     pub peers_live: i64,
     pub dht_nodes: i64,
+    pub queued_tracker_announces: i64,
     pub engine_total_down: u64,
     pub engine_total_up: u64,
     pub engine_wasted: u64,
@@ -1606,6 +1607,7 @@ impl Session {
             total_wasted_session: m.session_wasted,
             global_ratio,
             total_peer_connections: m.peers_live,
+            queued_tracker_announces: m.queued_tracker_announces,
             ..Default::default()
         }
     }

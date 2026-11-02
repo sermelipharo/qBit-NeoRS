@@ -359,6 +359,7 @@ pub struct EngineTransferStats {
     pub payload_ul_rate: i64,
     pub peers: u32,
     pub dht_nodes: i64,
+    pub queued_tracker_announces: i64,
 }
 
 pub struct Engine {
@@ -888,6 +889,7 @@ impl Engine {
             payload_ul_rate: s.payload_upload_rate as i64,
             peers: s.connected_peers,
             dht_nodes: s.dht_nodes as i64,
+            queued_tracker_announces: s.queued_tracker_announces as i64,
         }
     }
 

@@ -245,7 +245,7 @@ Button `"Send test email"` (GUI) calls `app()->sendTestEmail()` and then shows t
 | 75 | `ip_filter_enabled` | bool | `false` | | Group `"IP Filtering"` (mnemonic `IP Fi&ltering`) → `"Filter path (.dat, .p2p, .p2b):"` | Applies the IP filter file to peers. · `BitTorrent/Session/IPFilteringEnabled` |
 | 76 | `ip_filter_path` | string path | `""` | file filter `"All supported filters (*.dat *.p2p *.p2b);;.dat (*.dat);;.p2p (*.p2p);;.p2b (*.p2b)"`, caption `"Choose an IP filter file"` | path edit + refresh tool button (icon `view-refresh`, tooltip `"Reload the filter"`) | eMule `.dat`, PeerGuardian text `.p2p`, or binary `.p2b`. · `BitTorrent/Session/IPFilter` |
 | 77 | `ip_filter_trackers` | bool | `false` | | `"Apply to trackers"` | The filter also blocks tracker IPs. · `BitTorrent/Session/TrackerFilteringEnabled` |
-| 78 | `banned_IPs` | string (`\n`-joined) | `""` | IPv4/IPv6 addresses; SET splits on `\n` and skips empty entries; stored sorted | Button `"Manually banned IP addresses..."` opens the *Banned IPs* dialog | Manual peer ban list. · `State/BannedIPs` |
+| 78 | `banned_IPs` | string (`\n`-joined) | `""` | IPv4/IPv6 addresses and (5.3) ranges `a - b` or CIDR subnets, stored as `a` or `a - b`; SET splits on `\n`, drops invalid entries; stored sorted | Button `"Manually banned IP addresses..."` opens the *Banned IPs* dialog | Manual peer ban list. · `State/BannedIPs` |
 
 Proxy-type UI rules (`adjustProxyOptions`):
 * **(None):** host, port, hostname lookup, BitTorrent/peer/RSS/misc checkboxes and auth are all disabled.

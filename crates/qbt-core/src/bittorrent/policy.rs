@@ -127,18 +127,22 @@ impl Session {
         let Some(engine) = self.engine() else { return };
         let c = &prefs.connection;
         let file = self.ip_filter_from_file(prefs).await;
-        let (bans, invalid) = crate::ipfilter::parse_banned(&c.banned_ips);
-        for ip in invalid {
-            self.ctx.logger.warning(format!("Rejected invalid IP address while applying the list of banned IP addresses. IP: \"{ip}\""));
+        let bans = crate::ipfilter::parse_banned(&c.banned_ips);
+        for entry in &bans.invalid {
+            self.ctx.logger.warning(format!(
+                "Rejected invalid IP address range while applying the list of banned IP addresses. IP range: \"{entry}\""
+            ));
         }
-        engine.set_peer_ip_filter(file.clone());
-        engine.set_banned_ips(c.banned_ips.iter().filter_map(|s| crate::ipfilter::normalize_ip(s)).filter_map(|s| s.parse().ok()).collect());
+        // Banned ranges and subnets (qBittorrent 5.3) are checked like the IP filter.
+        let ranges = (!bans.ranges.is_empty()).then(|| Arc::new(bans.ranges.clone()));
+        engine.set_peer_ip_filter(file.clone(), ranges);
+        engine.set_banned_ips(bans.addresses.clone());
         if c.ip_filter_trackers {
             let mut filter = crate::ipfilter::IpFilter::default();
             if let Some(f) = &file {
                 filter.merge_from(f);
             }
-            filter.merge_from(&bans);
+            filter.merge_from(&bans.all);
             engine.set_tracker_ip_filter((!filter.is_empty()).then(|| Arc::new(filter)));
         } else {
             engine.set_tracker_ip_filter(None);

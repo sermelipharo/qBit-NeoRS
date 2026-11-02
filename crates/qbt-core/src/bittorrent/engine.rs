@@ -546,8 +546,14 @@ impl Engine {
     // ---- IP filter and bans -------------------------------------------------------
 
     /// Live peer IP filter (the file filter; manual bans are separate).
-    pub fn set_peer_ip_filter(&self, filter: Option<Arc<crate::ipfilter::IpFilter>>) {
-        self.session.set_peer_ip_filter(filter.map(|f| -> librqbit::IpFilterFn { Arc::new(move |ip| f.contains(ip)) }));
+    /// Blocks peers matched by the IP filter file or by a banned range.
+    pub fn set_peer_ip_filter(&self, file: Option<Arc<crate::ipfilter::IpFilter>>, banned_ranges: Option<Arc<crate::ipfilter::IpFilter>>) {
+        let f: Option<librqbit::IpFilterFn> = match (file, banned_ranges) {
+            (None, None) => None,
+            (Some(f), None) | (None, Some(f)) => Some(Arc::new(move |ip| f.contains(ip))),
+            (Some(f), Some(r)) => Some(Arc::new(move |ip| f.contains(ip) || r.contains(ip))),
+        };
+        self.session.set_peer_ip_filter(f);
     }
 
     pub fn set_banned_ips(&self, ips: Vec<IpAddr>) {

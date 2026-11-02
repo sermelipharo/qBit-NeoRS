@@ -472,7 +472,10 @@ fn apply_scan_dirs(d: &mut DownloadsPrefs, v: &Value) {
 }
 
 fn apply_banned_ips(c: &mut ConnectionPrefs, text: &str) {
-    let mut ips: Vec<String> = text.split('\n').filter_map(parse_ip).map(|ip| ip.to_string()).collect();
+    // Addresses, subnets and ranges (qBittorrent 5.3), normalised as
+    // `ipRangeToString`; invalid entries are dropped.
+    let mut ips: Vec<String> =
+        text.split('\n').filter_map(crate::ipfilter::parse_ban_entry).map(crate::ipfilter::ban_entry_string).collect();
     ips.sort();
     ips.dedup();
     c.banned_ips = ips;

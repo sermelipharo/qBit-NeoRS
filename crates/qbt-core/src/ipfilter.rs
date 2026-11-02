@@ -408,24 +408,86 @@ pub fn parse_file(path: &Path) -> Result<ParseResult, String> {
     }
 }
 
-/// Manual bans: returns the filter and the entries that are not valid IPs.
-pub fn parse_banned(list: &[String]) -> (IpFilter, Vec<String>) {
-    let mut f = IpFilter::default();
-    let mut invalid = Vec::new();
+/// One entry of the manual ban list (qBittorrent 5.3
+/// `Utils::Net::parseIPRange`, #23157): an address, a CIDR subnet
+/// (`10.0.0.0/8`) or a range (`10.0.0.1 - 10.0.0.9`). IPv4-mapped IPv6 is
+/// read as IPv4; both ends must be of one family, in order.
+pub fn parse_ban_entry(s: &str) -> Option<(IpAddr, IpAddr)> {
+    use crate::webui::subnet::parse_ip;
+    let s = s.trim();
+    if s.is_empty() || s.len() > 128 {
+        return None;
+    }
+    let (first, last) = if let Some((a, b)) = s.split_once('-') {
+        (parse_ip(a)?, parse_ip(b)?)
+    } else if let Some((a, p)) = s.split_once('/') {
+        let ip = parse_ip(a)?;
+        let prefix: u32 = p.trim().parse().ok()?;
+        match ip {
+            IpAddr::V4(v4) if prefix <= 32 => {
+                let mask = u32::MAX.checked_shl(32 - prefix).unwrap_or(0);
+                let net = u32::from(v4) & mask;
+                (IpAddr::V4(Ipv4Addr::from(net)), IpAddr::V4(Ipv4Addr::from(net | !mask)))
+            }
+            IpAddr::V6(v6) if prefix <= 128 => {
+                let mask = u128::MAX.checked_shl(128 - prefix).unwrap_or(0);
+                let net = u128::from(v6) & mask;
+                (IpAddr::V6(Ipv6Addr::from(net)), IpAddr::V6(Ipv6Addr::from(net | !mask)))
+            }
+            _ => return None,
+        }
+    } else {
+        let ip = parse_ip(s)?;
+        (ip, ip)
+    };
+    match (first, last) {
+        (IpAddr::V4(a), IpAddr::V4(b)) if a <= b => Some((first, last)),
+        (IpAddr::V6(a), IpAddr::V6(b)) if a <= b => Some((first, last)),
+        _ => None,
+    }
+}
+
+/// `Utils::Net::ipRangeToString`: `first` alone, or `first - last`.
+pub fn ban_entry_string((first, last): (IpAddr, IpAddr)) -> String {
+    if first == last { first.to_string() } else { format!("{first} - {last}") }
+}
+
+/// The manual ban list, split for the engine.
+#[derive(Debug, Default)]
+pub struct Bans {
+    /// Every entry (for the tracker filter).
+    pub all: IpFilter,
+    /// Single addresses (banned and disconnected by the engine).
+    pub addresses: Vec<IpAddr>,
+    /// Ranges and subnets (checked with the IP filter).
+    pub ranges: IpFilter,
+    /// Entries that are not valid.
+    pub invalid: Vec<String>,
+}
+
+/// Manual bans: addresses, subnets and ranges (see [`parse_ban_entry`]).
+pub fn parse_banned(list: &[String]) -> Bans {
+    let mut b = Bans::default();
     for entry in list {
         let e = entry.trim();
         if e.is_empty() {
             continue;
         }
-        match e.parse::<IpAddr>() {
-            Ok(ip) => {
-                f.add_ip(ip);
+        match parse_ban_entry(e) {
+            Some((first, last)) => {
+                b.all.add(first, last);
+                if first == last {
+                    b.addresses.push(first);
+                } else {
+                    b.ranges.add(first, last);
+                }
             }
-            Err(_) => invalid.push(e.to_string()),
+            None => b.invalid.push(e.to_string()),
         }
     }
-    f.normalize();
-    (f, invalid)
+    b.all.normalize();
+    b.ranges.normalize();
+    b
 }
 
 /// Normalises an address for the ban list (RFC 5952 for IPv6).
@@ -542,12 +604,29 @@ mod tests {
 
     #[test]
     fn banned_list() {
-        let (f, invalid) = parse_banned(&["1.2.3.4".into(), "nope".into(), " ::1 ".into()]);
-        assert!(f.contains(ip("1.2.3.4")));
-        assert!(f.contains(ip("::1")));
-        assert_eq!(invalid, vec!["nope".to_string()]);
+        let b = parse_banned(&["1.2.3.4".into(), "nope".into(), " ::1 ".into(), "10.0.0.0/30".into(), "5.5.5.1 - 5.5.5.3".into()]);
+        assert!(b.all.contains(ip("1.2.3.4")) && b.all.contains(ip("::1")) && b.all.contains(ip("10.0.0.3")));
+        assert_eq!(b.addresses, [ip("1.2.3.4"), ip("::1")]);
+        assert!(b.ranges.contains(ip("5.5.5.2")) && !b.ranges.contains(ip("5.5.5.4")) && !b.ranges.contains(ip("1.2.3.4")));
+        assert_eq!(b.invalid, vec!["nope".to_string()]);
         assert_eq!(normalize_ip("1.2.3.4:6881").as_deref(), Some("1.2.3.4"));
         assert_eq!(normalize_ip("[2001:DB8::1]:80").as_deref(), Some("2001:db8::1"));
         assert_eq!(normalize_ip("x"), None);
+    }
+
+    #[test]
+    fn ban_entries_follow_qbittorrent_53() {
+        let e = |s: &str| parse_ban_entry(s).map(ban_entry_string);
+        assert_eq!(e(" 1.2.3.4 ").as_deref(), Some("1.2.3.4"));
+        assert_eq!(e("10.1.2.3/8").as_deref(), Some("10.0.0.0 - 10.255.255.255"));
+        assert_eq!(e("10.0.0.7/32").as_deref(), Some("10.0.0.7"));
+        assert_eq!(e("0.0.0.0/0").as_deref(), Some("0.0.0.0 - 255.255.255.255"));
+        assert_eq!(e("192.168.0.1-192.168.0.9").as_deref(), Some("192.168.0.1 - 192.168.0.9"));
+        assert_eq!(e("2001:DB8::/126").as_deref(), Some("2001:db8:: - 2001:db8::3"));
+        assert_eq!(e("::ffff:1.2.3.4").as_deref(), Some("1.2.3.4"), "IPv4-mapped");
+        assert_eq!(e("[::1]").as_deref(), Some("::1"));
+        for bad in ["", "x", "1.2.3.9 - 1.2.3.1", "1.2.3.4 - ::1", "1.2.3.4/33", "::/129", "1.2.3.4/-1", "1.2.3.4 - 5.6.7.8 - 9.9.9.9", "1.2.3.4/x"] {
+            assert_eq!(e(bad), None, "{bad}");
+        }
     }
 }

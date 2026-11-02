@@ -23,6 +23,18 @@ pub struct PeerFlags {
     pub holepunched: bool,
 }
 
+/// Share of the peer's progress that we uploaded to it (qBittorrent 5.3's
+/// "Contribution" column): uploaded bytes over the bytes the peer has, or
+/// over the torrent size while it has nothing; 0 without uploads.
+pub fn peer_contribution(uploaded: i64, progress: f64, total_size: i64) -> f64 {
+    if uploaded <= 0 {
+        return 0.0;
+    }
+    let total = if total_size <= 0 { uploaded } else { total_size } as f64;
+    let have = progress * total;
+    uploaded as f64 / if have <= 0.0 { total } else { have }
+}
+
 /// Flag letters (space separated) and their descriptions (one per line),
 /// in qBittorrent's order.
 pub fn determine_flags(f: &PeerFlags) -> (String, String) {
@@ -173,6 +185,17 @@ fn sockaddr_of(addr: &SocketAddr) -> (libc::sockaddr_storage, libc::socklen_t) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn contribution_follows_qbittorrent() {
+        assert_eq!(super::peer_contribution(0, 0.5, 1000), 0.0);
+        // 250 of the peer's 500 bytes came from us.
+        assert_eq!(super::peer_contribution(250, 0.5, 1000), 0.5);
+        // The peer has nothing yet: relative to the torrent size.
+        assert_eq!(super::peer_contribution(100, 0.0, 1000), 0.1);
+        // Unknown size (no metadata): the upload itself.
+        assert_eq!(super::peer_contribution(100, 0.0, -1), 1.0);
+    }
+
     use super::*;
 
     #[test]

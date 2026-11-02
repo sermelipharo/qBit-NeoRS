@@ -20,6 +20,7 @@ enum PeerTable {
             TableColumnSpec("uploaded", String(localized: "Uploaded"), minWidth: 50, idealWidth: 86, alignment: .right),
             TableColumnSpec("relevance", String(localized: "Relevance"), minWidth: 44, idealWidth: 70, alignment: .right),
             TableColumnSpec("files", String(localized: "Files"), minWidth: 60, idealWidth: 200),
+            TableColumnSpec("contribution", String(localized: "Contribution"), minWidth: 44, idealWidth: 80, alignment: .right),
         ]
     }
 
@@ -76,6 +77,8 @@ enum PeerTable {
         case "downloaded": return value(info.downloaded, speed: false)
         case "uploaded": return value(info.uploaded, speed: false)
         case "relevance": return TableCellContent(ValueFormatter.percent(info.relevance), monospacedDigits: true, alignment: .right)
+        case "contribution":
+            return TableCellContent(ValueFormatter.percent(info.contribution), monospacedDigits: true, alignment: .right)
         case "files":
             return TableCellContent(info.files.replacing("\n", with: ";"), toolTip: info.files.isEmpty ? nil : info.files)
         default: return TableCellContent()
@@ -97,6 +100,7 @@ enum PeerTable {
         case "downloaded": KeyPathComparator(\PeerRow.info.downloaded, order: order)
         case "uploaded": KeyPathComparator(\PeerRow.info.uploaded, order: order)
         case "relevance": KeyPathComparator(\PeerRow.info.relevance, order: order)
+        case "contribution": KeyPathComparator(\PeerRow.info.contribution, order: order)
         case "files": KeyPathComparator(\PeerRow.info.files, order: order)
         default: nil
         }

@@ -16,7 +16,7 @@ use tokio::sync::{Notify, watch};
 use super::categories::{self, CategoryMap};
 use super::engine::{Engine, EngineHandle};
 use super::metainfo::{self, TorrentMeta};
-use super::peers::{HostCache, PeerFlags, determine_flags};
+use super::peers::{HostCache, PeerFlags, determine_flags, peer_contribution};
 use super::resume::{self, BackupDir, SessionStateFile, StatsFile};
 use super::speed::SpeedHistory;
 use super::sync::MainDataSnapshot;
@@ -697,8 +697,8 @@ impl Session {
 
     pub fn peers(&self, hash: &str) -> QbtResult<Vec<PeerInfo>> {
         let prefs = self.ctx.prefs.current();
-        let (handle, meta, paths) = self.with_torrent(hash, |e, _| {
-            (e.rt.engine.as_ref().map(|(h, _)| h.clone()), e.meta.clone(), e.file_paths.clone())
+        let (handle, meta, paths, total_size) = self.with_torrent(hash, |e, _| {
+            (e.rt.engine.as_ref().map(|(h, _)| h.clone()), e.meta.clone(), e.file_paths.clone(), e.total_size())
         })?;
         let (Some(h), Some(engine)) = (handle, self.engine()) else { return Ok(Vec::new()) };
         let peers = engine.peers(&h);
@@ -780,6 +780,7 @@ impl Session {
                     uploaded: p.uploaded as i64,
                     progress: p.progress,
                     relevance: p.relevance,
+                    contribution: peer_contribution(p.uploaded as i64, p.progress, total_size),
                     flags,
                     flags_description,
                     files: p.downloading_files.iter().filter_map(|i| names.get(i).cloned()).collect::<Vec<_>>().join("\n"),

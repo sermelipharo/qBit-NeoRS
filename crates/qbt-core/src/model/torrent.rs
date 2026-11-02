@@ -548,6 +548,9 @@ pub struct PeerInfo {
     pub uploaded: i64,
     pub progress: f64,
     pub relevance: f64,
+    /// How much of the peer's progress we uploaded, as a fraction (can
+    /// exceed 1 when it re-downloaded data); 0 when we sent it nothing.
+    pub contribution: f64,
     /// qBittorrent flag letters separated by spaces, e.g. "D U H E".
     pub flags: String,
     /// One "<letter> = <description>" per line.

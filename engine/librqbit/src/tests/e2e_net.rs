@@ -523,6 +523,12 @@ async fn test_e2e_net_pex_toggle() {
     )
     .await
     .unwrap();
+    // Once A advertises them to each other, S and B may dial each other at
+    // once; with one connection per peer id the one S made could be kept,
+    // which B doesn't know from PeX.
+    for session in [&s, &b] {
+        session.set_allow_multiple_connections_per_pid(true);
+    }
     let at = add_leech(&a, torrent, vec![s_addr, b_addr]).await.unwrap();
     wait_until(
         || {

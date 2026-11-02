@@ -8,3 +8,4 @@ mod e2e_trackers;
 mod e2e_webseed;
 pub mod test_util;
 mod e2e_ratelimit;
+mod e2e_peer_settings;

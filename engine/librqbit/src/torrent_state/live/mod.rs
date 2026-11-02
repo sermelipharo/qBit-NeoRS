@@ -127,8 +127,7 @@ use self::{
     stats::{atomic::AtomicStats, snapshot::StatsSnapshot},
     superseed::superseed_allows,
     upload_queue::{
-        MAX_QUEUED_HASH_REPLIES, MAX_QUEUED_METADATA_PIECES, MAX_UPLOAD_REQUESTS, PushResult,
-        UploadQueue,
+        MAX_QUEUED_HASH_REPLIES, MAX_QUEUED_METADATA_PIECES, PushResult, UploadQueue,
     },
 };
 
@@ -203,6 +202,17 @@ pub enum AddIncomingPeerResult {
     Added,
     AlreadyActive,
     ConcurrencyLimitReached,
+    /// The peer id is already connected to the torrent from another address
+    /// (`allow_multiple_connections_per_pid` off).
+    DuplicatePeerId,
+}
+
+/// libtorrent's rule for two connections from the same peer id: the peer
+/// with the greater id is the one that connects, so both ends close the same
+/// connection. Returns whether the new connection is closed (otherwise the
+/// existing one is).
+fn close_new_duplicate(their_pid: Id20, our_pid: Id20, new_is_outgoing: bool) -> bool {
+    (their_pid < our_pid) != new_is_outgoing
 }
 
 // The connection slots (torrent and session-wide) a peer connection holds.
@@ -551,6 +561,33 @@ impl TorrentStateLive {
         }
     }
 
+    /// libtorrent `allow_multiple_connections_per_pid`: when it is off and
+    /// another live connection of the torrent has the same peer id, one of
+    /// the two is closed (see `close_new_duplicate`). Returns false if the
+    /// new connection `addr` must be closed; the existing one is closed (and
+    /// not reconnected) otherwise.
+    fn admit_peer_id(&self, addr: PeerHandle, peer_id: Id20, outgoing: bool) -> bool {
+        let allow = self
+            .shared
+            .session
+            .upgrade()
+            .is_some_and(|s| s.peer_policy.allow_multiple_connections_per_pid());
+        if allow {
+            return true;
+        }
+        let Some(existing) = self.peers.live_with_peer_id(peer_id, addr) else {
+            return true;
+        };
+        if close_new_duplicate(peer_id, self.our_peer_id(), outgoing) {
+            debug!(%addr, %existing, "closing connection: duplicate peer id");
+            false
+        } else {
+            debug!(%addr, %existing, "closing the older connection: duplicate peer id");
+            self.kick_peer(existing, true);
+            true
+        }
+    }
+
     // Close the connection to a peer. With `forget`, it is not reconnected.
     pub(crate) fn kick_peer(&self, addr: PeerHandle, forget: bool) -> bool {
         self.peers
@@ -612,6 +649,9 @@ impl TorrentStateLive {
         checked_peer: CheckedIncomingConnection,
     ) -> anyhow::Result<AddIncomingPeerResult> {
         use dashmap::mapref::entry::Entry;
+        if !self.admit_peer_id(checked_peer.addr, checked_peer.handshake.peer_id, false) {
+            return Ok(AddIncomingPeerResult::DuplicatePeerId);
+        }
         let (tx, rx) = unbounded_channel();
         let permit = match self.try_acquire_peer_permits() {
             Some(permit) => permit,
@@ -872,6 +912,26 @@ impl TorrentStateLive {
                 .upgrade()
                 .ok_or(Error::SessionDestroyed)?;
 
+            // libtorrent `seeding_outgoing_connections`: a finished torrent
+            // only takes incoming connections. The peer is dialled if the
+            // setting is turned back on or the torrent wants data again.
+            if !session.peer_policy.seeding_outgoing_connections()
+                && state.is_finished_and_no_active_streams()
+            {
+                debug!(
+                    ?addr,
+                    "not connecting: no outgoing connections while seeding"
+                );
+                // Only a peer still waiting (it may have connected to us
+                // meanwhile).
+                state.peers.with_peer_mut(addr, "seeding_no_outgoing", |p| {
+                    if matches!(p.get_state(), PeerState::Queued) {
+                        p.set_not_needed(&state.peers);
+                    }
+                });
+                continue;
+            }
+
             if session.ipv4_only && addr.is_ipv6() && !crate::i2p::is_i2p_addr(addr) {
                 debug!(?addr, "skipping ipv6 peer (ipv4_only=true)");
                 continue;
@@ -946,6 +1006,15 @@ impl TorrentStateLive {
                 aframe!(state.clone().task_manage_outgoing_peer(addr, permit)),
             );
         }
+    }
+
+    /// The session's `max_allowed_in_request_queue` (libtorrent's default
+    /// without a session).
+    pub(crate) fn max_allowed_in_request_queue(&self) -> u32 {
+        self.shared.session.upgrade().map_or(
+            crate::peer_policy::DEFAULT_MAX_ALLOWED_IN_REQUEST_QUEUE,
+            |s| s.peer_policy.max_allowed_in_request_queue(),
+        )
     }
 
     pub fn torrent(&self) -> &ManagedTorrentShared {
@@ -1689,6 +1758,15 @@ impl PeerConnectionHandler for &'_ PeerHandler {
     ) -> anyhow::Result<()> {
         self.is_utp
             .store(matches!(ckind, ConnectionKind::Utp), Ordering::Relaxed);
+        if !self.incoming && !self.state.admit_peer_id(self.addr, handshake.peer_id, true) {
+            // Don't dial it again.
+            self.state
+                .peers
+                .with_peer_mut(self.addr, "duplicate_peer_id", |p| {
+                    p.disconnect_requested = true;
+                });
+            anyhow::bail!("duplicate peer id");
+        }
         if self.state.shared.info_hash_alt == Some(handshake.info_hash) {
             // Our v1 connection was upgraded to v2 (or made with the v2 hash).
             self.v2_hash.store(true, Ordering::Relaxed);
@@ -1925,7 +2003,7 @@ impl PeerConnectionHandler for &'_ PeerHandler {
         {
             handshake.metadata_size = Some(len);
         }
-        handshake.reqq = Some(MAX_UPLOAD_REQUESTS);
+        handshake.reqq = Some(self.state.max_allowed_in_request_queue());
         // No PeX for private torrents (BEP 27) or with PeX off for the
         // torrent: don't offer it (session-wide PeX is handled by the
         // connection).
@@ -2227,7 +2305,8 @@ impl PeerHandler {
             return Ok(());
         }
 
-        match self.uploads.lock().push(chunk_info.absolute_index) {
+        let cap = self.state.max_allowed_in_request_queue();
+        match self.uploads.lock().push(chunk_info.absolute_index, cap) {
             PushResult::Queued => {}
             PushResult::Duplicate => return Ok(()),
             PushResult::Dropped => {
@@ -2235,7 +2314,7 @@ impl PeerHandler {
                 return Ok(());
             }
             PushResult::Abusive => {
-                bail!("peer keeps sending more than {MAX_UPLOAD_REQUESTS} outstanding requests")
+                bail!("peer keeps sending more than {cap} outstanding requests")
             }
         }
 
@@ -3126,5 +3205,25 @@ mod metadata_piece_tests {
         assert_eq!(metadata_piece_range(32768, 1), Some(16384..32768));
         assert_eq!(metadata_piece_range(32768, 2), None);
         assert_eq!(metadata_piece_range(0, 0), None);
+    }
+}
+
+#[cfg(test)]
+mod duplicate_peer_id_tests {
+    use super::{Id20, close_new_duplicate};
+
+    #[test]
+    fn both_ends_close_the_same_connection() {
+        let (a, b) = (Id20::new([2; 20]), Id20::new([1; 20]));
+        // Two connections between A (greater id) and B: c1 dialled by A, c2
+        // dialled by B. Whichever arrives second, both ends keep c1.
+        // At A, c2 arrives second (incoming): closed.
+        assert!(close_new_duplicate(b, a, false));
+        // At A, c1 arrives second (outgoing): the existing c2 is closed.
+        assert!(!close_new_duplicate(b, a, true));
+        // At B, c1 arrives second (incoming): the existing c2 is closed.
+        assert!(!close_new_duplicate(a, b, false));
+        // At B, c2 arrives second (outgoing): closed.
+        assert!(close_new_duplicate(a, b, true));
     }
 }

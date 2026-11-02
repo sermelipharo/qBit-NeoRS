@@ -63,6 +63,42 @@ pub struct PeerPolicyOptions {
     /// `utp_tcp_mixed_mode`).
     #[serde(default)]
     pub mixed_mode: MixedModeAlgorithm,
+    /// Torrents that are finished (have every wanted piece) make outgoing
+    /// peer connections (libtorrent `seeding_outgoing_connections`). When
+    /// off they only accept incoming connections; established connections
+    /// are kept.
+    #[serde(default = "default_true")]
+    pub seeding_outgoing_connections: bool,
+    /// The most block requests a peer may have queued with us (libtorrent
+    /// `max_allowed_in_request_queue`, advertised as `reqq`). Requests above
+    /// it are dropped. Clamped to `1..=MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT`.
+    #[serde(default = "default_in_request_queue")]
+    pub max_allowed_in_request_queue: u32,
+    /// Keep a second connection to a peer with the same peer id in a torrent
+    /// (libtorrent `allow_multiple_connections_per_pid`). When off, one of
+    /// the two is closed right after the handshake.
+    #[serde(default)]
+    pub allow_multiple_connections_per_pid: bool,
+}
+
+/// libtorrent's default `max_allowed_in_request_queue`.
+pub const DEFAULT_MAX_ALLOWED_IN_REQUEST_QUEUE: u32 = 2000;
+
+/// Upper bound of `max_allowed_in_request_queue`: the per-peer upload
+/// queue (and the writer queue behind it, twice as long) stays bounded even
+/// if a larger value is configured.
+pub const MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT: u32 = 16_384;
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_in_request_queue() -> u32 {
+    DEFAULT_MAX_ALLOWED_IN_REQUEST_QUEUE
+}
+
+fn clamp_in_request_queue(v: u32) -> u32 {
+    v.clamp(1, MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT)
 }
 
 impl Default for PeerPolicyOptions {
@@ -76,6 +112,9 @@ impl Default for PeerPolicyOptions {
             rate_limit_utp: true,
             rate_limit_lan: true,
             mixed_mode: MixedModeAlgorithm::PreferTcp,
+            seeding_outgoing_connections: true,
+            max_allowed_in_request_queue: DEFAULT_MAX_ALLOWED_IN_REQUEST_QUEUE,
+            allow_multiple_connections_per_pid: false,
         }
     }
 }
@@ -87,6 +126,9 @@ pub(crate) struct SessionPeerPolicy {
     seed_choking_algorithm: AtomicU8,
     rate_limit_utp: AtomicBool,
     rate_limit_lan: AtomicBool,
+    seeding_outgoing_connections: AtomicBool,
+    max_allowed_in_request_queue: AtomicU32,
+    allow_multiple_connections_per_pid: AtomicBool,
     /// uTP/TCP mixed mode throttles (set by the peer tick).
     pub mixed: MixedModeLimits,
     /// The global connection limit.
@@ -107,6 +149,13 @@ impl SessionPeerPolicy {
             seed_choking_algorithm: AtomicU8::new(opts.seed_choking_algorithm.to_u8()),
             rate_limit_utp: AtomicBool::new(opts.rate_limit_utp),
             rate_limit_lan: AtomicBool::new(opts.rate_limit_lan),
+            seeding_outgoing_connections: AtomicBool::new(opts.seeding_outgoing_connections),
+            max_allowed_in_request_queue: AtomicU32::new(clamp_in_request_queue(
+                opts.max_allowed_in_request_queue,
+            )),
+            allow_multiple_connections_per_pid: AtomicBool::new(
+                opts.allow_multiple_connections_per_pid,
+            ),
             mixed: MixedModeLimits::new(opts.mixed_mode),
             connections: ConnLimiter::new(
                 opts.max_connections
@@ -137,7 +186,23 @@ impl SessionPeerPolicy {
             rate_limit_utp: self.rate_limit_utp.load(Ordering::Relaxed),
             rate_limit_lan: self.rate_limit_lan.load(Ordering::Relaxed),
             mixed_mode: self.mixed.algorithm(),
+            seeding_outgoing_connections: self.seeding_outgoing_connections(),
+            max_allowed_in_request_queue: self.max_allowed_in_request_queue(),
+            allow_multiple_connections_per_pid: self.allow_multiple_connections_per_pid(),
         }
+    }
+
+    pub fn seeding_outgoing_connections(&self) -> bool {
+        self.seeding_outgoing_connections.load(Ordering::Relaxed)
+    }
+
+    pub fn max_allowed_in_request_queue(&self) -> u32 {
+        self.max_allowed_in_request_queue.load(Ordering::Relaxed)
+    }
+
+    pub fn allow_multiple_connections_per_pid(&self) -> bool {
+        self.allow_multiple_connections_per_pid
+            .load(Ordering::Relaxed)
     }
 
     pub fn default_max_uploads_per_torrent(&self) -> Option<u32> {
@@ -258,6 +323,46 @@ impl Session {
         self.set_rate_limit_utp(opts.rate_limit_utp);
         self.set_rate_limit_lan(opts.rate_limit_lan);
         self.set_mixed_mode_algorithm(opts.mixed_mode);
+        self.set_seeding_outgoing_connections(opts.seeding_outgoing_connections);
+        self.set_max_allowed_in_request_queue(opts.max_allowed_in_request_queue);
+        self.set_allow_multiple_connections_per_pid(opts.allow_multiple_connections_per_pid);
+    }
+
+    /// Whether finished torrents make outgoing peer connections. Turning it
+    /// off stops new outgoing connection attempts of finished torrents
+    /// (connections already made stay); turning it back on dials the peers
+    /// that were skipped meanwhile.
+    pub fn set_seeding_outgoing_connections(&self, enabled: bool) {
+        let was = self
+            .peer_policy
+            .seeding_outgoing_connections
+            .swap(enabled, Ordering::Relaxed);
+        if enabled && !was {
+            let live =
+                self.with_torrents(|ts| ts.filter_map(|(_, t)| t.live()).collect::<Vec<_>>());
+            for t in live {
+                if t.is_finished() {
+                    t.reconnect_all_not_needed_peers();
+                }
+            }
+        }
+    }
+
+    /// The most block requests a peer may have queued with us (clamped to
+    /// `1..=MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT`). Applies to requests from
+    /// now on; new connections advertise it as `reqq`.
+    pub fn set_max_allowed_in_request_queue(&self, max: u32) {
+        self.peer_policy
+            .max_allowed_in_request_queue
+            .store(clamp_in_request_queue(max), Ordering::Relaxed);
+    }
+
+    /// Whether a second connection from a peer id already connected to the
+    /// same torrent is kept. Applies to handshakes from now on.
+    pub fn set_allow_multiple_connections_per_pid(&self, allow: bool) {
+        self.peer_policy
+            .allow_multiple_connections_per_pid
+            .store(allow, Ordering::Relaxed);
     }
 
     /// Session-wide upload slots (`None` = unlimited). Takes effect at once.
@@ -591,6 +696,9 @@ mod tests {
             rate_limit_utp: false,
             rate_limit_lan: true,
             mixed_mode: MixedModeAlgorithm::PeerProportional,
+            seeding_outgoing_connections: false,
+            max_allowed_in_request_queue: 300,
+            allow_multiple_connections_per_pid: true,
         };
         let p = SessionPeerPolicy::new(opts);
         assert_eq!(p.options(), opts);
@@ -605,5 +713,31 @@ mod tests {
         let p = SessionPeerPolicy::new(PeerPolicyOptions::default());
         assert_eq!(p.options(), PeerPolicyOptions::default());
         assert!(p.has_free_upload_slot(100_000));
+        // libtorrent defaults.
+        assert!(p.seeding_outgoing_connections());
+        assert_eq!(p.max_allowed_in_request_queue(), 2000);
+        assert!(!p.allow_multiple_connections_per_pid());
+    }
+
+    #[test]
+    fn in_request_queue_is_clamped() {
+        let at = |v| {
+            SessionPeerPolicy::new(PeerPolicyOptions {
+                max_allowed_in_request_queue: v,
+                ..Default::default()
+            })
+            .max_allowed_in_request_queue()
+        };
+        assert_eq!(at(0), 1);
+        assert_eq!(at(500), 500);
+        assert_eq!(at(u32::MAX), MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT);
+        // Old saved options without the new fields get the defaults.
+        let old: PeerPolicyOptions = serde_json::from_str(
+            r#"{"max_uploads":null,"max_uploads_per_torrent":null,"choking_algorithm":"FixedSlots",
+            "seed_choking_algorithm":"FastestUpload","max_connections":null,
+            "rate_limit_utp":true,"rate_limit_lan":true}"#,
+        )
+        .unwrap();
+        assert_eq!(old, PeerPolicyOptions::default());
     }
 }

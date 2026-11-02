@@ -243,6 +243,7 @@ impl LiveSettings {
                 UtpMixedMode::PreferTcp => MixedModeAlgorithm::PreferTcp,
                 UtpMixedMode::PeerProportional => MixedModeAlgorithm::PeerProportional,
             },
+            ..PeerPolicyOptions::default()
         };
         let trackers = TrackerSettings {
             announce_ip: a.announce_ip.trim().parse().ok(),

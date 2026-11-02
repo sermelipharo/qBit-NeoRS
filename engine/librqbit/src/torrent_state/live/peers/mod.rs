@@ -9,7 +9,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use librqbit_core::lengths::ValidPieceIndex;
+use librqbit_core::{hash_id::Id20, lengths::ValidPieceIndex};
 use parking_lot::RwLock;
 use peer_binary_protocol::Message;
 use tracing::debug;
@@ -130,6 +130,15 @@ impl PeerStates {
     ) -> Option<R> {
         self.with_peer_mut(addr, reason, |peer| peer.get_live_mut().map(f))
             .flatten()
+    }
+
+    /// A live connection, other than `except`, whose peer sent `peer_id` in
+    /// its handshake. Must not be called while holding an entry of the map.
+    pub fn live_with_peer_id(&self, peer_id: Id20, except: PeerHandle) -> Option<PeerHandle> {
+        self.states.iter().find_map(|e| {
+            (*e.key() != except && e.value().get_live().is_some_and(|l| l.peer_id == peer_id))
+                .then(|| *e.key())
+        })
     }
 
     pub fn drop_peer(&self, handle: PeerHandle) -> Option<Peer> {
@@ -389,8 +398,6 @@ impl PeerStates {
 
 #[cfg(test)]
 mod tests {
-    use librqbit_core::hash_id::Id20;
-
     use super::*;
     use crate::stream_connect::ConnectionKind;
 
@@ -444,6 +451,24 @@ mod tests {
         peers
             .states
             .contains_key(&SocketAddr::from(([127, 0, 0, 1], port)))
+    }
+
+    #[test]
+    fn finds_live_connections_by_peer_id() {
+        let peers = make_peer_states();
+        let pid = Id20::new(*b"01234567890123456789");
+        let a = SocketAddr::from(([127, 0, 0, 1], 1));
+        let b = SocketAddr::from(([127, 0, 0, 1], 2));
+        let _rx = insert_incoming(&peers, 1, None);
+        // Only the connection itself: no duplicate.
+        assert_eq!(peers.live_with_peer_id(pid, a), None);
+        assert_eq!(peers.live_with_peer_id(pid, b), Some(a));
+        assert_eq!(peers.live_with_peer_id(Id20::new([7; 20]), b), None);
+        // Peers that are not live don't count.
+        let _rx = insert_incoming(&peers, 3, Some(PeerState::NotNeeded));
+        insert_outgoing(&peers, 4, PeerState::Queued);
+        peers.with_peer_mut(a, "test", |p| p.set_not_needed(&peers));
+        assert_eq!(peers.live_with_peer_id(pid, b), None);
     }
 
     #[test]

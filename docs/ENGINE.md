@@ -241,6 +241,53 @@ slowest); they may be retried later within the limit. The global limit does
 not disconnect. A torrent added without `peer_limit` (torrent or session) gets
 128, as before.
 
+### Seeding connections, incoming request queue, duplicate peer ids
+
+Three libtorrent session settings (qBittorrent 5.3 advanced settings), part of
+`PeerPolicyOptions` and changeable at runtime (`peer_policy.rs`):
+
+```rust
+pub fn set_seeding_outgoing_connections(&self, enabled: bool);        // default true
+pub fn set_max_allowed_in_request_queue(&self, max: u32);             // default 2000
+pub fn set_allow_multiple_connections_per_pid(&self, allow: bool);    // default false
+```
+
+* `seeding_outgoing_connections` off: the peer adder of a finished torrent
+  (every wanted piece, no stream on an unwanted file) doesn't dial; a queued
+  peer becomes "not needed" and is dialled when the torrent wants data again
+  (file priorities, recheck) or the setting is turned back on (then the
+  not-needed peers of every finished torrent are re-queued). Incoming
+  connections and connections already made are untouched, as in libtorrent.
+* `max_allowed_in_request_queue`: the cap of a peer's queued block requests
+  (`UploadQueue`, `torrent_state/live/upload_queue.rs`), advertised as `reqq`
+  in our extended handshake (new connections), read on every request (a
+  change applies to connected peers at once; a lower cap drops nothing
+  already queued). Requests above it are dropped, which is what libtorrent
+  does without the fast extension (it sends no reject then); a peer that
+  keeps sending 2000 over the cap is disconnected. It replaces the fixed cap
+  of 500 (the default is libtorrent's 2000) and is clamped to `1..=16384`
+  (`MAX_ALLOWED_IN_REQUEST_QUEUE_LIMIT`), so the queue and the writer queue
+  behind it (at most twice the cap) stay bounded whatever is configured;
+  libtorrent accepts any positive value and lets one request past it (`>`).
+* `allow_multiple_connections_per_pid` off: after the handshake (incoming:
+  before the connection is added; outgoing: when it goes live) the
+  torrent's live peers are searched for the same peer id at another
+  address (`PeerStates::live_with_peer_id`, a linear scan like libtorrent's
+  `find_peer`). If one exists, libtorrent's rule picks the connection to
+  close so both ends agree (the peer with the greater id keeps the
+  connection it made): either the new one (an outgoing one is not dialled
+  again) or the existing one (kicked, not reconnected). Incoming refusals
+  return `AddIncomingPeerResult::DuplicatePeerId`.
+
+Tests: `tests/e2e_peer_settings.rs` (a seeder not dialling a listening
+leecher until the setting is turned on; a full download from a seeder with a
+queue of 1; two leechers with one peer id, the second refused, then a third
+accepted once allowed), unit tests in `upload_queue.rs`, `peer_policy.rs`,
+`peers/mod.rs` and `live/mod.rs` (`duplicate_peer_id_tests`).
+`e2e_net::test_e2e_net_pex_toggle` allows duplicate peer ids: once PeX
+introduces S and B to each other they may dial each other at once, and the
+connection kept could be S's, which B doesn't know from PeX.
+
 ### Rate limits
 
 ```rust

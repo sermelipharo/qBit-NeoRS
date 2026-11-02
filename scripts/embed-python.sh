@@ -57,7 +57,7 @@ if [[ ! -x "$TREE/bin/python3.13" ]]; then
         "$LIB"/turtle.py "$LIB"/config-3.13-darwin "$LIB"/site-packages/*
     find "$P" -name __pycache__ -type d -prune -exec rm -rf {} +
     # Bytecode that never needs its source's timestamp, so the copy in the
-    # signed bundle is used as is (the app runs Python with -B). The build
+    # signed bundle is used as is and never rewritten. The build
     # folder is stripped from the recorded source paths (they hold the home
     # folder); imports put the real path back.
     "$P/bin/python3.13" -I -B -m compileall -f -q -j 0 --invalidation-mode unchecked-hash -s "$P" -p / "$LIB" >/dev/null
@@ -78,8 +78,11 @@ cp "$(dirname "$0")"/python-licenses/LICENSE.*.txt "$DEST/licenses/"
 # Inside out: extension modules, then the interpreter. Ad-hoc code has no
 # team, so library validation would refuse the modules under the hardened
 # runtime; only a team-signed interpreter gets the runtime.
+# Release builds signed by a team get a secure timestamp (notarization).
 runtime=(--options runtime)
+timestamp=--timestamp=none
 [[ "$IDENTITY" == "-" ]] && runtime=()
+[[ "$IDENTITY" != "-" && "${CONFIGURATION:-}" == "Release" ]] && timestamp=--timestamp
 find "$DEST/lib" -type f \( -name '*.so' -o -name '*.dylib' \) -print0 |
-    xargs -0 codesign --force --sign "$IDENTITY" --timestamp=none
-codesign --force --sign "$IDENTITY" --timestamp=none ${runtime[@]+"${runtime[@]}"} "$DEST/bin/python3.13"
+    xargs -0 codesign --force --sign "$IDENTITY" "$timestamp"
+codesign --force --sign "$IDENTITY" "$timestamp" ${runtime[@]+"${runtime[@]}"} "$DEST/bin/python3.13"

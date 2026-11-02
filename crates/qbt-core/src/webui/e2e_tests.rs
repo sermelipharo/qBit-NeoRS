@@ -1094,7 +1094,9 @@ fn torrent_file_backups() {
         assert_eq!(add("false").await.unwrap().status(), 200);
         let finished = done.join("dir.torrent");
         eventually("the backup in the finished folder", || finished.is_file()).await;
-        assert!(!base.join("data/backup/dir (1).torrent").exists(), "moved, not copied");
+        // Moving copies, then deletes the original: wait for the delete.
+        let first = base.join("data/backup/dir (1).torrent");
+        eventually("the original backup to go (moved, not copied)", || !first.exists()).await;
         assert_eq!(std::fs::read(&backup).unwrap(), b"user file");
 
         assert_eq!(h.post("/api/v2/torrents/delete", &del, Some(&c)).await.status(), 200);

@@ -892,3 +892,43 @@ fn edit_category_keeps_what_the_call_leaves_out() {
         assert_eq!(r.status(), 404);
     });
 }
+
+/// qBittorrent 5.3's `rss/exportRules` / `rss/importRules`: the JSON rules
+/// file round-trips; exactly one JSON file is accepted.
+#[test]
+fn rss_rules_export_and_import() {
+    let h = Harness::new(|_| {});
+    h.block(async {
+        let c = h.login().await;
+        let rule = r#"{"mustContain":"show","enabled":true}"#;
+        let r = h.post("/api/v2/rss/setRule", &[("ruleName", "Show"), ("ruleDef", rule)], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let r = h.get("/api/v2/rss/exportRules", Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        assert!(r.headers()["content-disposition"].to_str().unwrap().contains("rss-downloader-rules.json"));
+        let exported = r.bytes().await.unwrap().to_vec();
+        let v: Value = serde_json::from_slice(&exported).unwrap();
+        assert_eq!(v["Show"]["mustContain"], "show");
+
+        let r = h.post("/api/v2/rss/removeRule", &[("ruleName", "Show")], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+        let upload = |parts: Vec<&'static [u8]>| {
+            let mut form = reqwest::multipart::Form::new();
+            for (i, p) in parts.into_iter().enumerate() {
+                form = form.part(format!("file{i}"), reqwest::multipart::Part::bytes(p).file_name(format!("rules{i}.json")));
+            }
+            h.client.post(h.url("/api/v2/rss/importRules")).header("Cookie", &c).multipart(form).send()
+        };
+        let leaked: &'static [u8] = Box::leak(exported.into_boxed_slice());
+        assert_eq!(upload(vec![leaked]).await.unwrap().status(), 200);
+        let rules: Value = h.get("/api/v2/rss/rules", Some(&c)).await.json().await.unwrap();
+        assert_eq!(rules["Show"]["mustContain"], "show");
+
+        assert_eq!(upload(vec![]).await.unwrap().status(), 400, "no file");
+        assert_eq!(upload(vec![leaked, leaked]).await.unwrap().status(), 400, "two files");
+        assert_eq!(upload(vec![b"[Show]\nmust_contain=x\n"]).await.unwrap().status(), 400, "legacy format");
+        assert_eq!(upload(vec![b"{not json"]).await.unwrap().status(), 400, "broken JSON");
+        // importRules is POST only.
+        assert_eq!(h.get("/api/v2/rss/importRules", Some(&c)).await.status(), 405);
+    });
+}

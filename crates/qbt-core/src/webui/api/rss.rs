@@ -106,6 +106,25 @@ pub fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             }
         }
         "rules" => Ok(Reply::Json(c.app.rss_rules_json())),
+        // qBittorrent 5.3: the rules file as a download, and its import
+        // (exactly one uploaded file, JSON format only).
+        "exportRules" => {
+            Ok(Reply::Bytes { data: c.app.rss_export_rules(), mime: "application/json", filename: Some("rss-downloader-rules.json".into()) })
+        }
+        "importRules" => {
+            if c.files.len() != 1 {
+                return Err(ApiError::bad_params("Exactly one rules file is required"));
+            }
+            let data = std::mem::take(&mut c.files).into_values().next().unwrap_or_default();
+            if data.iter().find(|b| !b.is_ascii_whitespace()) != Some(&b'{') {
+                return Err(ApiError::bad_params("Invalid data format."));
+            }
+            c.app.rss_import_rules(data).map_err(|e| match e {
+                QbtError::Unsupported { .. } => ApiError::from(e),
+                other => ApiError::bad_params(super::error_message(&other)),
+            })?;
+            Ok(Reply::ok())
+        }
         "matchingArticles" => {
             c.params.require(&["ruleName"])?;
             let list = match c.app.rss_matching_articles(c.params.str("ruleName").to_owned()) {

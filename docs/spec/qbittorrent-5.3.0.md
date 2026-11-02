@@ -119,7 +119,7 @@ Things to know before reading:
 | #24920 | New prefs `confirm_remove_all_tags`, `confirm_remove_tracker_from_all_torrents` | ✅ | Core preferences (`advanced`), imported from qBittorrent's ini; the Mac app moved its own stored values into them once and reads them from the core; the Web UI honours `confirm_remove_all_tags` and `confirm_torrent_recheck` |
 | #24891, #24870 | `i2p_*_length_variance`, `i2p_pex_enabled` keys | ✅ | Stored, clamped to -7..7, imported from qBittorrent; passing the variance to SAM is the #24891 engine row |
 | #24837 | `webtorrent_stun_server` key | ✅ | Stored only |
-| #24842 | `rss/exportRules`, `rss/importRules` (POST) | ⬜ | Core already exports rules (`rssExportRules`, `apps/macos/Generated/qbt_core.swift:804`; UI `Features/RSS/Downloader/RulesExport.swift`); add the two endpoints in `webui/api/rss.rs` |
+| #24842 | `rss/exportRules`, `rss/importRules` (POST) | ✅ | `webui/api/rss.rs`; export GET/POST as an attachment, import exactly one JSON file (400 otherwise); e2e test `rss_rules_export_and_import` |
 | #24269 | `transfer/pauseSession`, `transfer/resumeSession`, `session_state` in `server_state` | ⬜ | Needs a core "session paused" state (stop all engine activity without changing torrent states) |
 | #24249 | Prefs `start_paused`, `shutdown_timeout` | ⬜ | `shutdown_timeout` exists (`prefs/model.rs:523`); add `start_paused` |
 | #24791 | POST-only endpoints | ✅ | See Security |
@@ -190,7 +190,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24519 | Persist feed list sort order | ⬜ | Low: `RSSFeedList` has no sort order to persist; add sorting and remember it |
 | #24806 | Clamp max articles per feed to non-negative | ✅ | `rss/mod.rs:179` clamps to `0..=i32::MAX` |
 | #24082 | Added rule follows the "enabled" state | ➖ | Qt widget bug; check once while building clone rule |
-| #24842 | RSS rules export/import over WebAPI | ⬜ | See WebAPI |
+| #24842 | RSS rules export/import over WebAPI | ✅ | See WebAPI |
 
 ## Search
 

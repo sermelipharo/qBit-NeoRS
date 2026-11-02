@@ -400,6 +400,30 @@ impl RepeatFilter {
     }
 }
 
+/// Writes the engine's blocked and banned peers to the peer log, as
+/// qBittorrent's `handlePeerBlockedAlert` / `handlePeerBanAlert` do.
+fn blocked_peer_log_callback(logger: Arc<crate::logger::Logger>) -> librqbit::BlockedPeerCallback {
+    let repeats = Mutex::new(RepeatFilter::default());
+    Arc::new(move |b: librqbit::BlockedPeer| {
+        let ip = b.addr.ip().to_string();
+        let reason = match b.reason {
+            // A torrent banned the peer for sending corrupt data
+            // (`peer_ban_alert`): logged as banned, without a reason. Made
+            // once per peer and torrent, so not rate limited.
+            librqbit::PeerBlockReason::CorruptData => return logger.peer(ip, false, ""),
+            librqbit::PeerBlockReason::IpFilter | librqbit::PeerBlockReason::Banned => "IP filter",
+            librqbit::PeerBlockReason::I2pMixedMode => "I2P mixed mode restrictions",
+            _ => "blocked",
+        };
+        // A host reconnecting in a loop must not push every other entry
+        // out of the (bounded) log.
+        if !repeats.lock().should_log(b.addr.ip(), std::time::Instant::now()) {
+            return;
+        }
+        logger.peer(ip, true, reason);
+    })
+}
+
 fn nz(v: u64) -> Option<NonZeroU32> {
     NonZeroU32::new(v.min(u32::MAX as u64) as u32)
 }
@@ -573,20 +597,7 @@ impl Engine {
 
     /// Feeds blocked connections into the "Blocked IPs" log.
     pub fn set_blocked_peer_logger(&self, logger: Arc<crate::logger::Logger>) {
-        let repeats = Mutex::new(RepeatFilter::default());
-        self.session.set_blocked_peer_callback(Some(Arc::new(move |b: librqbit::BlockedPeer| {
-            // A host reconnecting in a loop must not push every other entry
-            // out of the (bounded) log.
-            if !repeats.lock().should_log(b.addr.ip(), std::time::Instant::now()) {
-                return;
-            }
-            let reason = match b.reason {
-                librqbit::PeerBlockReason::IpFilter | librqbit::PeerBlockReason::Banned => "IP filter",
-                librqbit::PeerBlockReason::I2pMixedMode => "I2P mixed mode restrictions",
-                _ => "blocked",
-            };
-            logger.peer(b.addr.ip().to_string(), true, reason);
-        })));
+        self.session.set_blocked_peer_callback(Some(blocked_peer_log_callback(logger)));
     }
 
     // ---- Port mapping ---------------------------------------------------------------
@@ -954,6 +965,39 @@ mod tests {
             f.should_log(IpAddr::from(i.to_be_bytes()), t);
         }
         assert!(f.last.len() <= RepeatFilter::MAX_TRACKED);
+    }
+
+    #[test]
+    fn banned_peers_are_logged_as_banned() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = crate::app::AppConfig { profile_dir: dir.path().to_string_lossy().into_owned(), ..Default::default() };
+        let profile = crate::app::Profile::resolve(&config);
+        let prefs = Arc::new(crate::prefs::PreferencesStore::in_memory(Preferences::default()));
+        let logger = Arc::new(crate::logger::Logger::new(&profile, &prefs, Default::default(), false));
+        let cb = blocked_peer_log_callback(logger.clone());
+        let addr: std::net::SocketAddr = "10.0.0.1:6881".parse().unwrap();
+        let blocked = |reason, incoming| librqbit::BlockedPeer { addr, reason, incoming };
+        cb(blocked(librqbit::PeerBlockReason::IpFilter, true));
+        // Banned right after being blocked (another torrent): still logged.
+        cb(blocked(librqbit::PeerBlockReason::CorruptData, false));
+        // A repeated block within a second is dropped.
+        cb(blocked(librqbit::PeerBlockReason::IpFilter, true));
+        cb(blocked(librqbit::PeerBlockReason::CorruptData, true));
+        let log: Vec<_> = logger.peers(-1).into_iter().map(|e| (e.ip, e.blocked, e.reason)).collect();
+        let ip = "10.0.0.1".to_owned();
+        assert_eq!(
+            log,
+            vec![
+                (ip.clone(), true, "IP filter".to_owned()),
+                (ip.clone(), false, String::new()),
+                (ip, false, String::new()),
+            ]
+        );
+        // As `/api/v2/log/peers` returns it (qBittorrent: `"blocked": false`,
+        // empty reason).
+        let json = serde_json::to_value(&logger.peers(-1)[1]).unwrap();
+        assert_eq!(json["blocked"], false);
+        assert_eq!(json["reason"], "");
     }
 
     #[test]

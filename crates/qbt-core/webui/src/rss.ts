@@ -6,8 +6,9 @@ import { openAdd } from "./add";
 import { get, post } from "./api";
 import { app, emit, on } from "./app";
 import { icon } from "./icons";
+import { articleLinks } from "./links";
 import { confirmSheet, formSheet, menu, toast } from "./ui";
-import { collator, date, h, put, safeUrl, setText, shortDate, toggle } from "./util";
+import { collator, date, download, h, put, safeUrl, setText, shortDate, toggle } from "./util";
 import { VList } from "./vlist";
 
 interface Article {
@@ -73,6 +74,7 @@ export function createRss() {
           h("button", { class: "icon-btn", title: "New feed", "aria-label": "New feed", onclick: addFeed }, icon("plus")),
           h("button", { class: "icon-btn", title: "Refresh all", "aria-label": "Refresh all feeds", onclick: () => refreshItem("") }, icon("sync")),
           h("button", { class: "icon-btn", title: "Mark all as read", "aria-label": "Mark all as read", onclick: markAllRead }, icon("check")),
+          h("button", { class: "icon-btn", title: "Download rules", "aria-label": "Download rules", onclick: (e: MouseEvent) => rulesMenu(e.currentTarget as HTMLElement) }, icon("more")),
         ),
       ),
     ),
@@ -136,9 +138,12 @@ export function createRss() {
           renderFeeds();
           setLevel(1);
         },
-        oncontextmenu: id === UNREAD ? null : (e: MouseEvent) => {
+        oncontextmenu: (e: MouseEvent) => {
           e.preventDefault();
-          feedMenu(id, { x: e.clientX, y: e.clientY });
+          if (id === UNREAD) {
+            const n = torrentsIn(UNREAD).length;
+            menu([{ label: n ? `Download ${n} torrent${n === 1 ? "" : "s"}…` : "Download torrents…", icon: "down", disabled: !n, run: () => downloadAll(UNREAD) }], { x: e.clientX, y: e.clientY }, label);
+          } else feedMenu(id, { x: e.clientX, y: e.clientY });
         },
       }, icon(ic), h("span", { class: "sb-label" }, label), h("span", { class: "sb-count" }, count ? String(count) : ""));
       b.style.paddingInlineStart = 8 + depth * 14 + "px";
@@ -177,8 +182,8 @@ export function createRss() {
       return;
     }
     const a = open;
-    const link = a.link ? safeUrl(a.link) : null;
-    const torrent = a.torrentURL || (a.link?.startsWith("magnet:") ? a.link : "");
+    const { torrent, page: link } = articleLinks(a);
+    const blocked = !link && !!a.link && !/^magnet:/i.test(a.link.trim());
     put(reader,
       h("p", { class: "eyebrow" }, a._feedTitle),
       h("h2", null, a.title),
@@ -187,6 +192,7 @@ export function createRss() {
         torrent ? h("button", { class: "btn primary", onclick: () => openAdd({ urls: torrent }) }, icon("down"), "Download") : null,
         link ? h("button", { class: "btn", onclick: () => window.open(link, "_blank", "noopener,noreferrer") }, icon("link"), "Open link") : null,
       ),
+      blocked ? h("p", { class: "note" }, "The article link is not shown: only http:// and https:// links can be opened.") : null,
       h("div", { class: "reader-text" }, htmlToText(a.description ?? "") || "No description."),
     );
   }
@@ -243,10 +249,54 @@ export function createRss() {
     setTimeout(load, 1200);
   }
 
+  /** Torrent links of the articles in a feed or folder (or all unread). */
+  function torrentsIn(path: string): string[] {
+    const list = path === UNREAD
+      ? feeds.flatMap((f) => f.articles.filter((a) => !a.isRead))
+      : feeds.filter((f) => f.path === path || f.path.startsWith(path + "\\")).flatMap((f) => f.articles);
+    return [...new Set(list.map((a) => articleLinks(a).torrent).filter((t): t is string => !!t))];
+  }
+
+  /** One Add sheet for several articles (qBittorrent's shared download window). */
+  function downloadAll(path: string): void {
+    const urls = torrentsIn(path);
+    if (!urls.length) return toast("No torrent links in these articles", true);
+    openAdd({ urls: urls.join("\n") });
+  }
+
+  function rulesMenu(at: HTMLElement): void {
+    menu([
+      { label: "Export download rules…", icon: "up", run: () => download("rss/exportRules") },
+      { label: "Import download rules…", icon: "down", run: importRules },
+    ], at, "Download rules");
+  }
+
+  function importRules(): void {
+    const input = h("input", { type: "file", accept: ".json,application/json", hidden: true });
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      input.remove();
+      if (!file) return;
+      const fd = new FormData();
+      fd.append("rules", file, "rules");
+      try {
+        await post("rss/importRules", fd);
+        const rules = await get("rss/rules").catch(() => null);
+        toast(rules && typeof rules === "object" ? `Rules imported · ${Object.keys(rules).length} rules` : "Rules imported");
+      } catch (e) {
+        toast((e as Error).message, true);
+      }
+    });
+    document.body.appendChild(input);
+    input.click();
+  }
+
   function feedMenu(path: string, at: { x: number; y: number }): void {
     const f = feeds.find((x) => x.path === path);
+    const n = torrentsIn(path).length;
     menu([
       { label: "Refresh", icon: "sync", run: () => refreshItem(path) },
+      { label: n ? `Download ${n} torrent${n === 1 ? "" : "s"}…` : "Download torrents…", icon: "down", disabled: !n, run: () => downloadAll(path) },
       { label: "Mark as read", icon: "check", run: () => post("rss/markAsRead", { itemPath: path }).then(load) },
       {
         label: "Rename…", icon: "pencil", run: async () => {

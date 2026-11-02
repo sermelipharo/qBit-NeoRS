@@ -43,6 +43,8 @@ export function createSearch() {
   let shown: Result[] = [];
   let sortKey = "nbSeeders", asc = false;
   let timer = 0;
+  /** What the shown job searched for; Refresh runs exactly that again. */
+  let job: { pattern: string; category: string; plugins: string } | null = null;
 
   const pattern = h("input", { type: "search", placeholder: "Search torrents", "aria-label": "Search for", spellcheck: false, autocomplete: "off", enterkeyhint: "search" });
   const cat = h("select", { "aria-label": "Category" }, h("option", { value: "all" }, "All categories"));
@@ -52,6 +54,7 @@ export function createSearch() {
   const status = h("p", null, "Search the web with your search plugins");
   const form = h("form", { class: "search-form" }, h("label", { class: "searchbox big" }, icon("search"), pattern), cat, plug, go);
 
+  let refreshBtn: HTMLButtonElement;
   const thead = h("div", { class: "thead", role: "row" }, COLS.map(([k, l, cls]) =>
     h("button", { class: "c " + cls, "data-k": k, onclick: () => { asc = sortKey === k ? !asc : k === "fileName" || k === "engineName"; sortKey = k; apply(); } }, h("span", null, l), icon("chevD", "sort-ind")),
   ));
@@ -60,6 +63,7 @@ export function createSearch() {
       h("button", { class: "icon-btn", "aria-label": "Sidebar", title: "Sidebar", onclick: () => emit("sidebar") }, icon("sidebar")),
       h("div", { class: "titles" }, h("h1", null, "Search"), status),
       h("label", { class: "searchbox wide-only" }, icon("search"), narrowFilter),
+      (refreshBtn = h("button", { class: "icon-btn", title: "Search again", "aria-label": "Search again with the same category and plugins", disabled: true, onclick: () => job && startSearch(job) }, icon("sync"))),
       h("button", { class: "btn small", onclick: () => pluginsSheet() }, "Plugins"),
     ),
     form,
@@ -111,6 +115,7 @@ export function createSearch() {
     }
     setText(status, id == null ? "Search the web with your search plugins" : `${running ? "Searching… " : ""}${results.length} results${shown.length !== results.length ? `, ${shown.length} shown` : ""}`);
     go.textContent = running ? "Stop" : "Search";
+    refreshBtn.disabled = !job || running;
   }
 
   async function loadPlugins(): Promise<void> {
@@ -165,18 +170,31 @@ export function createSearch() {
     }
     const q = pattern.value.trim();
     if (!q) return pattern.focus();
+    await startSearch({ pattern: q, category: cat.value, plugins: plug.value });
+  });
+
+  /** Starts a search; the form shows what it searches for where it can. */
+  async function startSearch(j: { pattern: string; category: string; plugins: string }): Promise<void> {
+    clearTimeout(timer);
     if (id != null) post("search/delete", { id }).catch(() => {});
+    id = null;
     results = [];
+    job = j;
+    pattern.value = j.pattern;
+    if ([...cat.options].some((o) => o.value === j.category)) cat.value = j.category;
+    if ([...plug.options].some((o) => o.value === j.plugins)) plug.value = j.plugins;
     try {
-      const r = await post("search/start", { pattern: q, category: cat.value, plugins: plug.value });
+      const r = await post("search/start", j);
       id = r.id;
       running = true;
       apply();
       timer = window.setTimeout(poll, 800);
     } catch (er) {
+      running = false;
+      apply();
       toast((er as Error).message, true);
     }
-  });
+  }
   narrowFilter.addEventListener("input", apply);
 
   const resultAt = (e: Event) => {
@@ -269,6 +287,8 @@ export function createSearch() {
     if (last.category && [...cat.options].some((o) => o.value === last.category)) cat.value = last.category;
     const p = last.plugins ?? [];
     if (p.length === 1 && [...plug.options].some((o) => o.value === p[0])) plug.value = p[0];
+    // `plugins` lists the job's plugins (`all`/`enabled` expanded); search/start takes them `|`-joined.
+    if (last.pattern) job = { pattern: last.pattern, category: last.category || "all", plugins: p.length ? p.join("|") : "enabled" };
     await poll();
   }
 

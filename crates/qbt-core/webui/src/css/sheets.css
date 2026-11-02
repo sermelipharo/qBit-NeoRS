@@ -28,6 +28,9 @@ dialog.sheet.settings { width: min(820px, calc(100vw - 32px)); height: min(640px
 .sheet-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: .5px solid var(--sep); }
 .sheet-foot .btn { min-width: 84px; }
 .sheet-foot .btn.danger:first-child { margin-right: auto; }
+.note { font-size: 12px; line-height: 1.4; color: var(--label2); margin: 6px 4px 0; word-break: break-word; }
+.note.ok { color: var(--green); }
+.note.err { color: var(--red); }
 .msg { font-size: 13px; line-height: 1.45; margin: 4px 0 12px; word-break: break-word; }
 
 /* Grouped rows */
@@ -157,3 +160,10 @@ dialog.sheet.settings { width: min(820px, calc(100vw - 32px)); height: min(640px
 .error { min-height: 18px; color: var(--red); font-size: 13px; }
 .shake { animation: shake .4s; }
 @keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+
+/* Add sheet: file list of one torrent */
+.add-files-list { max-height: 240px; overflow-y: auto; margin: 0; padding: 0 12px; border-top: .5px solid var(--sep); }
+.add-files-list li { padding: 0; }
+.add-files-list label { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 5px 0; }
+.add-files-list small { color: var(--label2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.note.pad-x { margin: 6px 12px 10px; }

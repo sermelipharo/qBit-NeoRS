@@ -124,7 +124,7 @@ export async function limits(): Promise<void> {
   }, list);
 }
 
-async function copy(text: string): Promise<void> {
+export async function copy(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
   } catch {

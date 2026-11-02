@@ -2,13 +2,13 @@
 // Rendered in the inspector column on wide screens and in a sheet on
 // narrow ones; only the visible tab is fetched, on the main poll timer.
 
-import { remove, start, stop, torrentMenu } from "./actions";
+import { copy, remove, start, stop, torrentMenu } from "./actions";
 import { get, post } from "./api";
 import { refreshSoon } from "./app";
 import { icon } from "./icons";
 import { isStopped, kind, stateText, torrents, type Torrent } from "./store";
-import { formSheet, menu, toast } from "./ui";
-import { bytes, collator, date, duration, h, load, num, pct, put, ratio, save, setText, speed, toggle } from "./util";
+import { formSheet, menu, type MenuEntry, toast } from "./ui";
+import { bytes, collator, date, download, duration, h, joinPath, load, num, pct, put, ratio, save, setText, speed, toggle } from "./util";
 import { VList } from "./vlist";
 
 type Tab = "general" | "trackers" | "peers" | "files";
@@ -369,9 +369,14 @@ export function createDetails() {
     if (!n || !hash) return;
     e.preventDefault();
     const h0 = hash;
-    menu([
+    const t = cur();
+    // Only complete files can be downloaded (torrents/downloadFile refuses others).
+    const complete = !n.dir && n.size > 0 && n.done >= n.size;
+    const entries: (MenuEntry | null)[] = [
       ...PRIOS.map(([v, l]) => ({ label: l, checked: n.prio === Number(v), run: () => setPrio(n, Number(v)) })),
       "-",
+      n.dir ? null : { label: complete ? "Download" : "Download (when complete)", icon: "down", disabled: !complete, run: () => download("torrents/downloadFile", { hash: h0, file: n.idx[0] }) },
+      { label: "Copy path", icon: "doc", disabled: !t?.save_path, run: () => t && copy(joinPath(t.save_path, n.path)) },
       {
         label: "Rename…", icon: "pencil", run: async () => {
           const v = await formSheet("Rename", [{ key: "name", label: "Name", value: n.name }], "Rename");
@@ -380,7 +385,8 @@ export function createDetails() {
           post(n.dir ? "torrents/renameFolder" : "torrents/renameFile", { hash: h0, oldPath: n.path, newPath: parent + v.name }).then(tick, (er) => toast(er.message, true));
         },
       },
-    ], { x: e.clientX, y: e.clientY }, n.name);
+    ];
+    menu(entries.filter((x): x is MenuEntry => x !== null), { x: e.clientX, y: e.clientY }, n.name);
   });
 
   async function filesTab(t: Torrent): Promise<void> {

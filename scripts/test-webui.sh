@@ -2,7 +2,8 @@
 # Runs the Web UI's unit tests with Node's built-in test runner (no
 # dependencies; npx fetches the pinned esbuild once): the TypeScript torrent
 # name parser against the macOS app's results in
-# crates/qbt-core/webui/test/names-fixture.json.
+# crates/qbt-core/webui/test/names-fixture.json, and the pure UI logic
+# (test/logic.test.mjs: RSS link policy, Add sheet, sorting).
 #
 # The fixture comes from the app's parser; regenerate it after changing the
 # parser, the built-in rules or the corpus:
@@ -16,6 +17,8 @@ UI="$ROOT/crates/qbt-core/webui"
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/webui-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
-npx --yes esbuild@0.25.4 "$UI/test/names.test.mjs" --bundle --platform=node --format=esm --target=node20 \
-  --log-level=warning --outfile="$TMP/names.test.mjs"
-FIXTURE="$UI/test/names-fixture.json" node --test "$TMP/names.test.mjs"
+for t in names logic; do
+  npx --yes esbuild@0.25.4 "$UI/test/$t.test.mjs" --bundle --platform=node --format=esm --target=node20 \
+    --log-level=warning --outfile="$TMP/$t.test.mjs"
+done
+FIXTURE="$UI/test/names-fixture.json" node --test "$TMP/names.test.mjs" "$TMP/logic.test.mjs"

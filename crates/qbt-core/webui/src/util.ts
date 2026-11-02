@@ -123,6 +123,27 @@ export function safeUrl(u: string): string | null {
   }
 }
 
+/**
+ * A file's absolute path: the save path joined with its `/`-separated path
+ * in the torrent, with the save path's own separator (5.3's "Copy path").
+ */
+export function joinPath(savePath: string, rel: string): string {
+  const sep = savePath.includes("\\") && !savePath.includes("/") ? "\\" : "/";
+  return savePath.replace(/[\\/]+$/, "") + sep + rel.split("/").join(sep);
+}
+
+/**
+ * Saves a same-origin API download (an attachment) through a temporary
+ * link: the browser streams it to disk; nothing is read into the page.
+ */
+export function download(path: string, params?: Record<string, string | number>): void {
+  const q = params ? "?" + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : "";
+  const a = h("a", { href: "api/v2/" + path + q, download: "", hidden: true });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export function debounce<A extends unknown[]>(fn: (...a: A) => void, ms: number): (...a: A) => void {
   let t = 0;
   return (...a: A) => {

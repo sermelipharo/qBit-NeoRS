@@ -1,6 +1,6 @@
 // Shared UI state and a tiny event bus.
 
-import { get } from "./api";
+import { get, post } from "./api";
 import { load } from "./util";
 
 export type Section = "transfers" | "search" | "rss";
@@ -41,3 +41,26 @@ let poke: () => void = () => {};
 export const setPoke = (f: () => void) => (poke = f);
 /** Polls again soon (after an action), so the UI reflects it quickly. */
 export const refreshSoon = () => poke();
+
+/**
+ * Web UI options stored on the server (`clientdata`, shared with
+ * qBittorrent's own WebUI), e.g. `add_new_torrent_dialog_enabled`.
+ */
+let clientCache: Record<string, any> | null = null;
+
+export async function clientData(): Promise<Record<string, any>> {
+  if (!clientCache) {
+    try {
+      const v = await get("clientdata/load");
+      clientCache = v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch {
+      return {};
+    }
+  }
+  return clientCache!;
+}
+
+export async function setClientData(values: Record<string, unknown>): Promise<void> {
+  await post("clientdata/store", { data: JSON.stringify(values) });
+  clientCache = { ...(clientCache ?? {}), ...values };
+}

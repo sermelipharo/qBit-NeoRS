@@ -255,6 +255,8 @@ targets:
       - path: QBTNeo/Shared/Table/SortKeyPromotion.swift
       - path: QBTNeo/Properties/General/AdaptiveColumns.swift
       - path: QBTNeo/Features/Paste/PastedText.swift
+      - path: QBTNeo/Features/RSS/RSSHTMLSanitizer.swift
+      - path: QBTNeo/Features/RSS/RSSLinkPolicy.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests

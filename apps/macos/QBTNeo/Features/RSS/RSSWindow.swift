@@ -76,6 +76,8 @@ struct RSSPane: View {
                 .frame(minWidth: 260, idealWidth: 340, maxHeight: .infinity)
             RSSArticleView(item: model.currentArticle, showsFeed: model.showsFeedColumn) {
                 if let item = model.currentArticle { model.download([item], app: app) }
+            } addTorrent: { url in
+                app.add(.url(url: url.absoluteString))
             }
             .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
         }

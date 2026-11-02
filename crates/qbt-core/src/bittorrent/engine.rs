@@ -857,6 +857,11 @@ impl Engine {
         h.rename_files(renames).await
     }
 
+    /// User-visible relative paths by engine index (renames applied).
+    pub fn file_paths(&self, h: &EngineHandle) -> Vec<PathBuf> {
+        h.file_paths()
+    }
+
     pub fn actual_file_paths(&self, h: &EngineHandle) -> Vec<PathBuf> {
         h.actual_file_paths()
     }

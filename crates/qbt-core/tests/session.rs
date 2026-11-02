@@ -224,6 +224,64 @@ fn torrent_lifecycle_and_persistence() {
     app.shutdown();
 }
 
+/// "Manage Torrent Content" (qBittorrent 5.3): a batch that swaps two files,
+/// turns a folder into a file and moves a file into a new folder runs on
+/// disk without collisions; refused requests come back with their message.
+#[test]
+fn batch_file_renames() {
+    let tmp = tempfile::tempdir().unwrap();
+    let profile = tmp.path().join("profile");
+    let downloads = tmp.path().join("downloads");
+    write_prefs(&profile, &downloads);
+    let data = make_data(&downloads, "Show", &[("a.bin", 40_000), ("b.bin", 50_000), ("x/c.bin", 60_000), ("d.bin", 70_000)]);
+    let torrent = make_torrent(&data);
+    let app = start(&profile);
+    let rt = app.runtime();
+    let hash = rt
+        .block_on(app.add_torrent(
+            TorrentSource::Bytes { data: torrent },
+            AddTorrentParams { save_path: Some(downloads.to_string_lossy().into()), ..Default::default() },
+        ))
+        .expect("add");
+    wait_for(&app, &hash, "seeding after check", seeding);
+    let files = app.files(hash.clone(), vec![]).unwrap();
+    let index = |name: &str| files.iter().find(|f| f.name == name).unwrap().index;
+    let size = |path: &str| std::fs::metadata(downloads.join(path)).map(|m| m.len()).unwrap_or(0);
+
+    let renames = vec![
+        FileRename { index: index("Show/a.bin"), new_path: "Show/b.bin".into() },
+        FileRename { index: index("Show/b.bin"), new_path: "Show/a.bin".into() },
+        FileRename { index: index("Show/x/c.bin"), new_path: "Show/c.bin".into() },
+        FileRename { index: index("Show/d.bin"), new_path: "Show/x".into() },
+        FileRename { index: 99, new_path: "Show/z.bin".into() },
+    ];
+    let failures = rt.block_on(app.rename_files(hash.clone(), renames)).unwrap();
+    assert_eq!(failures, vec![FileRenameFailure { index: -1, message: "No such file: '99'.".into() }]);
+    assert_eq!((size("Show/a.bin"), size("Show/b.bin"), size("Show/c.bin"), size("Show/x")), (50_000, 40_000, 60_000, 70_000));
+    let after = app.files(hash.clone(), vec![]).unwrap();
+    let name_of = |i: i64| after.iter().find(|f| f.index == i).unwrap().name.clone();
+    assert_eq!(name_of(index("Show/a.bin")), "Show/b.bin");
+    assert_eq!(name_of(index("Show/b.bin")), "Show/a.bin");
+    assert_eq!(name_of(index("Show/x/c.bin")), "Show/c.bin");
+    assert_eq!(name_of(index("Show/d.bin")), "Show/x");
+    assert!(std::fs::read_dir(&data).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().starts_with(".neors")));
+
+    // Conflicts and invalid paths are refused; the valid rename still happens.
+    let renames = vec![
+        FileRename { index: index("Show/a.bin"), new_path: "Show/x".into() },
+        FileRename { index: index("Show/b.bin"), new_path: "Show/x/../y".into() },
+        FileRename { index: index("Show/x/c.bin"), new_path: "Show/sub/c.bin".into() },
+    ];
+    let failures = rt.block_on(app.rename_files(hash.clone(), renames)).unwrap();
+    let mut messages: Vec<String> = failures.into_iter().map(|f| f.message).collect();
+    messages.sort();
+    assert_eq!(messages, vec!["The file already exists: 'Show/x'.", "The new path is invalid: 'Show/x/../y'."]);
+    assert_eq!(size("Show/sub/c.bin"), 60_000);
+    rt.block_on(app.recheck_torrents(vec![hash.clone()])).unwrap();
+    wait_for(&app, &hash, "complete after recheck", |t| seeding(t) && t.progress == 1.0);
+    app.shutdown();
+}
+
 #[test]
 fn magnets_and_sources() {
     let tmp = tempfile::tempdir().unwrap();

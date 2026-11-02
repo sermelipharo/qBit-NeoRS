@@ -547,6 +547,25 @@ pub struct TrackerTierEntry {
     pub tier: i64,
 }
 
+/// One changed path of the "Manage Torrent Content" dialog.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct FileRename {
+    /// File index (`TorrentFile::index`).
+    pub index: i64,
+    /// New relative path with `/` separators; it may move the file to another folder.
+    pub new_path: String,
+}
+
+/// A rename of a batch that did not happen, with qBittorrent's message.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct FileRenameFailure {
+    /// File index, -1 when the request named no file of the torrent.
+    pub index: i64,
+    pub message: String,
+}
+
 /// Content tab row / `/api/v2/torrents/files` item.
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]

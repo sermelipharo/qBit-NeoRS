@@ -183,6 +183,17 @@ impl App {
         self.spawn_on_rt(async move { s.rename_folder(&hash, &old_path, &new_path).await }).await
     }
 
+    /// Renames many files at once (the "Manage Torrent Content" dialog). New
+    /// paths may move files between folders. Returns the renames that did not
+    /// happen, with qBittorrent's messages; the others are applied in an order
+    /// that never collides on disk (swaps and rotations included).
+    pub async fn rename_files(&self, hash: String, renames: Vec<FileRename>) -> QbtResult<Vec<FileRenameFailure>> {
+        let s = self.session.clone();
+        let requests = renames.into_iter().map(|r| (r.index, r.new_path)).collect();
+        let failures = self.spawn_on_rt(async move { s.rename_files_batch(&hash, requests).await }).await?;
+        Ok(failures.into_iter().map(|(index, message)| FileRenameFailure { index, message }).collect())
+    }
+
     pub fn set_file_priority(&self, hash: String, indexes: Vec<i64>, priority: FilePriority) -> QbtResult<()> {
         self.session.set_file_priority(&hash, &indexes, priority)
     }

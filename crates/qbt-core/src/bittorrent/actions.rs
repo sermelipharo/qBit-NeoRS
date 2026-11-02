@@ -8,7 +8,7 @@ use std::sync::Arc;
 use super::engine::{AddRequest, EngineHandle, TorrentSettings};
 use super::session::{Session, State};
 use super::torrent::{Env, Phase, TorrentEntry};
-use super::{bencode, metainfo, paths, trash};
+use super::{batch_rename, bencode, metainfo, paths, trash};
 use crate::error::{QbtError, QbtResult};
 use crate::events::CoreEvent;
 use crate::model::*;
@@ -833,6 +833,77 @@ impl Session {
             Ok(changes)
         })??;
         self.rename_files(hash, changes).await
+    }
+
+    /// Renames many files at once ("Manage Torrent Content", qBittorrent 5.3):
+    /// refused requests come back with qBittorrent's message, the others are
+    /// renamed in an order that never collides on disk (see `batch_rename`).
+    /// If the engine fails part-way, the files keep the paths the engine
+    /// reached and the rest are reported with its reason.
+    pub async fn rename_files_batch(&self, hash: &str, requests: Vec<(i64, String)>) -> QbtResult<Vec<(i64, String)>> {
+        let (plan, handle, name, engine_indexes) = self.with_torrent(hash, |e, _| {
+            if !e.has_metadata() {
+                return Err(QbtError::conflict("Torrent's metadata has not yet downloaded"));
+            }
+            let plan = batch_rename::plan(&e.file_paths, &requests);
+            let engine_indexes: Vec<usize> =
+                e.meta.as_ref().map(|m| m.files.iter().map(|f| f.engine_index as usize).collect()).unwrap_or_default();
+            Ok((plan, e.rt.engine.as_ref().map(|(h, _)| h.clone()), e.display_name(), engine_indexes))
+        })??;
+        let mut failures: Vec<(i64, String)> =
+            plan.failures.iter().map(|(i, m)| (i64::try_from(*i).unwrap_or(-1), m.clone())).collect();
+        if plan.steps.is_empty() {
+            return Ok(failures);
+        }
+        let engine = self.engine();
+        let outcome = match (&handle, &engine) {
+            (Some(h), Some(engine)) => {
+                let renames: Vec<(usize, PathBuf)> = plan
+                    .steps
+                    .iter()
+                    .filter_map(|(i, p)| Some((*engine_indexes.get(*i)?, PathBuf::from(p))))
+                    .collect();
+                engine.rename_files(h, renames).await
+            }
+            _ => Ok(()),
+        };
+        let reached: Vec<Option<String>> = match (&outcome, &handle, &engine) {
+            (Err(_), Some(h), Some(engine)) => {
+                let paths = engine.file_paths(h);
+                engine_indexes
+                    .iter()
+                    .map(|ei| paths.get(*ei).map(|p| p.to_string_lossy().replace('\\', "/")))
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
+        self.with_torrent_mut(hash, |e, _| {
+            for (&i, new) in &plan.accepted {
+                let Some(slot) = e.file_paths.get_mut(i) else { continue };
+                match &outcome {
+                    Ok(()) => *slot = new.clone(),
+                    Err(_) => {
+                        if let Some(Some(path)) = reached.get(i) {
+                            *slot = path.clone();
+                        }
+                    }
+                }
+            }
+        })?;
+        if let Err(err) = outcome {
+            let reason = format!("{err:#}");
+            let current = self.with_torrent(hash, |e, _| e.file_paths.clone())?;
+            for (&i, new) in &plan.accepted {
+                if current.get(i) != Some(new) {
+                    self.ctx.logger.warning(format!(
+                        "File rename failed. Torrent: \"{name}\", file: \"{new}\", reason: \"{reason}\""
+                    ));
+                    failures.push((i64::try_from(i).unwrap_or(-1), reason.clone()));
+                }
+            }
+            failures.sort_by_key(|(i, _)| *i);
+        }
+        Ok(failures)
     }
 
     async fn rename_files(&self, hash: &str, changes: Vec<(usize, String)>) -> QbtResult<()> {

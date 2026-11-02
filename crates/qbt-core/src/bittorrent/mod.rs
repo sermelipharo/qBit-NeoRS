@@ -14,6 +14,7 @@
 
 mod actions;
 mod adding;
+mod batch_rename;
 pub mod autorun;
 pub mod bencode;
 pub mod categories;

@@ -149,7 +149,7 @@ pub enum Methods {
 
 use Methods::{GetPost as GP, PostOnly as P};
 
-/// Every WebAPI 2.15.1 endpoint with its method filter (features.md 6.7),
+/// Every WebAPI 2.16.2 endpoint with its method filter (features.md 6.7),
 /// plus `app/getFreeSpaceAtPath`, which qBittorrent 5.2.4's own WebUI calls
 /// (add-torrent dialog) although its backend does not implement it, and the
 /// qBit NeoRS extensions of the bundled Web UI (`neors/*`).

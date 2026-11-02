@@ -344581,12 +344581,12 @@
         }
       }
     },
-    "qBit NeoRS reimplements the features, preferences and WebAPI of qBittorrent 5.2.4.": {
+    "qBit NeoRS reimplements the features, preferences and WebAPI of qBittorrent 5.3.0.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "qBit NeoRS заново реализует функции, настройки и WebAPI qBittorrent 5.2.4."
+            "value": "qBit NeoRS заново реализует функции, настройки и WebAPI qBittorrent 5.3.0."
           }
         }
       }

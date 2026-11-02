@@ -1,7 +1,7 @@
 qBit NeoRS
 ===============
 
-qBit NeoRS is a Rust/SwiftUI reimplementation of qBittorrent 5.2.4.
+qBit NeoRS is a Rust/SwiftUI reimplementation of qBittorrent 5.3.0.
 It is distributed under the GNU General Public License, version 3 or (at your
 option) any later version (see LICENSE).
 
@@ -9,7 +9,8 @@ It contains or is derived from the following third-party work:
 
 * qBittorrent (https://www.qbittorrent.org), GPLv2-or-later (binary
   distribution GPLv3-or-later). Behaviour, UI texts and the WebAPI are derived
-  from the qBittorrent 5.2.4 sources (pinned at reference/qBittorrent). The
+  from the qBittorrent 5.2.4 sources (pinned at reference/qBittorrent) and
+  the qBittorrent 5.3.0 changes (docs/spec/qbittorrent-5.3.0.md). The
   nova3 search engine helper scripts (crates/qbt-core/resources/nova3) are
   copied from qBittorrent and keep their original copyright headers. The
   bundled Web UI (crates/qbt-core/webui) is written for qBit NeoRS and uses

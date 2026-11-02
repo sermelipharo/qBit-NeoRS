@@ -196,8 +196,8 @@ fn version_endpoints() {
         let c = h.login().await;
         let r = h.get("/api/v2/app/version", Some(&c)).await;
         assert_eq!(r.headers()["content-type"], "text/plain; charset=UTF-8");
-        assert_eq!(r.text().await.unwrap(), "v5.2.4");
-        assert_eq!(h.get("/api/v2/app/webapiVersion", Some(&c)).await.text().await.unwrap(), "2.15.1");
+        assert_eq!(r.text().await.unwrap(), "v5.3.0");
+        assert_eq!(h.get("/api/v2/app/webapiVersion", Some(&c)).await.text().await.unwrap(), "2.16.2");
         let info: Value = h.get("/api/v2/app/buildInfo", Some(&c)).await.json().await.unwrap();
         assert_eq!(info["bitness"], 64);
         let p: Value = h.get("/api/v2/app/processInfo", Some(&c)).await.json().await.unwrap();

@@ -1,8 +1,8 @@
 # qBit NeoRS — architecture
 
-qBit NeoRS is a rewrite of qBittorrent 5.2.4 (C++/Qt/libtorrent) as a
+qBit NeoRS is a rewrite of qBittorrent 5.3.0 (C++/Qt/libtorrent) as a
 pure-Rust core with a native SwiftUI front end for macOS. The goal is feature
-parity with qBittorrent 5.2.4 — including every preference — with a small
+parity with qBittorrent 5.3.0 — including every preference — with a small
 memory footprint and a native, pleasant UI.
 
 The reference implementation is pinned at `reference/qBittorrent`

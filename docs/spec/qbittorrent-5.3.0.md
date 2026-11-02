@@ -17,8 +17,8 @@ Things to know before reading:
   the upstream diff (`git show <hash>` in the qBittorrent repo) is the
   behavioural reference. Only the optional alternative-WebUI folder runs
   qBittorrent's own WebUI unchanged.
-* `WEBAPI_VERSION` is `2.15.1` (`crates/qbt-core/src/model/mod.rs:33`);
-  bump to `2.16.2` once the WebAPI rows below are done.
+* `WEBAPI_VERSION` is `2.16.2` and `app/version` reports `v5.3.0`
+  (`crates/qbt-core/src/model/mod.rs`), bumped once every WebAPI row was done.
 * The bundled search engine (`crates/qbt-core/resources/nova3`) is a copy of
   upstream's `src/searchengine/nova3`, so search script fixes are ports of
   upstream diffs.
@@ -187,7 +187,7 @@ NeoRS-specific implementation (see intro). "Port" means: write the feature in
 | #24056 | "Clone rule" in the auto-downloader | ✅ | Toolbar button and context menu item "Clone rule…" with the "Rule cloning" prompt; the copy is disabled, history and last match cleared |
 | #23963 | Sticky "All" RSS item | ✅ | `RSSNode.Kind.all` above "Unread" in the RSS window and the main window's sidebar RSS section (once feeds exist); shows every article; sticky rows can't be renamed, moved or deleted |
 | #24120 | Add torrents from links in the article viewer | ✅ | Was missing: `magnet:` hrefs were dropped and other links only opened. Now `RSSLinkPolicy.isTorrentLink` (magnet, http(s) `*.torrent`) adds the torrent from `RSSArticleView`; the sanitizer keeps `magnet:` and relative-link resolution skips it. Unit tests `RSSLinkTests` |
-| #24519 | Persist feed list sort order | ⬜ | Low: `RSSFeedList` has no sort order to persist; add sorting and remember it |
+| #24519 | Persist feed list sort order | ➖ | The macOS feed list has no sortable header: feeds and folders keep the order the user arranges them in, so there is no sort order to persist |
 | #24806 | Clamp max articles per feed to non-negative | ✅ | `rss/mod.rs:179` clamps to `0..=i32::MAX` |
 | #24082 | Added rule follows the "enabled" state | ➖ | Qt widget bug; check once while building clone rule |
 | #24842 | RSS rules export/import over WebAPI | ✅ | See WebAPI |

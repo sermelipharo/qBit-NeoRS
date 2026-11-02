@@ -6,7 +6,7 @@ struct AboutOverviewTab: View {
         Form {
             Section {
                 Text("An advanced BitTorrent client with a Rust core and a native SwiftUI interface, based on qBittorrent.")
-                Text("qBit NeoRS reimplements the features, preferences and WebAPI of qBittorrent 5.2.4.")
+                Text("qBit NeoRS reimplements the features, preferences and WebAPI of qBittorrent 5.3.0.")
                     .foregroundStyle(.secondary)
                 Text("Copyright © 2006-2026 The qBittorrent project")
                     .foregroundStyle(.secondary)

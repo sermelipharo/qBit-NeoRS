@@ -43,7 +43,7 @@ final class DemoClient: CoreClient {
     func version() -> String { "v0.2.3" }
 
     func buildInfo() -> BuildInfo {
-        BuildInfo(app: "0.2.3", qbittorrentCompat: "5.2.4", webapi: "2.15.1", engine: "Demo session",
+        BuildInfo(app: "0.2.3", qbittorrentCompat: "5.3.0", webapi: "2.16.2", engine: "Demo session",
                   rustc: "-", platform: "macos", bitness: 64)
     }
 

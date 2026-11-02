@@ -28,6 +28,6 @@ pub const MAX_ETA: i64 = 8_640_000;
 /// Ratios at or above this are reported as -1 / "∞".
 pub const MAX_RATIO: f64 = 9999.0;
 /// Upstream qBittorrent version this build is feature-compatible with.
-pub const QBT_COMPAT_VERSION: &str = "5.2.4";
+pub const QBT_COMPAT_VERSION: &str = "5.3.0";
 /// WebAPI version string reported by `/api/v2/app/webapiVersion`.
-pub const WEBAPI_VERSION: &str = "2.15.1";
+pub const WEBAPI_VERSION: &str = "2.16.2";

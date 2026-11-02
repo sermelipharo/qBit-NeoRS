@@ -88,6 +88,8 @@ enum GUIPreferenceKey: String, CaseIterable {
     case peerListColumns = "TorrentProperties/Peers/Columns"
     /// Column layout of the Content tab (`TableColumnLayout` JSON).
     case contentListColumns = "TorrentProperties/Content/Columns"
+    /// Column layout of the Manage Torrent Content dialog (`TableColumnLayout` JSON).
+    case manageContentColumns = "GUI/TorrentContentLayoutDialog/Columns"
     /// Column layout of the search results (`TableColumnLayout` JSON).
     case searchResultColumns = "SearchTab/Columns"
     /// qBit NeoRS only: the transfer list as a table or as cards (`TransferViewMode`).

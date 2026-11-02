@@ -258,6 +258,8 @@ targets:
       - path: QBTNeo/Features/RSS/RSSHTMLSanitizer.swift
       - path: QBTNeo/Features/RSS/RSSLinkPolicy.swift
       - path: QBTNeo/Features/Preferences/Components/IPAddressParser.swift
+      - path: QBTNeo/Dialogs/ManageContent/ContentPath.swift
+      - path: QBTNeo/Dialogs/ManageContent/ContentLayoutEdits.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: mk.lex.qbitneors.unit-tests

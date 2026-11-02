@@ -28,6 +28,9 @@ struct TransferContextMenu {
         menu.addAction(String(localized: "Set Location…"), symbol: Symbol.folder) { model.requestSetLocation(ids) }
         if ids.count == 1 {
             menu.addAction(String(localized: "Rename…"), symbol: Symbol.pencil) { model.requestRename(ids[0]) }
+            menu.addAction(String(localized: "Manage Content…"), symbol: Symbol.pencil, isEnabled: selection.hasMetadata) {
+                model.requestManageContent(ids[0])
+            }
         }
         menu.addAction(String(localized: "Edit Trackers…"), symbol: Symbol.antennaRadiowavesLeftAndRight) {
             model.sheet = .editTrackers(ids: ids)

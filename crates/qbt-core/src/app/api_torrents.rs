@@ -382,4 +382,9 @@ impl App {
     pub fn main_data_snapshot(&self) -> crate::bittorrent::sync::MainDataSnapshot {
         self.session.main_data_snapshot()
     }
+
+    /// `torrents/downloadFile`: see `Session::completed_file`.
+    pub fn completed_file(&self, hash: &str, file: &str) -> QbtResult<(std::path::PathBuf, std::path::PathBuf, String)> {
+        self.session.completed_file(hash, file)
+    }
 }

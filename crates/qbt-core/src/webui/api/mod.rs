@@ -39,6 +39,8 @@ pub enum Reply {
     Async(Value),
     /// Raw bytes with a MIME type and optional attachment file name.
     Bytes { data: Vec<u8>, mime: &'static str, filename: Option<String> },
+    /// An opened file streamed as an attachment (never read into memory).
+    File { file: tokio::fs::File, len: u64, filename: String },
 }
 
 impl Reply {
@@ -250,6 +252,7 @@ pub const ENDPOINTS: &[(&str, &str, Methods)] = &[
     ("torrents", "deleteTags", P),
     ("torrents", "renameFile", P),
     ("torrents", "renameFolder", P),
+    ("torrents", "downloadFile", GP),
     ("torrents", "setSSLParameters", P),
     ("rss", "addFolder", P),
     ("rss", "addFeed", P),
@@ -503,11 +506,11 @@ mod tests {
 
     #[test]
     fn endpoint_table() {
-        assert_eq!(ENDPOINTS.len(), 132);
+        assert_eq!(ENDPOINTS.len(), 133);
         let post = ENDPOINTS.iter().filter(|e| e.2 == Methods::PostOnly).count();
         let get = ENDPOINTS.len() - post;
         assert_eq!(post, 85);
-        assert_eq!(get, 47);
+        assert_eq!(get, 48);
         assert_eq!(method_filter("torrents", "SSLParameters"), Some(Methods::GetPost));
         assert_eq!(method_filter("torrents", "ssLParameters"), None);
         assert_eq!(method_filter("rss", "setFeedRefreshInterval"), Some(Methods::PostOnly));

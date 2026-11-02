@@ -137,7 +137,7 @@ Things to know before reading:
 | #23838 | `mail_notification_encryption_type` | ✅ | Replaces `mail_notification_ssl_enabled` in `app/preferences` |
 | #24134 | `transfer/getSpeedLimits`, `transfer/setSpeedLimits` | ✅ | Both modes' limits in bytes/s; `setSpeedLimits` is POST-only, needs all four keys and normalises them like `setPreferences` |
 | #24253 | `max_outstanding_block_requests` | ⬜ | See Core/engine |
-| #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ⬜ | Serve a completed file from torrent content. Security: resolve against the torrent's content root only, reject `..` and symlink escape, require the file complete, stream with `Content-Disposition` |
+| #24135 | `torrents/downloadFile` (`hash`, `file` as index or relative path) | ✅ | `Session::completed_file` (only files of the torrent, complete), `open_inside` (canonical path inside the torrent folder, `O_NOFOLLOW`, regular file), streamed `Reply::File` with Content-Length; e2e `download_completed_files` incl. a symlink swap and login check |
 | #24056 | `rss/cloneRule` (`sourceName`, `cloneName`) | ✅ | `RssManager::clone_rule` |
 | #24043 | `share_limits_mode` in maindata, prefs and `setShareLimits` | ✅ | `torrents/info` and `sync/maindata` report the torrent's own mode; `app/preferences` `share_limits_mode` (unknown → MatchAny); `torrents/add` `shareLimitsMode`. Deviation: `setShareLimits` keeps `shareLimitsMode` optional (missing = Default) so clients written for 5.2 still work |
 | #23856 (2.15.2) | `app/getFreeSpaceAtPath` | ✅ | `webui/api/app.rs:92`, route `webui/api/mod.rs:173` (the changelog line's `Action` suffix is the C++ method name; the real route is `getFreeSpaceAtPath`) |

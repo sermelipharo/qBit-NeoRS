@@ -1127,3 +1127,66 @@ fn rss_rules_export_and_import() {
         assert_eq!(h.get("/api/v2/rss/importRules", Some(&c)).await.status(), 405);
     });
 }
+
+/// qBittorrent 5.3's `torrents/downloadFile`: a complete file by index or
+/// path, streamed as an attachment; incomplete files, bad indexes and
+/// paths, and links leaving the torrent folder are refused.
+#[test]
+fn download_completed_files() {
+    let h = Harness::new(|_| {});
+    let base = h._dir.path().to_path_buf();
+    h.block(async {
+        let c = h.login().await;
+        let tor = crate::migrate::libtorrent::tests::sample_torrent(16, &[7u8; 48], b"nfo!");
+        let id = crate::bittorrent::metainfo::parse_torrent(&tor, Default::default()).unwrap().meta.id();
+        let save = base.join("dl");
+        std::fs::create_dir_all(save.join("dir")).unwrap();
+        // 48 bytes: a.mkv fills three whole pieces, so it completes without b.nfo.
+        std::fs::write(save.join("dir/a.mkv"), [7u8; 48]).unwrap();
+        let form = reqwest::multipart::Form::new()
+            .part("torrents", reqwest::multipart::Part::bytes(tor.clone()).file_name("x.torrent"))
+            .text("savepath", save.to_string_lossy().into_owned())
+            .text("stopped", "false");
+        let r = h.client.post(h.url("/api/v2/torrents/add")).header("Cookie", &c).multipart(form).send().await.unwrap();
+        assert_eq!(r.status(), 200);
+        let get = |file: &str| {
+            let rb = h.client.get(h.url(&format!("/api/v2/torrents/downloadFile?hash={id}&file={file}"))).header("Cookie", c.clone());
+            async move { rb.send().await.unwrap() }
+        };
+        // a.mkv is checked complete; b.nfo is missing.
+        let mut last = String::new();
+        for _ in 0..600 {
+            let r = get("0").await;
+            if r.status() == 200 {
+                last.clear();
+                break;
+            }
+            last = format!("{} {}", r.status(), r.text().await.unwrap());
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(last.is_empty(), "a.mkv never became downloadable: {last}");
+        let r = get("0").await;
+        assert_eq!(r.headers()["content-type"], "application/octet-stream");
+        assert_eq!(r.headers()["content-length"], "48");
+        assert!(r.headers()["content-disposition"].to_str().unwrap().contains("a.mkv"));
+        assert_eq!(r.bytes().await.unwrap().as_ref(), &[7u8; 48]);
+        assert_eq!(get("dir%2Fa.mkv").await.status(), 200, "by relative path");
+        let r = get("1").await;
+        assert_eq!((r.status().as_u16(), r.text().await.unwrap()), (409, "File not fully downloaded".to_owned()));
+        assert_eq!(get("2").await.text().await.unwrap(), "File index 2 is out of bounds");
+        assert_eq!(get("-1").await.text().await.unwrap(), "\"-1\" is not a valid file index");
+        assert_eq!(get("..%2F..%2Fetc%2Fpasswd").await.status(), 409);
+        let r = h.get("/api/v2/torrents/downloadFile?hash=0123456789abcdef0123456789abcdef01234567&file=0", Some(&c)).await;
+        assert_eq!(r.status(), 404);
+        assert_eq!(h.get(&format!("/api/v2/torrents/downloadFile?hash={id}&file=0"), None).await.status(), 403, "login required");
+
+        // A link swapped in for the completed file is not followed outside.
+        let secret = base.join("secret.txt");
+        std::fs::write(&secret, b"secret").unwrap();
+        std::fs::remove_file(save.join("dir/a.mkv")).unwrap();
+        std::os::unix::fs::symlink(&secret, save.join("dir/a.mkv")).unwrap();
+        let r = get("0").await;
+        assert_eq!(r.status(), 409);
+        assert!(!r.text().await.unwrap().contains("secret"));
+    });
+}

@@ -278,6 +278,7 @@ pub async fn dispatch(c: &mut Call<'_>, action: &str) -> ApiResult {
             Ok(Reply::ok())
         }
         "renameFile" | "renameFolder" => rename_path(c, action == "renameFile").await,
+        "downloadFile" => download_file(c).await,
         _ => Err(ApiError::endpoint_not_found()),
     }
 }
@@ -1196,6 +1197,43 @@ async fn rename_path(c: &mut Call<'_>, file: bool) -> ApiResult {
         other => ApiError::conflict(super::error_message(&other)),
     })?;
     Ok(Reply::ok())
+}
+
+/// `torrents/downloadFile` (qBittorrent 5.3): a completely downloaded file
+/// of a torrent, chosen by index or relative path. Only files listed by
+/// the torrent are served; the resolved path (symbolic links followed)
+/// must lie inside the torrent's folder, and the final open refuses links,
+/// so a link planted in the download folder cannot expose other files.
+async fn download_file(c: &mut Call<'_>) -> ApiResult {
+    c.params.require(&["hash", "file"])?;
+    let (root, path, name) = c.app.completed_file(&hash(c, "hash"), c.params.str("file")).map_err(|e| match e {
+        QbtError::NotFound { .. } => ApiError::not_found_msg("Torrent not found"),
+        other => ApiError::conflict(super::error_message(&other)),
+    })?;
+    let opened = tokio::task::spawn_blocking(move || open_inside(&root, &path))
+        .await
+        .map_err(|_| ApiError::internal(""))?
+        .map_err(|_| ApiError::conflict("File not fully downloaded"))?;
+    let (file, len) = opened;
+    let filename = name.rsplit('/').next().unwrap_or(&name).to_owned();
+    Ok(Reply::File { file: tokio::fs::File::from_std(file), len, filename })
+}
+
+/// Opens `path` for reading if, with links resolved, it is a regular file
+/// inside `root`.
+fn open_inside(root: &std::path::Path, path: &std::path::Path) -> std::io::Result<(std::fs::File, u64)> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let root = std::fs::canonicalize(root)?;
+    let real = std::fs::canonicalize(path)?;
+    if real == root || !real.starts_with(&root) {
+        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "outside the torrent folder"));
+    }
+    let file = std::fs::OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(&real)?;
+    let meta = file.metadata()?;
+    if !meta.is_file() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "not a regular file"));
+    }
+    Ok((file, meta.len()))
 }
 
 #[cfg(test)]

@@ -157,6 +157,47 @@ impl Session {
         (g == engine.generation).then_some(h)
     }
 
+    /// `torrents/downloadFile` (qBittorrent 5.3): the folder the engine
+    /// writes the torrent to, the on-disk path of one of its files (by
+    /// index, or by its relative path) and that relative path. The file
+    /// must be completely downloaded. The caller must still check that the
+    /// path, links resolved, stays inside the folder.
+    pub fn completed_file(&self, hash: &str, file: &str) -> QbtResult<(PathBuf, PathBuf, String)> {
+        let (id, engine_index, name, location) = self.with_torrent(hash, |e, env| -> QbtResult<_> {
+            let Some(meta) = e.meta.as_deref() else {
+                return Err(QbtError::conflict("Torrent metadata not available"));
+            };
+            let count = meta.files.len();
+            let index = match file.trim().parse::<i64>() {
+                Ok(i) if i < 0 => return Err(QbtError::conflict(format!("\"{file}\" is not a valid file index"))),
+                Ok(i) if i as usize >= count => return Err(QbtError::conflict(format!("File index {i} is out of bounds"))),
+                Ok(i) => i as usize,
+                Err(_) => {
+                    let wanted = paths::normalize_user_path(file);
+                    e.file_paths
+                        .iter()
+                        .position(|p| *p == wanted)
+                        .ok_or_else(|| QbtError::conflict(format!("\"{file}\" is not a valid file path")))?
+                }
+            };
+            let done = e.rt.file_progress.get(index).copied().unwrap_or(0);
+            if done < meta.files[index].size {
+                return Err(QbtError::conflict("File not fully downloaded"));
+            }
+            let name = e.file_paths.get(index).cloned().unwrap_or_else(|| meta.files[index].path.clone());
+            Ok((e.id.clone(), meta.files[index].engine_index as usize, name, e.actual_location(env)))
+        })??;
+        // A stopped torrent has no engine handle: its files are at their
+        // stored location (a complete file has no `.!qB` extension).
+        let (Some(h), Some(engine)) = (self.handle_of(&id), self.engine()) else {
+            let root = PathBuf::from(location);
+            return Ok((root.clone(), root.join(&name), name));
+        };
+        let rel = engine.actual_file_paths(&h).get(engine_index).cloned().ok_or_else(|| QbtError::conflict("File not fully downloaded"))?;
+        let root = engine.output_folder(&h);
+        Ok((root.clone(), root.join(rel), name))
+    }
+
     /// Hands a torrent with metadata to the engine.
     pub(super) async fn attach(&self, id: &str) {
         let Some(engine) = self.engine() else { return };

@@ -162,11 +162,13 @@ struct Out {
     gzipped: bool,
     headers: Vec<(HeaderName, HeaderValue)>,
     close: bool,
+    /// A file streamed instead of `body` (with its length).
+    stream: Option<Box<(tokio::fs::File, u64)>>,
 }
 
 impl Out {
     fn new(status: StatusCode) -> Self {
-        Self { status, content_type: None, body: Bytes::new(), gzipped: false, headers: Vec::new(), close: false }
+        Self { status, content_type: None, body: Bytes::new(), gzipped: false, headers: Vec::new(), close: false, stream: None }
     }
 
     fn text(status: StatusCode, text: impl Into<String>) -> Self {
@@ -196,6 +198,15 @@ impl Out {
                 if let Some(f) = filename
                     && let Ok(v) = HeaderValue::from_str(&content_disposition(&f))
                 {
+                    o.headers.push((header::CONTENT_DISPOSITION, v));
+                }
+                o
+            }
+            Reply::File { file, len, filename } => {
+                let mut o = Self::new(StatusCode::OK);
+                o.content_type = Some("application/octet-stream");
+                o.stream = Some(Box::new((file, len)));
+                if let Ok(v) = HeaderValue::from_str(&content_disposition(&filename)) {
                     o.headers.push((header::CONTENT_DISPOSITION, v));
                 }
                 o
@@ -882,6 +893,21 @@ fn system_locale() -> String {
 
 /// Compression, security headers and conversion to an HTTP response.
 fn finish(mut out: Out, cfg: &WebConfig, gzip_ok: bool) -> Response<Body> {
+    if let Some(stream) = out.stream.take() {
+        let (file, len) = *stream;
+        // Streamed as is: no compression, the length known up front.
+        let mut resp = Response::new(Body::from_stream(tokio_util::io::ReaderStream::with_capacity(file, 64 * 1024)));
+        let h = resp.headers_mut();
+        h.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+        h.insert(header::CONTENT_LENGTH, HeaderValue::from(len));
+        for (k, v) in out.headers {
+            h.append(k, v);
+        }
+        for (k, v) in &cfg.headers {
+            h.insert(k.clone(), v.clone());
+        }
+        return resp;
+    }
     let compressible = !matches!(out.content_type, Some("image/png" | "image/gif"));
     if out.gzipped {
         if !gzip_ok {

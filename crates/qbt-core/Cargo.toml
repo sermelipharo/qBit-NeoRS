@@ -47,6 +47,7 @@ socket2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "fs", "process", "net", "io-util", "signal"] }
+tokio-util = { workspace = true, features = ["io"] }
 tokio-rustls = { workspace = true, features = ["tls12", "aws_lc_rs"] }
 tracing.workspace = true
 url = { workspace = true, features = ["std"] }

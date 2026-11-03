@@ -15,6 +15,7 @@
 //! Announce state is kept per tracker; the per-address-family results of the
 //! last announce are kept for display ([`TrackerEndpointStatus`]).
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 use serde_derive::Serialize;
@@ -37,6 +38,9 @@ const MAX_INTERVAL: Duration = Duration::from_secs(7 * 24 * 3600);
 const DEFAULT_MIN_INTERVAL: Duration = Duration::from_secs(30);
 
 pub type TrackerId = u64;
+
+/// Numbers announce results process-wide (see [`TrackerStatus::announce_seq`]).
+static ANNOUNCE_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Tracker state as shown in the Trackers tab (qBittorrent
 /// `TrackerEndpointState`).
@@ -141,6 +145,11 @@ pub struct TrackerStatus {
     /// Time until announcing is allowed again.
     pub min_announce_in: Option<Duration>,
     pub last_announce: Option<SystemTime>,
+    /// Number of the last announce result recorded for this tracker (0:
+    /// none yet). Numbers increase with every result of any tracker of any
+    /// torrent in the process, so a watcher can find the results recorded
+    /// since it last looked by remembering the largest number it saw.
+    pub announce_seq: u64,
     pub endpoints: Vec<TrackerEndpointStatus>,
 }
 
@@ -180,6 +189,7 @@ struct TrackerEntry {
     message: String,
     tracker_id: Option<Vec<u8>>,
     last_announce: Option<SystemTime>,
+    announce_seq: u64,
     endpoints: Vec<EndpointInfo>,
 
     scrape: Option<ScrapeData>,
@@ -217,6 +227,7 @@ impl TrackerEntry {
             message: String::new(),
             tracker_id: None,
             last_announce: None,
+            announce_seq: 0,
             endpoints: Vec::new(),
             scrape: None,
             scrape_updating: false,
@@ -737,6 +748,7 @@ impl TrackerList {
         let e = &mut self.entries[idx];
         e.updating = false;
         e.last_announce = Some(wall);
+        e.announce_seq = ANNOUNCE_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
         e.endpoints = Self::endpoint_infos(&e.endpoints, outcome);
 
         let ok: Vec<_> = outcome
@@ -913,6 +925,7 @@ impl TrackerList {
             next_announce_in,
             min_announce_in,
             last_announce: e.last_announce,
+            announce_seq: e.announce_seq,
             endpoints,
         }
     }
@@ -1148,6 +1161,32 @@ mod tests {
         let p = l.plan(t2, false, &s);
         assert_eq!(urls(&p), vec![B]);
         assert_eq!(p[0].event, AnnounceEvent::None);
+    }
+
+    #[test]
+    fn announce_results_are_numbered() {
+        let mut l = list(&[(A, 0), (B, 0)]);
+        let s = settings(true, true);
+        let t0 = Instant::now();
+        let seq = |l: &TrackerList, url: &str| {
+            l.statuses(t0).into_iter().find(|x| x.url == url).unwrap().announce_seq
+        };
+        assert_eq!(seq(&l, A), 0);
+        l.plan(t0, false, &s);
+        let (a, b) = (id_of(&l, A), id_of(&l, B));
+        l.apply_announce(a, AnnounceEvent::Started, &ok(1800), t0, SystemTime::now(), &s);
+        let first = seq(&l, A);
+        assert!(first > 0);
+        assert_eq!(seq(&l, B), 0);
+        l.apply_announce(b, AnnounceEvent::Started, &fail(TrackerErrorKind::Other), t0, SystemTime::now(), &s);
+        assert!(seq(&l, B) > first);
+        // A list of another torrent continues the numbering.
+        let mut other = list(&[(A, 0)]);
+        other.plan(t0, false, &s);
+        let oa = id_of(&other, A);
+        other.apply_announce(oa, AnnounceEvent::Started, &ok(1800), t0, SystemTime::now(), &s);
+        assert!(other.statuses(t0)[0].announce_seq > seq(&l, B));
+        assert_eq!(seq(&l, A), first);
     }
 
     #[test]

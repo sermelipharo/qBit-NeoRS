@@ -16,7 +16,7 @@ use super::share_limits::{self, ShareInputs};
 use super::torrent::{Env, Phase};
 use super::{scheduler, trackers};
 use crate::events::CoreEvent;
-use crate::plugins::{PluginArg, PluginHandler};
+use crate::plugins::{PluginArg, PluginHandler, TorrentArg};
 use crate::model::*;
 use crate::net::http::{self, HttpPurpose, HttpRequest};
 use crate::prefs::{BtProtocol, Preferences};
@@ -57,6 +57,12 @@ pub(super) enum TorrentEvent {
     Stopped(String),
     Errored { id: String, name: String, message: String, disk_full: bool },
     Checked(String),
+    /// Trackers of the torrent that announced since the last tick, for
+    /// plugins (`onTorrentAnnounce*`, `onTorrentTrackerStatusesUpdated`).
+    Announced { id: String, trackers: Vec<TrackerEntry> },
+    /// Torrents whose state changed since plugins last got them in
+    /// `onTorrentsUpdated` (at most one per tick).
+    Updated(Vec<String>),
 }
 
 fn is_disk_full(message: &str) -> bool {
@@ -475,7 +481,7 @@ impl Session {
         for ev in events {
             match ev {
                 TorrentEvent::Finished(id) => finished.push(id),
-                TorrentEvent::Stopped(id) => self.plugin_event(PluginHandler::TorrentStopped, &id, Vec::new),
+                TorrentEvent::Stopped(id) => self.plugin_torrent_stopped(&id),
                 TorrentEvent::Errored { id, name, message, disk_full } => {
                     self.ctx.logger.warning(format!("Torrent errored. Torrent: \"{name}\". Error: \"{message}\""));
                     let text = message.clone();
@@ -488,6 +494,11 @@ impl Session {
                 }
                 TorrentEvent::Checked(id) => {
                     let _ = id;
+                }
+                TorrentEvent::Announced { id, trackers } => self.plugin_announced(&id, trackers),
+                TorrentEvent::Updated(ids) => {
+                    let torrents = ids.into_iter().map(|id| TorrentArg { id, captured: None }).collect();
+                    self.ctx.plugins.emit(PluginHandler::TorrentsUpdated, vec![PluginArg::Torrents(torrents)], &self.ctx.logger);
                 }
             }
         }
@@ -553,6 +564,17 @@ impl Session {
         let slow_dl = prefs.bittorrent.slow_torrent_dl_rate_threshold.max(0) * 1024;
         let slow_ul = prefs.bittorrent.slow_torrent_ul_rate_threshold.max(0) * 1024;
         let recheck_on_complete = prefs.advanced.recheck_completed_torrents;
+        let plugins = &self.ctx.plugins;
+        let want_announces = [
+            PluginHandler::TorrentAnnounceSuccess,
+            PluginHandler::TorrentAnnounceWarning,
+            PluginHandler::TorrentAnnounceError,
+            PluginHandler::TorrentTrackerStatusesUpdated,
+        ]
+        .into_iter()
+        .any(|h| plugins.wants(h));
+        // Held back while the previous one waits for the plugins thread.
+        let want_updated = plugins.wants(PluginHandler::TorrentsUpdated) && !plugins.torrents_updated_queued();
         let mut st = self.state.write();
         for e in st.torrents.values_mut() {
             let status = match (&e.rt.engine, engine) {
@@ -637,6 +659,22 @@ impl Session {
                     e.trackers = s.iter().map(|x| TrackerTierEntry { url: x.url.clone(), tier: x.tier as i64 }).collect();
                     e.rt.dirty = true;
                 }
+                // Announce results since the last tick (tracker alerts in
+                // libtorrent). Followed even without plugins, so turning one
+                // on doesn't report old results.
+                let seq = s.iter().map(|x| x.announce_seq).max().unwrap_or(0);
+                if seq > e.rt.announce_seq {
+                    if want_announces && !e.stopped {
+                        let since = e.rt.announce_seq;
+                        let trackers = s
+                            .iter()
+                            .filter(|x| x.announce_seq > since)
+                            .map(|x| super::engine::tracker_entry(x, now_s))
+                            .collect();
+                        events.push(TorrentEvent::Announced { id: e.id.clone(), trackers });
+                    }
+                    e.rt.announce_seq = seq;
+                }
             }
             let checking = matches!(e.rt.phase, Phase::Checking { .. });
             if !status.file_progress.is_empty() && !checking {
@@ -714,6 +752,19 @@ impl Session {
                     e.rt.dirty = true;
                     events.push(TorrentEvent::Finished(e.id.clone()));
                 }
+            }
+        }
+        if want_updated {
+            let mut updated = Vec::new();
+            for e in st.torrents.values_mut() {
+                let fp = e.update_fingerprint();
+                if fp != e.rt.update_fingerprint {
+                    e.rt.update_fingerprint = fp;
+                    updated.push(e.id.clone());
+                }
+            }
+            if !updated.is_empty() {
+                events.push(TorrentEvent::Updated(updated));
             }
         }
         drop(st);

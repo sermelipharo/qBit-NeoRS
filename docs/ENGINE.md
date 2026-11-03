@@ -1482,10 +1482,15 @@ persists `tracker_list()` and restores it with `replace_trackers`.
 ### Status
 
 `TrackerStatus { url, tier, state, updating, message, peers, seeds, leechers,
-downloaded, next_announce_in, min_announce_in, last_announce, endpoints }`;
-`TrackerState` is `NotContacted | Working | NotWorking | TrackerError |
-Unreachable` (qBittorrent `TrackerEndpointState`; `updating` is separate, as in
-WebAPI 2.13). Counts are `None` when unknown (WebAPI `-1`).
+downloaded, next_announce_in, min_announce_in, last_announce, announce_seq,
+endpoints }`; `TrackerState` is `NotContacted | Working | NotWorking |
+TrackerError | Unreachable` (qBittorrent `TrackerEndpointState`; `updating` is
+separate, as in WebAPI 2.13). Counts are `None` when unknown (WebAPI `-1`).
+`announce_seq` numbers the tracker's last announce result (0: none); the
+numbers grow with every result of any tracker in the process, so the core
+finds the results recorded since its last look (they become the plugins'
+announce events, libtorrent's tracker alerts) by remembering the largest one
+per torrent.
 
 * Errors map like libtorrent's: a `failure reason` (HTTP) or error action
   (UDP) is `TrackerError`; an endpoint that could not be used (e.g. no IPv4

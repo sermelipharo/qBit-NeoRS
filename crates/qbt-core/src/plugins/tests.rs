@@ -456,8 +456,8 @@ function onTorrentStarted(t) error("broken") end
         e.torrent_event(PluginHandler::TorrentAdded, vec![]);
     }
     e.wait_log("was disabled because it ran out of time 3 times in a row");
-    let s = e.manager.status();
-    assert!(!s.plugins[0].enabled && s.plugins[0].failures >= 4);
+    // The status is published after the warning.
+    wait_status(&e.manager, |s| !s.plugins[0].enabled && s.plugins[0].failures >= 4);
     assert!(!e.ctx.plugins.wants(PluginHandler::TorrentAdded));
 }
 
@@ -471,4 +471,26 @@ fn full_queue_drops_events() {
     }
     assert!(e.ctx.plugins.dropped_events() > 0);
     e.wait_log("Plugins are too slow; dropped event \"onTorrentAdded\"");
+}
+
+#[test]
+fn torrents_updated_waits_for_the_previous_one() {
+    let e = engine(true);
+    let body = "NAME='U'\nVERSION='0.1'\nfunction onTorrentsUpdated(ts) qBittorrent.log('updated ' .. #ts) end";
+    e.install("U.lua", body).unwrap();
+    e.enable("U");
+    let bus = &e.ctx.plugins;
+    assert!(!bus.torrents_updated_queued());
+    let torrents = vec![TorrentArg { id: "ab".repeat(20), captured: None }; 2];
+    bus.emit(PluginHandler::TorrentsUpdated, vec![PluginArg::Torrents(torrents)], &e.ctx.logger);
+    e.wait_log("updated 2");
+    let start = Instant::now();
+    while bus.torrents_updated_queued() {
+        assert!(start.elapsed() < Duration::from_secs(10), "the flag was never cleared");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // Without a handler nothing is queued (or marked as queued).
+    e.rt.block_on(e.manager.set_enabled("U".into(), false)).unwrap();
+    bus.emit(PluginHandler::TorrentsUpdated, vec![PluginArg::Torrents(Vec::new())], &e.ctx.logger);
+    assert!(!bus.torrents_updated_queued());
 }

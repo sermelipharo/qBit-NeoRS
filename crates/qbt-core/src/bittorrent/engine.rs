@@ -953,6 +953,43 @@ impl Engine {
 }
 
 /// Tracker state as the model enum.
+/// A tracker's status as the API shows it; `now` is the Unix time the
+/// announce countdowns are added to.
+pub fn tracker_entry(t: &librqbit::TrackerStatus, now: i64) -> crate::model::TrackerEntry {
+    let opt = |v: Option<u32>| v.map(|v| v as i64).unwrap_or(-1);
+    let at = |d: Option<Duration>| d.map(|d| now + d.as_secs() as i64).unwrap_or(0);
+    crate::model::TrackerEntry {
+        url: t.url.clone(),
+        tier: t.tier as i64,
+        status: tracker_state(t.state),
+        updating: t.updating,
+        message: t.message.clone(),
+        num_peers: opt(t.peers),
+        num_seeds: opt(t.seeds),
+        num_leeches: opt(t.leechers),
+        num_downloaded: opt(t.downloaded),
+        next_announce: at(t.next_announce_in),
+        min_announce: at(t.min_announce_in),
+        endpoints: t
+            .endpoints
+            .iter()
+            .map(|ep| crate::model::TrackerEndpoint {
+                name: format!("{:?}", ep.family),
+                updating: ep.updating,
+                status: tracker_state(ep.state),
+                message: ep.message.clone(),
+                bt_version: 1,
+                num_peers: opt(ep.peers),
+                num_seeds: opt(ep.seeds),
+                num_leeches: opt(ep.leechers),
+                num_downloaded: opt(ep.downloaded),
+                next_announce: at(ep.next_announce_in),
+                min_announce: at(ep.min_announce_in),
+            })
+            .collect(),
+    }
+}
+
 pub fn tracker_state(s: TrackerState) -> crate::model::TrackerStatus {
     use crate::model::TrackerStatus as M;
     match s {

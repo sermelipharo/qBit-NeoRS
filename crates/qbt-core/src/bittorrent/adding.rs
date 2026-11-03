@@ -707,7 +707,7 @@ impl Session {
             self.emit(CoreEvent::TorrentMetadataReceived { hash: id.to_string(), name: name.clone() });
             self.plugin_event(PluginHandler::TorrentMetadataReady, id, Vec::new);
             if stopped_by_condition {
-                self.plugin_event(PluginHandler::TorrentStopped, id, Vec::new);
+                self.plugin_torrent_stopped(id);
             }
             self.backup_on_metadata(id, &name).await;
         }

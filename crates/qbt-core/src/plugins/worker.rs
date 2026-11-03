@@ -78,6 +78,7 @@ pub(crate) fn run(cfg: WorkerConfig, rx: Receiver<Job>) {
     while let Ok(job) = rx.recv() {
         match job {
             Job::Event { handler, args } => {
+                w.cfg.bus.taken(handler);
                 if !w.cfg.stopping.load(Ordering::Relaxed) {
                     w.dispatch(handler, args);
                 }

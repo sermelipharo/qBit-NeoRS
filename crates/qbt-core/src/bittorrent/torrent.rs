@@ -128,6 +128,12 @@ pub struct Runtime {
     /// Per-torrent engine settings must be (re)applied.
     pub settings_dirty: bool,
     pub last_checked_phase: bool,
+    /// The largest tracker `announce_seq` seen (announce results already
+    /// reported to plugins).
+    pub announce_seq: u64,
+    /// [`TorrentEntry::update_fingerprint`] when plugins last got the
+    /// torrent in `onTorrentsUpdated`.
+    pub update_fingerprint: u64,
 }
 
 pub struct TorrentEntry {
@@ -440,6 +446,26 @@ impl TorrentEntry {
     }
 
     /// Display name: explicit, metadata, magnet `dn`, else the id.
+    /// A hash of what `onTorrentsUpdated` reports changes of (libtorrent's
+    /// state updates): state, transfer, peers and tracker summary, without
+    /// the times that advance by themselves.
+    pub fn update_fingerprint(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        let r = &self.rt;
+        std::mem::discriminant(&r.phase).hash(&mut h);
+        if let Phase::Checking { checked_bytes } = r.phase {
+            checked_bytes.hash(&mut h);
+        }
+        (r.restoring, r.moving, r.missing_files, r.error.is_some(), r.queued, r.finished).hash(&mut h);
+        (self.stopped, self.forced, self.seed_status).hash(&mut h);
+        (r.dl_rate, r.ul_rate, self.all_time_download, self.all_time_upload, r.wasted).hash(&mut h);
+        (r.peers_live, r.seeders_live, r.connections, r.availability.to_bits()).hash(&mut h);
+        (r.swarm_seeds, r.swarm_leechers, r.tracker_warning, r.tracker_error, r.tracker_other_error).hash(&mut h);
+        r.working_tracker.hash(&mut h);
+        h.finish()
+    }
+
     pub fn display_name(&self) -> String {
         if !self.name.is_empty() {
             return self.name.clone();

@@ -157,3 +157,166 @@ fn upstream_example_plugins() {
     wait_until("engine stopped", || !app.plugins_status().running);
     app.shutdown();
 }
+
+/// A local HTTP tracker: `/ok/announce` answers, `/warn/announce` answers
+/// with a warning message and `/fail/announce` with a failure reason.
+fn serve_tracker() -> u16 {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut request = [0u8; 4096];
+            let n = stream.read(&mut request).unwrap_or(0);
+            let request = String::from_utf8_lossy(&request[..n]);
+            let body = if request.starts_with("GET /fail/") {
+                "d14:failure reason4:nopee"
+            } else if request.starts_with("GET /warn/") {
+                "d15:warning message4:slow8:intervali1800e5:peers0:e"
+            } else {
+                "d8:intervali1800e5:peers0:e"
+            };
+            let reply = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            let _ = stream.write_all(reply.as_bytes());
+        }
+    });
+    port
+}
+
+const PROBE: &str = r#"
+NAME = "Probe"
+VERSION = "1.0"
+
+local updates = 0
+
+function onTorrentsUpdated(torrents)
+    updates = updates + 1
+    if updates == 1 then
+        qBittorrent.log(string.format("probe: updated %s (%d)", torrents[1].name, #torrents))
+    end
+end
+
+function onTorrentAnnounceSuccess(torrent, url)
+    qBittorrent.log("probe: success " .. url)
+end
+
+function onTorrentAnnounceWarning(torrent, url)
+    qBittorrent.log("probe: warning " .. url)
+end
+
+function onTorrentAnnounceError(torrent, url)
+    qBittorrent.log("probe: error " .. url)
+end
+
+function onTorrentTrackerStatusesUpdated(torrent, statuses)
+    for url, status in pairs(statuses) do
+        qBittorrent.log(string.format("probe: status %s %d '%s' of %s", url, status.state, status.message, torrent.name))
+    end
+end
+
+function onTorrentContentFileRenamed(torrent, index, oldPath)
+    qBittorrent.log(string.format("probe: renamed %d %s -> %s", index, oldPath, torrent:filePath(index)))
+end
+
+function invoke()
+    qBittorrent.log("probe: updates " .. updates)
+end
+"#;
+
+fn probe_updates(app: &App, rt: &tokio::runtime::Runtime) -> u64 {
+    let before = logs(app).iter().filter(|l| l.contains("probe: updates ")).count();
+    rt.block_on(app.invoke_plugin("Probe".into())).unwrap();
+    wait_until("probe count", || logs(app).iter().filter(|l| l.contains("probe: updates ")).count() > before);
+    let line = logs(app).into_iter().rfind(|l| l.contains("probe: updates ")).unwrap();
+    line.rsplit(' ').next().unwrap().parse().unwrap()
+}
+
+/// `onTorrentsUpdated`, the announce events, tracker status updates and the
+/// file renames of "Manage Torrent Content", against local trackers.
+#[test]
+fn torrent_update_tracker_and_rename_events() {
+    let tmp = tempfile::tempdir().unwrap();
+    let profile = tmp.path().join("profile");
+    let downloads = tmp.path().join("downloads");
+    write_prefs(&profile, &downloads);
+    let data = downloads.join("Probe");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("a.bin"), vec![1u8; 70_000]).unwrap();
+    std::fs::write(data.join("b.bin"), vec![2u8; 30_000]).unwrap();
+    let torrent = make_torrent(&data);
+    let port = serve_tracker();
+
+    let app: Arc<App> =
+        App::new(AppConfig { profile_dir: profile.to_string_lossy().into_owned(), front_end: "test".into(), ..Default::default() })
+            .expect("App::new");
+    let rt = app.runtime();
+    // The trackers are on 127.0.0.1.
+    let mut p = app.preferences();
+    p.advanced.ssrf_mitigation = false;
+    app.set_preferences(p).unwrap();
+    wait_until("plugins engine", || app.plugins_status().running);
+    let file = tmp.path().join("Probe.lua");
+    std::fs::write(&file, PROBE).unwrap();
+    rt.block_on(app.install_plugin(file.to_string_lossy().into_owned())).unwrap();
+    rt.block_on(app.set_plugin_enabled("Probe".into(), true)).unwrap();
+
+    let hash = rt
+        .block_on(app.add_torrent(
+            TorrentSource::Bytes { data: torrent },
+            AddTorrentParams { save_path: Some(downloads.to_string_lossy().into()), ..Default::default() },
+        ))
+        .expect("add");
+    wait_until("seeding", || app.torrent(hash.clone()).is_ok_and(|t| t.progress == 1.0));
+    wait_log(&app, "probe: updated Probe (1)");
+
+    let url = |kind: &str| format!("http://127.0.0.1:{port}/{kind}/announce");
+    let trackers = ["ok", "warn", "fail"]
+        .iter()
+        .enumerate()
+        .map(|(tier, kind)| TrackerTierEntry { url: url(kind), tier: tier as i64 })
+        .collect();
+    app.add_trackers(hash.clone(), trackers).unwrap();
+    wait_log(&app, &format!("probe: success {}", url("ok")));
+    wait_log(&app, &format!("probe: warning {}", url("warn")));
+    wait_log(&app, &format!("probe: success {}", url("warn")));
+    wait_log(&app, &format!("probe: error {}", url("fail")));
+    wait_log(&app, &format!("probe: status {} 2 '' of Probe", url("ok")));
+    wait_log(&app, &format!("probe: status {} 2 'slow' of Probe", url("warn")));
+    wait_log(&app, &format!("probe: status {} 5 'nope' of Probe", url("fail")));
+    // Each result is reported once.
+    std::thread::sleep(Duration::from_millis(600));
+    let count = |needle: &str| logs(&app).iter().filter(|l| l.contains(needle)).count();
+    assert_eq!(count(&format!("probe: success {}", url("ok"))), 1);
+    assert_eq!(count(&format!("probe: error {}", url("fail"))), 1);
+    assert_eq!(count(&format!("probe: warning {}", url("ok"))), 0);
+
+    // Stopping resets the statuses (qBittorrent reports them before
+    // onTorrentStopped).
+    rt.block_on(app.stop_torrents(vec![hash.clone()])).unwrap();
+    wait_log(&app, &format!("probe: status {} 1 '' of Probe", url("fail")));
+    // A stopped torrent with nothing changing is not reported again.
+    std::thread::sleep(Duration::from_millis(1000));
+    let idle = probe_updates(&app, rt);
+    std::thread::sleep(Duration::from_millis(1500));
+    assert_eq!(probe_updates(&app, rt), idle, "an idle torrent was reported as updated");
+
+    // Manage Torrent Content: one event per renamed file, with its old path.
+    let files = app.files(hash.clone(), vec![]).unwrap();
+    let old = files.iter().find(|f| f.name.ends_with("a.bin")).unwrap();
+    let new_path = old.name.replace("a.bin", "sub/c.bin");
+    let failures = rt
+        .block_on(app.rename_files(
+            hash.clone(),
+            vec![
+                FileRename { index: old.index, new_path: new_path.clone() },
+                FileRename { index: 99, new_path: "x".into() },
+            ],
+        ))
+        .unwrap();
+    assert_eq!(failures.len(), 1);
+    wait_log(&app, &format!("probe: renamed {} {} -> {new_path}", old.index, old.name));
+    assert_eq!(count("probe: renamed"), 1);
+
+    app.shutdown();
+}

@@ -391,6 +391,76 @@ impl Session {
         self.ctx.plugins.emit(handler, args, &self.ctx.logger);
     }
 
+    /// `SessionImpl::handleTorrentStopped` for plugins: the torrent's
+    /// tracker statuses are reset (`onTorrentTrackerStatusesUpdated`), then
+    /// `onTorrentStopped`.
+    pub(super) fn plugin_torrent_stopped(&self, id: &str) {
+        self.plugin_trackers_reset(id);
+        self.plugin_event(PluginHandler::TorrentStopped, id, Vec::new);
+    }
+
+    /// `onTorrentTrackerStatusesUpdated` with every tracker of the torrent
+    /// back to "not contacted" (`TorrentImpl::resetTrackerEntryStatuses`).
+    pub(super) fn plugin_trackers_reset(&self, id: &str) {
+        if !self.ctx.plugins.wants(PluginHandler::TorrentTrackerStatusesUpdated) {
+            return;
+        }
+        let Ok(list) = self.with_torrent(id, |e, _| {
+            e.trackers
+                .iter()
+                .map(|t| TrackerEntry {
+                    url: t.url.clone(),
+                    tier: t.tier,
+                    status: TrackerStatus::NotContacted,
+                    num_peers: -1,
+                    num_seeds: -1,
+                    num_leeches: -1,
+                    num_downloaded: -1,
+                    ..Default::default()
+                })
+                .collect::<Vec<_>>()
+        }) else {
+            return;
+        };
+        self.plugin_event(PluginHandler::TorrentTrackerStatusesUpdated, id, || vec![PluginArg::TrackerStatuses(list)]);
+    }
+
+    /// Announce results of a torrent's trackers for plugins, like
+    /// libtorrent's tracker alerts: `onTorrentAnnounceWarning` (an answer
+    /// with a warning message) and `onTorrentAnnounceSuccess` per answer,
+    /// `onTorrentAnnounceError` per failure, then one
+    /// `onTorrentTrackerStatusesUpdated` with the trackers' new statuses.
+    pub(super) fn plugin_announced(&self, id: &str, trackers: Vec<TrackerEntry>) {
+        let plugins = &self.ctx.plugins;
+        let Some(torrent) = self.plugin_torrent(id) else { return };
+        let emit = |handler: PluginHandler, url: &str| {
+            if plugins.wants(handler) {
+                plugins.emit(handler, vec![PluginArg::Torrent(torrent.clone()), PluginArg::Str(url.to_string())], &self.ctx.logger);
+            }
+        };
+        for t in &trackers {
+            match t.status {
+                TrackerStatus::Working => {
+                    if !t.message.is_empty() {
+                        emit(PluginHandler::TorrentAnnounceWarning, &t.url);
+                    }
+                    emit(PluginHandler::TorrentAnnounceSuccess, &t.url);
+                }
+                TrackerStatus::NotWorking | TrackerStatus::TrackerError | TrackerStatus::Unreachable => {
+                    emit(PluginHandler::TorrentAnnounceError, &t.url);
+                }
+                _ => {}
+            }
+        }
+        if plugins.wants(PluginHandler::TorrentTrackerStatusesUpdated) {
+            plugins.emit(
+                PluginHandler::TorrentTrackerStatusesUpdated,
+                vec![PluginArg::Torrent(torrent), PluginArg::TrackerStatuses(trackers)],
+                &self.ctx.logger,
+            );
+        }
+    }
+
     /// A torrent for a plugin event, with a copy of its current state;
     /// `None` when there is no such torrent.
     pub(super) fn plugin_torrent(&self, id: &str) -> Option<TorrentArg> {
@@ -584,41 +654,8 @@ impl Session {
             pseudo("** [LSD] **", prefs.bittorrent.lsd, flags.2, counts[2], true),
         ];
         let now = now_secs();
-        let opt = |v: Option<u32>| v.map(|v| v as i64).unwrap_or(-1);
-        let at = |d: Option<std::time::Duration>| d.map(|d| now + d.as_secs() as i64).unwrap_or(0);
         if !statuses.is_empty() {
-            for t in statuses {
-                out.push(TrackerEntry {
-                    url: t.url.clone(),
-                    tier: t.tier as i64,
-                    status: super::engine::tracker_state(t.state),
-                    updating: t.updating,
-                    message: t.message.clone(),
-                    num_peers: opt(t.peers),
-                    num_seeds: opt(t.seeds),
-                    num_leeches: opt(t.leechers),
-                    num_downloaded: opt(t.downloaded),
-                    next_announce: at(t.next_announce_in),
-                    min_announce: at(t.min_announce_in),
-                    endpoints: t
-                        .endpoints
-                        .iter()
-                        .map(|ep| TrackerEndpoint {
-                            name: format!("{:?}", ep.family),
-                            updating: ep.updating,
-                            status: super::engine::tracker_state(ep.state),
-                            message: ep.message.clone(),
-                            bt_version: 1,
-                            num_peers: opt(ep.peers),
-                            num_seeds: opt(ep.seeds),
-                            num_leeches: opt(ep.leechers),
-                            num_downloaded: opt(ep.downloaded),
-                            next_announce: at(ep.next_announce_in),
-                            min_announce: at(ep.min_announce_in),
-                        })
-                        .collect(),
-                });
-            }
+            out.extend(statuses.iter().map(|t| super::engine::tracker_entry(t, now)));
         } else {
             for t in list {
                 out.push(TrackerEntry {

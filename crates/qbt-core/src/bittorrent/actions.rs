@@ -320,6 +320,15 @@ impl Session {
         }
         self.ctx.logger.info("BitTorrent session paused");
         self.reconcile(None).await;
+        // `SessionImpl::pause` resets every torrent's tracker statuses;
+        // stopped torrents had theirs reset when they stopped.
+        if self.ctx.plugins.wants(PluginHandler::TorrentTrackerStatusesUpdated) {
+            let running: Vec<String> =
+                self.state.read().torrents.values().filter(|e| !e.stopped).map(|e| e.id.clone()).collect();
+            for id in running {
+                self.plugin_trackers_reset(&id);
+            }
+        }
         self.emit(CoreEvent::SessionPaused);
     }
 
@@ -387,7 +396,7 @@ impl Session {
         });
         self.reconcile(Some(&ids)).await;
         for id in stopped {
-            self.plugin_event(PluginHandler::TorrentStopped, &id, Vec::new);
+            self.plugin_torrent_stopped(&id);
         }
         Ok(())
     }
@@ -871,14 +880,15 @@ impl Session {
     /// If the engine fails part-way, the files keep the paths the engine
     /// reached and the rest are reported with its reason.
     pub async fn rename_files_batch(&self, hash: &str, requests: Vec<(i64, String)>) -> QbtResult<Vec<(i64, String)>> {
-        let (plan, handle, name, engine_indexes) = self.with_torrent(hash, |e, _| {
+        let (plan, handle, name, engine_indexes, old_paths) = self.with_torrent(hash, |e, _| {
             if !e.has_metadata() {
                 return Err(QbtError::conflict("Torrent's metadata has not yet downloaded"));
             }
             let plan = batch_rename::plan(&e.file_paths, &requests);
             let engine_indexes: Vec<usize> =
                 e.meta.as_ref().map(|m| m.files.iter().map(|f| f.engine_index as usize).collect()).unwrap_or_default();
-            Ok((plan, e.rt.engine.as_ref().map(|(h, _)| h.clone()), e.display_name(), engine_indexes))
+            let old_paths: Vec<String> = plan.accepted.keys().filter_map(|&i| e.file_paths.get(i).cloned()).collect();
+            Ok((plan, e.rt.engine.as_ref().map(|(h, _)| h.clone()), e.display_name(), engine_indexes, old_paths))
         })??;
         let mut failures: Vec<(i64, String)> =
             plan.failures.iter().map(|(i, m)| (i64::try_from(*i).unwrap_or(-1), m.clone())).collect();
@@ -920,9 +930,9 @@ impl Session {
                 }
             }
         })?;
-        if let Err(err) = outcome {
+        let current = self.with_torrent(hash, |e, _| e.file_paths.clone())?;
+        if let Err(err) = &outcome {
             let reason = format!("{err:#}");
-            let current = self.with_torrent(hash, |e, _| e.file_paths.clone())?;
             for (&i, new) in &plan.accepted {
                 if current.get(i) != Some(new) {
                     self.ctx.logger.warning(format!(
@@ -932,6 +942,18 @@ impl Session {
                 }
             }
             failures.sort_by_key(|(i, _)| *i);
+        }
+        // Upstream renames file by file: one `onTorrentContentFileRenamed`
+        // per file that got its new path, with the path it had before.
+        if self.ctx.plugins.wants(PluginHandler::TorrentContentFileRenamed)
+            && let Some(torrent) = self.plugin_torrent(&hash.trim().to_ascii_lowercase())
+        {
+            for ((&i, new), old) in plan.accepted.iter().zip(old_paths) {
+                if current.get(i) == Some(new) {
+                    let args = vec![PluginArg::Torrent(torrent.clone()), PluginArg::Int(i as i64), PluginArg::Str(old)];
+                    self.ctx.plugins.emit(PluginHandler::TorrentContentFileRenamed, args, &self.ctx.logger);
+                }
+            }
         }
         Ok(failures)
     }

@@ -23,7 +23,7 @@ mod version;
 mod worker;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError};
 
 use parking_lot::Mutex;
@@ -237,6 +237,8 @@ struct BusInner {
     mask: AtomicU32,
     tx: Mutex<Option<SyncSender<Job>>>,
     dropped: AtomicU64,
+    /// An `onTorrentsUpdated` event waits in the queue.
+    torrents_updated_queued: AtomicBool,
 }
 
 impl PluginBus {
@@ -254,7 +256,23 @@ impl PluginBus {
         if tx.is_none() {
             self.set_mask(0);
         }
+        self.inner.torrents_updated_queued.store(false, Ordering::Relaxed);
         *self.inner.tx.lock() = tx;
+    }
+
+    /// Whether an `onTorrentsUpdated` event is still waiting for the
+    /// plugins thread: the session then holds the next one back (the
+    /// torrents that changed meanwhile go with a later one), so a slow plugin
+    /// sees at most one of them queued.
+    pub fn torrents_updated_queued(&self) -> bool {
+        self.inner.torrents_updated_queued.load(Ordering::Relaxed)
+    }
+
+    /// The plugins thread took an event off the queue.
+    pub(crate) fn taken(&self, handler: PluginHandler) {
+        if handler == PluginHandler::TorrentsUpdated {
+            self.inner.torrents_updated_queued.store(false, Ordering::Relaxed);
+        }
     }
 
     /// Queues an event; when the queue is full the event is dropped and a
@@ -265,9 +283,23 @@ impl PluginBus {
         }
         let tx = self.inner.tx.lock().clone();
         let Some(tx) = tx else { return };
+        let updated = handler == PluginHandler::TorrentsUpdated;
+        if updated {
+            self.inner.torrents_updated_queued.store(true, Ordering::Relaxed);
+        }
         match tx.try_send(Job::Event { handler, args }) {
             Ok(()) => {}
-            Err(TrySendError::Full(_)) => {
+            Err(e) if updated => {
+                self.inner.torrents_updated_queued.store(false, Ordering::Relaxed);
+                self.on_send_error(e, handler, logger);
+            }
+            Err(e) => self.on_send_error(e, handler, logger),
+        }
+    }
+
+    fn on_send_error(&self, e: TrySendError<Job>, handler: PluginHandler, logger: &Logger) {
+        match e {
+            TrySendError::Full(_) => {
                 let n = self.inner.dropped.fetch_add(1, Ordering::Relaxed);
                 if n.is_multiple_of(100) {
                     logger.warning(format!(
@@ -277,7 +309,7 @@ impl PluginBus {
                     ));
                 }
             }
-            Err(TrySendError::Disconnected(_)) => {}
+            TrySendError::Disconnected(_) => {}
         }
     }
 

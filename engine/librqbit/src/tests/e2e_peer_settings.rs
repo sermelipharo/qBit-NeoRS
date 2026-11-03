@@ -1,6 +1,7 @@
 // End-to-end checks of the session peer settings that mirror libtorrent's
-// `seeding_outgoing_connections`, `max_allowed_in_request_queue` and
-// `allow_multiple_connections_per_pid`, and of the automatic ban of peers
+// `seeding_outgoing_connections`, `max_allowed_in_request_queue`,
+// `allow_multiple_connections_per_pid` and
+// `allow_multiple_connections_per_ip`, and of the automatic ban of peers
 // sending corrupt data, over local TCP connections.
 
 use std::{
@@ -115,7 +116,17 @@ async fn start_leecher(
     listen: bool,
     peer_id: Option<Id20>,
 ) -> anyhow::Result<(Arc<Session>, Arc<ManagedTorrent>)> {
-    let session = new_session(out, listen, peer_id, Default::default()).await?;
+    start_leecher_with(torrent, out, listen, peer_id, Default::default()).await
+}
+
+async fn start_leecher_with(
+    torrent: Bytes,
+    out: &Path,
+    listen: bool,
+    peer_id: Option<Id20>,
+    peer_policy: PeerPolicyOptions,
+) -> anyhow::Result<(Arc<Session>, Arc<ManagedTorrent>)> {
+    let session = new_session(out, listen, peer_id, peer_policy).await?;
     let handle = session
         .add_torrent(
             AddTorrent::TorrentFileBytes(torrent),
@@ -337,6 +348,143 @@ async fn duplicate_peer_id(drop_checks: &DropChecks) -> anyhow::Result<()> {
     drop(server_handle);
     drop(clients);
     drop(server);
+    Ok(())
+}
+
+fn one_connection_per_ip() -> PeerPolicyOptions {
+    PeerPolicyOptions {
+        allow_multiple_connections_per_ip: false,
+        ..Default::default()
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_e2e_one_incoming_connection_per_ip() {
+    run("one_incoming_connection_per_ip", one_incoming_connection_per_ip).await;
+}
+
+// Leechers on 127.0.0.1 with different peer ids: the seeder keeps one
+// incoming connection while `allow_multiple_connections_per_ip` is off, and
+// takes another one once it is on.
+async fn one_incoming_connection_per_ip(drop_checks: &DropChecks) -> anyhow::Result<()> {
+    let (dir, torrent) = make_torrent(4, 500_000).await;
+    let (server, server_handle, server_addr) =
+        start_seeder(torrent.clone(), dir.path(), None, one_connection_per_ip()).await?;
+    drop_checks.add(&server, "server session");
+    // Keep the first leecher downloading for the whole test.
+    server_handle.set_ratelimits(LimitsConfig {
+        upload_bps: std::num::NonZeroU32::new(60_000),
+        download_bps: None,
+    });
+
+    let mut clients = Vec::new();
+    let start = async |i: usize| {
+        let out = tempfile::TempDir::with_prefix("rqbit_peerset_ip").unwrap();
+        let (client, handle) = start_leecher(torrent.clone(), out.path(), false, None).await?;
+        drop_checks.add(&client, format!("client session {i}"));
+        handle.add_peers(vec![server_addr]);
+        anyhow::Ok((client, handle, out))
+    };
+
+    clients.push(start(0).await?);
+    wait_until(
+        || {
+            ensure!(
+                server_handle.connections() == 1,
+                "first leecher not connected"
+            );
+            Ok(())
+        },
+        Duration::from_secs(20),
+    )
+    .await?;
+    clients.push(start(1).await?);
+    for _ in 0..30 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(server_handle.connections(), 1);
+    }
+    assert_eq!(clients[0].1.connections(), 1);
+    assert_eq!(clients[1].1.connections(), 0);
+
+    server.set_allow_multiple_connections_per_ip(true);
+    assert!(server.peer_policy().allow_multiple_connections_per_ip);
+    clients.push(start(2).await?);
+    wait_until(
+        || {
+            ensure!(
+                server_handle.connections() == 2,
+                "third leecher not connected"
+            );
+            Ok(())
+        },
+        Duration::from_secs(20),
+    )
+    .await?;
+    assert_eq!(clients[0].1.connections(), 1);
+
+    drop(server_handle);
+    drop(clients);
+    drop(server);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_e2e_one_outgoing_connection_per_ip() {
+    run("one_outgoing_connection_per_ip", one_outgoing_connection_per_ip).await;
+}
+
+// Two seeders on 127.0.0.1: a leecher with `allow_multiple_connections_per_ip`
+// off dials only one of them; turning it on dials the other.
+async fn one_outgoing_connection_per_ip(drop_checks: &DropChecks) -> anyhow::Result<()> {
+    let (dir, torrent) = make_torrent(4, 500_000).await;
+    let mut seeders = Vec::new();
+    for i in 0..2 {
+        let (server, handle, addr) =
+            start_seeder(torrent.clone(), dir.path(), None, Default::default()).await?;
+        drop_checks.add(&server, format!("server session {i}"));
+        // Slow, so the leecher stays connected for the whole test.
+        handle.set_ratelimits(LimitsConfig {
+            upload_bps: std::num::NonZeroU32::new(30_000),
+            download_bps: None,
+        });
+        seeders.push((server, handle, addr));
+    }
+    let out = tempfile::TempDir::with_prefix("rqbit_peerset_ip_out").unwrap();
+    let (client, handle) =
+        start_leecher_with(torrent, out.path(), false, None, one_connection_per_ip()).await?;
+    drop_checks.add(&client, "client session");
+    handle.add_peers(seeders.iter().map(|s| s.2).collect());
+    wait_until(
+        || {
+            ensure!(handle.connections() == 1, "leecher not connected");
+            Ok(())
+        },
+        Duration::from_secs(20),
+    )
+    .await?;
+    for _ in 0..30 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(handle.connections(), 1);
+    }
+    assert_eq!(
+        seeders.iter().map(|s| s.1.connections()).sum::<u32>(),
+        1,
+        "only one seeder is connected"
+    );
+
+    client.set_allow_multiple_connections_per_ip(true);
+    wait_until(
+        || {
+            ensure!(handle.connections() == 2, "second seeder not dialled");
+            Ok(())
+        },
+        Duration::from_secs(20),
+    )
+    .await?;
+
+    drop(handle);
+    drop(client);
+    drop(seeders);
     Ok(())
 }
 

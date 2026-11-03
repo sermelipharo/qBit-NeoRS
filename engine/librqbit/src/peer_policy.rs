@@ -79,6 +79,14 @@ pub struct PeerPolicyOptions {
     /// the two is closed right after the handshake.
     #[serde(default)]
     pub allow_multiple_connections_per_pid: bool,
+    /// Keep more than one connection per IP address in a torrent (libtorrent
+    /// `allow_multiple_connections_per_ip`). When off, an incoming
+    /// connection from an IP already connected to the torrent is refused and
+    /// other addresses of a connected (or connecting) IP aren't dialled.
+    /// I2P peers are never restricted. On by default here (librqbit's
+    /// behaviour); libtorrent and qBittorrent default to off.
+    #[serde(default = "default_true")]
+    pub allow_multiple_connections_per_ip: bool,
 }
 
 /// libtorrent's default `max_allowed_in_request_queue`.
@@ -115,6 +123,7 @@ impl Default for PeerPolicyOptions {
             seeding_outgoing_connections: true,
             max_allowed_in_request_queue: DEFAULT_MAX_ALLOWED_IN_REQUEST_QUEUE,
             allow_multiple_connections_per_pid: false,
+            allow_multiple_connections_per_ip: true,
         }
     }
 }
@@ -129,6 +138,7 @@ pub(crate) struct SessionPeerPolicy {
     seeding_outgoing_connections: AtomicBool,
     max_allowed_in_request_queue: AtomicU32,
     allow_multiple_connections_per_pid: AtomicBool,
+    allow_multiple_connections_per_ip: AtomicBool,
     /// uTP/TCP mixed mode throttles (set by the peer tick).
     pub mixed: MixedModeLimits,
     /// The global connection limit.
@@ -155,6 +165,9 @@ impl SessionPeerPolicy {
             )),
             allow_multiple_connections_per_pid: AtomicBool::new(
                 opts.allow_multiple_connections_per_pid,
+            ),
+            allow_multiple_connections_per_ip: AtomicBool::new(
+                opts.allow_multiple_connections_per_ip,
             ),
             mixed: MixedModeLimits::new(opts.mixed_mode),
             connections: ConnLimiter::new(
@@ -189,6 +202,7 @@ impl SessionPeerPolicy {
             seeding_outgoing_connections: self.seeding_outgoing_connections(),
             max_allowed_in_request_queue: self.max_allowed_in_request_queue(),
             allow_multiple_connections_per_pid: self.allow_multiple_connections_per_pid(),
+            allow_multiple_connections_per_ip: self.allow_multiple_connections_per_ip(),
         }
     }
 
@@ -202,6 +216,11 @@ impl SessionPeerPolicy {
 
     pub fn allow_multiple_connections_per_pid(&self) -> bool {
         self.allow_multiple_connections_per_pid
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn allow_multiple_connections_per_ip(&self) -> bool {
+        self.allow_multiple_connections_per_ip
             .load(Ordering::Relaxed)
     }
 
@@ -326,6 +345,7 @@ impl Session {
         self.set_seeding_outgoing_connections(opts.seeding_outgoing_connections);
         self.set_max_allowed_in_request_queue(opts.max_allowed_in_request_queue);
         self.set_allow_multiple_connections_per_pid(opts.allow_multiple_connections_per_pid);
+        self.set_allow_multiple_connections_per_ip(opts.allow_multiple_connections_per_ip);
     }
 
     /// Whether finished torrents make outgoing peer connections. Turning it
@@ -363,6 +383,23 @@ impl Session {
         self.peer_policy
             .allow_multiple_connections_per_pid
             .store(allow, Ordering::Relaxed);
+    }
+
+    /// Whether a torrent may keep more than one connection per IP address.
+    /// Applies to connections made from now on (established ones stay);
+    /// turning it on dials the addresses skipped meanwhile.
+    pub fn set_allow_multiple_connections_per_ip(&self, allow: bool) {
+        let was = self
+            .peer_policy
+            .allow_multiple_connections_per_ip
+            .swap(allow, Ordering::Relaxed);
+        if allow && !was {
+            let live =
+                self.with_torrents(|ts| ts.filter_map(|(_, t)| t.live()).collect::<Vec<_>>());
+            for t in live {
+                t.reconnect_all_not_needed_peers();
+            }
+        }
     }
 
     /// Session-wide upload slots (`None` = unlimited). Takes effect at once.
@@ -699,6 +736,7 @@ mod tests {
             seeding_outgoing_connections: false,
             max_allowed_in_request_queue: 300,
             allow_multiple_connections_per_pid: true,
+            allow_multiple_connections_per_ip: false,
         };
         let p = SessionPeerPolicy::new(opts);
         assert_eq!(p.options(), opts);
@@ -717,6 +755,8 @@ mod tests {
         assert!(p.seeding_outgoing_connections());
         assert_eq!(p.max_allowed_in_request_queue(), 2000);
         assert!(!p.allow_multiple_connections_per_pid());
+        // librqbit's: no limit per IP unless the front end sets one.
+        assert!(p.allow_multiple_connections_per_ip());
     }
 
     #[test]

@@ -141,6 +141,24 @@ impl PeerStates {
         })
     }
 
+    /// A connection, other than `except`, to the same IP address as `except`
+    /// (IPv4-mapped IPv6 counts as IPv4): a live one, or with `connecting`
+    /// also one being dialled. Must not be called while holding an entry of
+    /// the map.
+    pub fn connected_with_same_ip(&self, except: PeerHandle, connecting: bool) -> Option<PeerHandle> {
+        use crate::net::filter::canonical_ip;
+        let ip = canonical_ip(except.ip());
+        self.states.iter().find_map(|e| {
+            let addr = *e.key();
+            let counts = match e.value().get_state() {
+                PeerState::Live(_) => true,
+                PeerState::Connecting(_) => connecting,
+                _ => false,
+            };
+            (counts && addr != except && canonical_ip(addr.ip()) == ip).then_some(addr)
+        })
+    }
+
     pub fn drop_peer(&self, handle: PeerHandle) -> Option<Peer> {
         let p = self.states.remove(&handle).map(|r| r.1)?;
         let s = p.get_state();

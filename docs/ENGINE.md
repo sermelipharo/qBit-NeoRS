@@ -241,15 +241,16 @@ slowest); they may be retried later within the limit. The global limit does
 not disconnect. A torrent added without `peer_limit` (torrent or session) gets
 128, as before.
 
-### Seeding connections, incoming request queue, duplicate peer ids
+### Seeding connections, incoming request queue, duplicate peer ids and IPs
 
-Three libtorrent session settings (qBittorrent 5.3 advanced settings), part of
+Four libtorrent session settings (qBittorrent advanced settings), part of
 `PeerPolicyOptions` and changeable at runtime (`peer_policy.rs`):
 
 ```rust
 pub fn set_seeding_outgoing_connections(&self, enabled: bool);        // default true
 pub fn set_max_allowed_in_request_queue(&self, max: u32);             // default 2000
 pub fn set_allow_multiple_connections_per_pid(&self, allow: bool);    // default false
+pub fn set_allow_multiple_connections_per_ip(&self, allow: bool);     // default true (lt: false)
 ```
 
 * `seeding_outgoing_connections` off: the peer adder of a finished torrent
@@ -278,11 +279,31 @@ pub fn set_allow_multiple_connections_per_pid(&self, allow: bool);    // default
   connection it made): either the new one (an outgoing one is not dialled
   again) or the existing one (kicked, not reconnected). Incoming refusals
   return `AddIncomingPeerResult::DuplicatePeerId`.
+* `allow_multiple_connections_per_ip` off: a torrent keeps one connection
+  per IP address (IPv4-mapped IPv6 counts as IPv4; I2P peers, whose
+  addresses stand for destinations, are exempt). An incoming connection from
+  an IP that already has a live connection to the torrent is refused before
+  it is added (`AddIncomingPeerResult::DuplicateIp`). The peer adder skips an
+  address whose IP has a live or connecting connection (checked after waiting
+  for the connection slots; the queued peer becomes "not needed") and marks
+  the dialled peer connecting itself, so the next address of the same IP sees
+  it; an outgoing connection that reaches its handshake while an incoming one
+  from its IP went live meanwhile is closed. The check is a linear scan of the
+  torrent's peers at connect/accept time (`PeerStates::connected_with_same_ip`),
+  no background work. Connections already made stay when it is turned off;
+  turning it on re-queues the not-needed peers of every live torrent. The
+  engine's default is on (librqbit's behaviour); the core sets it from
+  `enable_multi_connections_from_same_ip` (qBittorrent's default off, so a
+  NeoRS torrent keeps one connection per IP like qBittorrent). libtorrent
+  goes further and keys its peer list by IP in this mode, and tie-breaks two
+  simultaneous connections by port; we refuse the newer one.
 
 Tests: `tests/e2e_peer_settings.rs` (a seeder not dialling a listening
 leecher until the setting is turned on; a full download from a seeder with a
 queue of 1; two leechers with one peer id, the second refused, then a third
-accepted once allowed), unit tests in `upload_queue.rs`, `peer_policy.rs`,
+accepted once allowed; one incoming connection per IP from leechers on
+127.0.0.1, then a second once allowed; a leecher dialling one of two seeders
+on 127.0.0.1, then the other once allowed), unit tests in `upload_queue.rs`, `peer_policy.rs`,
 `peers/mod.rs` and `live/mod.rs` (`duplicate_peer_id_tests`).
 `e2e_net::test_e2e_net_pex_toggle` allows duplicate peer ids: once PeX
 introduces S and B to each other they may dial each other at once, and the
@@ -781,12 +802,12 @@ garbage. Now, as libtorrent's `piece_failed` / `penalize_peers`:
 * The ban (`ManagedTorrentShared::auto_bans`, at most 256 per torrent, the
   oldest forgotten) lasts as long as the torrent, across pause/resume, like
   libtorrent's peer list; it is not saved across restarts (libtorrent's
-  resume data keeps `banned_peers`). Our engine allows several connections
-  per IP (libtorrent's `allow_multiple_connections_per_ip`, where a ban is
-  per `ip:port`): a dialled peer is banned by its listen address, so other
+  resume data keeps `banned_peers`). Bans work as with libtorrent's
+  `allow_multiple_connections_per_ip` on (a ban is per `ip:port`) whatever
+  that setting says: a dialled peer is banned by its listen address, so other
   peers behind the same IP can still be dialled, while incoming connections
   from a banned IP are all refused (their port says nothing; libtorrent's
-  default one-peer-per-IP mode bans the IP). A peer banned on an incoming
+  one-peer-per-IP mode bans the IP). A peer banned on an incoming
   connection bans its whole IP both ways.
 * Enforced in `add_peer_with_source` (trackers, DHT, PeX, LSD, manual adds
   are ignored), in the peer adder (a re-queued or revived entry becomes "not

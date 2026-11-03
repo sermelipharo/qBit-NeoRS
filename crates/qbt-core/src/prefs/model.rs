@@ -608,6 +608,7 @@ pub struct AdvancedPrefs {
     pub utp_tcp_mixed_mode: UtpMixedMode,
     pub hostname_cache_ttl: i64,
     pub idn_support_enabled: bool,
+    /// libtorrent `allow_multiple_connections_per_ip`.
     pub enable_multi_connections_from_same_ip: bool,
     /// libtorrent `allow_multiple_connections_per_pid`.
     pub enable_multi_connections_from_same_peer_id: bool,

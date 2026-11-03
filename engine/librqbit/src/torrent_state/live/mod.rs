@@ -207,6 +207,9 @@ pub enum AddIncomingPeerResult {
     DuplicatePeerId,
     /// The torrent banned the peer for sending corrupt data.
     Banned,
+    /// The IP address is already connected to the torrent
+    /// (`allow_multiple_connections_per_ip` off).
+    DuplicateIp,
 }
 
 /// libtorrent's rule for two connections from the same peer id: the peer
@@ -590,6 +593,28 @@ impl TorrentStateLive {
         }
     }
 
+    /// libtorrent `allow_multiple_connections_per_ip`: whether `addr` may be
+    /// connected while it is off, i.e. no other live connection of the
+    /// torrent (or, with `connecting`, no connection being dialled) has the
+    /// same IP. I2P peers are exempt (their addresses are per destination).
+    fn admit_ip(&self, addr: PeerHandle, connecting: bool) -> bool {
+        let allow = self
+            .shared
+            .session
+            .upgrade()
+            .is_none_or(|s| s.peer_policy.allow_multiple_connections_per_ip());
+        if allow || crate::i2p::is_i2p_addr(addr) {
+            return true;
+        }
+        match self.peers.connected_with_same_ip(addr, connecting) {
+            Some(existing) => {
+                debug!(%addr, %existing, "one connection per IP: the IP is already connected");
+                false
+            }
+            None => true,
+        }
+    }
+
     // Close the connection to a peer. With `forget`, it is not reconnected.
     pub(crate) fn kick_peer(&self, addr: PeerHandle, forget: bool) -> bool {
         self.peers
@@ -711,6 +736,9 @@ impl TorrentStateLive {
         {
             debug!(addr = %checked_peer.addr, "refusing incoming connection: banned peer");
             return Ok(AddIncomingPeerResult::Banned);
+        }
+        if !self.admit_ip(checked_peer.addr, false) {
+            return Ok(AddIncomingPeerResult::DuplicateIp);
         }
         if !self.admit_peer_id(checked_peer.addr, checked_peer.handshake.peer_id, false) {
             return Ok(AddIncomingPeerResult::DuplicatePeerId);
@@ -872,9 +900,9 @@ impl TorrentStateLive {
         self: Arc<Self>,
         addr: SocketAddr,
         permit: PeerPermits,
+        (rx, tx): (PeerRx, PeerTx),
     ) -> crate::Result<()> {
         let state = self;
-        let (rx, tx) = state.peers.mark_peer_connecting(addr)?;
         let counters = state
             .peers
             .with_peer(addr, |p| p.stats.counters.clone())
@@ -1074,10 +1102,26 @@ impl TorrentStateLive {
                 _torrent: torrent_permit,
                 _session: Some(session_permit),
             };
+            // libtorrent `allow_multiple_connections_per_ip` off: one
+            // connection per IP. Checked after waiting for the slots, and the
+            // peer is marked connecting here (not in its task) so the next
+            // address of the same IP sees it.
+            if !state.admit_ip(addr, true) {
+                state.peers.with_peer_mut(addr, "duplicate_ip_no_outgoing", |p| {
+                    if matches!(p.get_state(), PeerState::Queued) {
+                        p.set_not_needed(&state.peers);
+                    }
+                });
+                continue;
+            }
+            let Ok(chans) = state.peers.mark_peer_connecting(addr) else {
+                // Connected to us (or forgotten) meanwhile.
+                continue;
+            };
             state.spawn(
                 debug_span!(parent: state.shared.span.clone(), "manage_peer", peer = ?addr),
                 format!("[{}][addr={addr}]manage_peer", state.shared.id),
-                aframe!(state.clone().task_manage_outgoing_peer(addr, permit)),
+                aframe!(state.clone().task_manage_outgoing_peer(addr, permit, chans)),
             );
         }
     }
@@ -1835,6 +1879,11 @@ impl PeerConnectionHandler for &'_ PeerHandler {
     ) -> anyhow::Result<()> {
         self.is_utp
             .store(matches!(ckind, ConnectionKind::Utp), Ordering::Relaxed);
+        // An incoming connection from the same IP may have become live while
+        // this one was being dialled.
+        if !self.incoming && !self.state.admit_ip(self.addr, false) {
+            anyhow::bail!("the IP is already connected");
+        }
         if !self.incoming && !self.state.admit_peer_id(self.addr, handshake.peer_id, true) {
             // Don't dial it again.
             self.state

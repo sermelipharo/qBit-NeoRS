@@ -35,6 +35,9 @@ impl Node {
         prefs.bittorrent.pex = false;
         prefs.behavior.file_log_enabled = false;
         prefs.advanced.resolve_peer_countries = false;
+        // Every node is on 127.0.0.1: one connection per IP (the default)
+        // would let a torrent connect to only one of them.
+        prefs.advanced.enable_multi_connections_from_same_ip = true;
         tweak(&mut prefs);
         std::fs::write(profile.join("config/preferences.json"), serde_json::to_vec_pretty(&prefs).unwrap()).unwrap();
 

@@ -272,6 +272,7 @@ impl LiveSettings {
             seeding_outgoing_connections: a.seeding_outgoing_connections,
             max_allowed_in_request_queue: a.max_outstanding_block_requests.clamp(1, u32::MAX as i64) as u32,
             allow_multiple_connections_per_pid: a.enable_multi_connections_from_same_peer_id,
+            allow_multiple_connections_per_ip: a.enable_multi_connections_from_same_ip,
         };
         let trackers = TrackerSettings {
             announce_ip: a.announce_ip.trim().parse().ok(),
@@ -540,6 +541,7 @@ impl Engine {
         self.session.set_seeding_outgoing_connections(p.seeding_outgoing_connections);
         self.session.set_max_allowed_in_request_queue(p.max_allowed_in_request_queue);
         self.session.set_allow_multiple_connections_per_pid(p.allow_multiple_connections_per_pid);
+        self.session.set_allow_multiple_connections_per_ip(p.allow_multiple_connections_per_ip);
         let _ = self.session.set_tracker_settings(live.trackers.clone());
         self.apply_net(&live.net).await
     }
@@ -1039,12 +1041,15 @@ mod tests {
         let mut p = Preferences::default();
         let pp = LiveSettings::from_prefs(&p).peer_policy;
         assert!(pp.seeding_outgoing_connections && !pp.allow_multiple_connections_per_pid);
+        assert!(!pp.allow_multiple_connections_per_ip);
         assert_eq!(pp.max_allowed_in_request_queue, 2000);
         p.advanced.seeding_outgoing_connections = false;
         p.advanced.enable_multi_connections_from_same_peer_id = true;
+        p.advanced.enable_multi_connections_from_same_ip = true;
         p.advanced.max_outstanding_block_requests = 0;
         let pp = LiveSettings::from_prefs(&p).peer_policy;
         assert!(!pp.seeding_outgoing_connections && pp.allow_multiple_connections_per_pid);
+        assert!(pp.allow_multiple_connections_per_ip);
         assert_eq!(pp.max_allowed_in_request_queue, 1);
         p.advanced.max_outstanding_block_requests = i64::MAX;
         assert_eq!(LiveSettings::from_prefs(&p).peer_policy.max_allowed_in_request_queue, u32::MAX);

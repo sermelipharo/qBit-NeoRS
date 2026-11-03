@@ -160,6 +160,8 @@ pub(crate) struct JobState {
     pub running: bool,
     pub outcome: SearchJobOutcome,
     pub error: String,
+    /// Engine stderr of a search that finished normally.
+    pub warning: String,
     /// Results discarded because of the memory caps.
     pub dropped: u64,
 }
@@ -209,6 +211,7 @@ impl Job {
             total: st.results.len() as i64,
             outcome: st.outcome,
             error: st.error.clone(),
+            warning: st.warning.clone(),
         }
     }
 
@@ -242,7 +245,7 @@ impl Job {
         kept
     }
 
-    fn finish(&self, outcome: SearchJobOutcome, error: String) {
+    fn finish(&self, outcome: SearchJobOutcome, error: String, warning: String) {
         let mut st = self.state.lock();
         st.running = false;
         st.outcome = match outcome {
@@ -250,6 +253,7 @@ impl Job {
             o => o,
         };
         st.error = error;
+        st.warning = warning;
     }
 }
 
@@ -281,7 +285,7 @@ pub(crate) async fn run_job(job: Arc<Job>, l: JobLaunch) {
     let emit = || l.events.emit(CoreEvent::SearchUpdated { id: job.id });
 
     if job.stop_requested.load(Ordering::SeqCst) {
-        job.finish(SearchJobOutcome::Aborted, String::new());
+        job.finish(SearchJobOutcome::Aborted, String::new(), String::new());
         emit();
         return;
     }
@@ -294,7 +298,7 @@ pub(crate) async fn run_job(job: Arc<Job>, l: JobLaunch) {
         Err(e) => {
             let msg = "Process failed to start";
             l.logger.warning(format!("Search process failed. {}", describe(&format!("{msg}: {e}"))));
-            job.finish(SearchJobOutcome::Error, msg.to_string());
+            job.finish(SearchJobOutcome::Error, msg.to_string(), String::new());
             emit();
             return;
         }
@@ -381,11 +385,18 @@ pub(crate) async fn run_job(job: Arc<Job>, l: JobLaunch) {
         ));
     }
 
+    // A plugin that hits e.g. HTTP 403 prints "Connection error: ..." to
+    // stderr while nova2.py still exits 0: keep that text as the job's
+    // warning so the app can say why a search found nothing.
+    let mut warning = String::new();
     let (outcome, error) = if cancelled {
         (SearchJobOutcome::Aborted, String::new())
     } else {
         match status {
-            Some(st) if st.success() => (SearchJobOutcome::Finished, String::new()),
+            Some(st) if st.success() => {
+                warning = err_text;
+                (SearchJobOutcome::Finished, String::new())
+            }
             Some(st) if st.code().is_none() => {
                 l.logger.warning(format!("Search process failed. {}", describe("Process crashed")));
                 (SearchJobOutcome::Error, if err_text.is_empty() { "Process crashed".to_string() } else { err_text })
@@ -397,7 +408,7 @@ pub(crate) async fn run_job(job: Arc<Job>, l: JobLaunch) {
             None => (SearchJobOutcome::Error, "Process unknown error".to_string()),
         }
     };
-    job.finish(outcome, error);
+    job.finish(outcome, error, warning);
     emit();
 }
 
@@ -530,13 +541,13 @@ mod tests {
         }
         assert!(!job.store(vec![r]));
         assert_eq!(job.state.lock().dropped, 1);
-        job.finish(SearchJobOutcome::Finished, String::new());
+        job.finish(SearchJobOutcome::Finished, String::new(), String::new());
         let info = job.info();
         assert_eq!(info.status, SearchJobStatus::Stopped);
         assert_eq!(info.outcome, SearchJobOutcome::Finished);
 
         let empty = Job::new(2, "p".into(), "all".into(), vec![]);
-        empty.finish(SearchJobOutcome::Finished, String::new());
+        empty.finish(SearchJobOutcome::Finished, String::new(), String::new());
         assert_eq!(empty.info().outcome, SearchJobOutcome::NoResults);
     }
 }

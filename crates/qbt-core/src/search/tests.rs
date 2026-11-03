@@ -417,6 +417,51 @@ async fn search_timeout_aborts() {
     h.mgr.shutdown().await;
 }
 
+/// A plugin whose site refuses the request: `retrieve_url` prints
+/// "Connection error: ..." to stderr and nova2.py still exits 0.
+fn refused_plugin(url: &str) -> String {
+    format!(
+        r#"# VERSION: 1.00
+from helpers import retrieve_url
+
+
+class refused(object):
+    url = '{url}'
+    name = 'Refused Engine'
+    supported_categories = {{'all': '0'}}
+
+    def search(self, what, cat='all'):
+        retrieve_url(self.url + '/search?q=' + what)
+"#
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn engine_errors_become_the_job_warning() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let site = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    serve(listener, HashMap::new());
+    let options = Options { fetch_icons: false, ..Default::default() };
+    let Some(h) = Harness::new(options).await else { return };
+    let refused = h.write_source("refused.py", &refused_plugin(&site));
+    h.mgr.install_plugins(vec![refused]).await.unwrap();
+
+    let id = h.mgr.start("x", &["refused".into()], "all").unwrap();
+    let info = h.wait_stopped(id, Duration::from_secs(60)).await;
+    assert_eq!(info.outcome, SearchJobOutcome::NoResults, "{info:?}");
+    assert_eq!(info.error, "");
+    assert_eq!(info.warning, "Connection error: Not Found", "{info:?}");
+
+    // A clean search has no warning.
+    let dummy = h.write_source("dummy.py", &dummy_plugin("1.00", "http://127.0.0.1:9", "warn"));
+    h.mgr.install_plugins(vec![dummy]).await.unwrap();
+    let id = h.mgr.start("x", &["dummy".into()], "all").unwrap();
+    let info = h.wait_stopped(id, Duration::from_secs(60)).await;
+    assert_eq!(info.outcome, SearchJobOutcome::Finished, "{info:?}");
+    assert_eq!(info.warning, "");
+    h.mgr.shutdown().await;
+}
+
 /// Minimal HTTP/1.1 server answering GETs from a path -> body map.
 fn serve(listener: tokio::net::TcpListener, files: HashMap<String, Vec<u8>>) {
     let files = Arc::new(files);

@@ -82,6 +82,11 @@ pub struct SearchJobInfo {
     /// Not part of the WebAPI JSON.
     #[serde(skip_serializing)]
     pub error: String,
+    /// What the search engines wrote to stderr (capped, trimmed) when the
+    /// search finished normally, e.g. a plugin's "Connection error:
+    /// Forbidden"; empty otherwise. Not part of the WebAPI JSON.
+    #[serde(skip_serializing)]
+    pub warning: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]

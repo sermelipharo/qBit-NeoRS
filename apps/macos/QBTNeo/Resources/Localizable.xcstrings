@@ -196869,6 +196869,16 @@
         }
       }
     },
+    "Some search engines reported errors:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Некоторые поисковики сообщили об ошибках:"
+          }
+        }
+      }
+    },
     "Stop after": {
       "localizations": {
         "ru": {

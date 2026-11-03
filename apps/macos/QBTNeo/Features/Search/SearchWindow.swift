@@ -6,6 +6,8 @@ struct SearchWindow: View {
     @State private var model = SearchModel()
     /// Snapshots: run this search on open.
     var initialPattern: String?
+    /// Snapshots: the plugins to search with ("enabled", "all" or a plugin name).
+    var initialPlugins = "enabled"
 
     var body: some View {
         SearchPane(model: model)
@@ -16,6 +18,7 @@ struct SearchWindow: View {
                                    preferences: app.corePreferencesReader)
                 if let initialPattern, model.tabs.isEmpty {
                     model.pattern = initialPattern
+                    model.pluginSelector = initialPlugins
                     model.search()
                 }
             }

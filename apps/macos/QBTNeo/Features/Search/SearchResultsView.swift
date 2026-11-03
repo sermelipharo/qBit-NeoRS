@@ -12,9 +12,10 @@ struct SearchResultsView: View {
             ListTableView(gui: app.gui) { SearchResultsTable.makeController(model: model, tab: tab, app: app) }
                 .id(tab.id)
                 .overlay {
-                    if tab.visibleRows.isEmpty, tab.status != .ongoing {
-                        ContentUnavailableView(tab.rows.isEmpty ? tab.status.text : String(localized: "No results match the filters"),
-                                               systemImage: tab.status.symbol)
+                    if tab.rows.isEmpty, tab.status != .ongoing {
+                        ContentUnavailableView(tab.status.text, systemImage: tab.status.symbol)
+                    } else if !tab.rows.isEmpty, tab.visibleRows.isEmpty {
+                        SearchFilteredOutView(tab: tab)
                     }
                 }
         }

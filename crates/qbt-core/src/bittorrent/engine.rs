@@ -30,7 +30,7 @@ use crate::prefs::{
 
 pub type EngineHandle = Arc<ManagedTorrent>;
 
-/// The app version as Azureus-style peer ID digits (`-NR0310-` for 0.3.1),
+/// The app version as Azureus-style peer ID digits (`-NR0320-` for 0.3.2),
 /// from the crate version so it never goes stale.
 pub(crate) fn client_version() -> (u8, u8, u8, u8) {
     let digit = |s: &str| s.parse::<u8>().unwrap_or(0).min(35);
@@ -42,7 +42,7 @@ pub(crate) fn client_version() -> (u8, u8, u8, u8) {
     )
 }
 
-/// The peer ID prefix logged at start-up, e.g. `-NR0310-`.
+/// The peer ID prefix logged at start-up, e.g. `-NR0320-`.
 pub(crate) fn peer_id_prefix() -> String {
     let (a, b, c, d) = client_version();
     let ch = |n: u8| char::from_digit(u32::from(n), 36).unwrap_or('0').to_ascii_uppercase();

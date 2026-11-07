@@ -683,7 +683,7 @@ mod tests {
             url_seeds: seeds,
             comment: "hello",
             source_tag: "SRC",
-            created_by: "qBit NeoRS v0.3.1",
+            created_by: "qBit NeoRS v0.3.2",
             creation_date: 1_700_000_000,
             max_torrent_size: 100 << 20,
         }

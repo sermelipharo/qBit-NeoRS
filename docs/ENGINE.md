@@ -630,6 +630,27 @@ pub fn get_dht(&self) -> Option<Dht>;   // was Option<&Dht>
   candidate list when it ends, so hundreds of torrents do not hold hundreds
   of lookups' state. Empty rounds (no nodes yet, or no IPv6) back off from 1 s
   to 8 s.
+* Lookup convergence (`RecursiveRequest` in `engine/dht/src/dht.rs`, also
+  used by find_node for bootstrap and bucket refresh), like libtorrent's
+  traversal: a round starts from the 16 routing table nodes closest to the
+  target and asks candidates closest first, only while they are closer than
+  the 8th closest node that answered or is being asked (failed nodes, timeouts
+  included, do not count). It ends when nothing is in flight and no candidate
+  is left inside that window, typically after 20 to 60 queries (17 in the
+  1000-node simulation test; the old rounds asked every node they heard of
+  until a budget of 256 was used up). Safety caps: 100 requests per round,
+  8 hops, one node per IP address, 16 nodes taken per reply. `announce_peer`
+  goes to the 8 closest nodes that answered with a token (it used to go to
+  every responder within 16 bits of the hash). Nodes that answer a get_peers
+  query are added to the routing table (and refreshed), as in libtorrent.
+* Query rate: all outgoing DHT queries (get_peers, find_node, ping,
+  announce_peer) share one token bucket in `DhtState`: 32 queries/s with a
+  64-query burst (about libtorrent's `dht_upload_rate_limit` of 8000 B/s;
+  the env var `DHT_QUERIES_PER_SECOND` overrides it). Queries over the
+  budget wait in order and are never dropped; answers to incoming queries
+  are not limited by it (they have the per-source limit). The routing table
+  pinger spaces its pings 200 ms apart instead of pinging every questionable
+  node at once.
 * Lookup pacing: `DhtState::get_peers_paced(hash, port, LookupPacer)` takes
   the time between rounds from the caller (`get_peers` keeps a fixed 60 s).
   The loop sleeps for `interval()` after a round; `LookupPacer::wake()`
@@ -1830,7 +1851,7 @@ fork's listener already always matches and has an `else` branch.
 | PR #653 `1e924f87` middlewares drop `on_piece_completed` | bug fix | already fixed (all middlewares forward it) |
 | PR #695 `eb831e15` `CurrentPiece::piece_offset` was the piece number | bug fix | ported |
 | PR #701 `2563195c` duplicate `.pad/<len>` names reject hybrid torrents | bug fix | ported (unit tests; upstream e2e test not taken) |
-| PR #706 `618f426c` DHT get_peers queue and rate-limiter wait unbounded | performance / memory | rate-limiter wait ported; the in-flight cap was already stricter here (8 per round, 32 rounds, 16 nodes per reply) |
+| PR #706 `618f426c` DHT get_peers queue and rate-limiter wait unbounded | performance / memory | the in-flight cap was already stricter here (8 per round, 32 rounds, 16 nodes per reply); the rate-limiter wait timeout was ported, then dropped again with the 32 queries/s cap (a timed-out wait counted as a node failure; the waiters are bounded by the in-flight caps instead) |
 | PR #656 `a742b747` per-file progress stops at a zero-length file | bug fix | ported (also for web seed and v2 layer completions) |
 | PR #667 `aa45753a` peers map grows by one entry per incoming address | memory | ported with a rescan guard; the upload-disabled refusal not taken (no such mode here) |
 | PR #614 `6913d56d` UPnP WANIPConnection:2 | feature (parity) | ported (one socket for both searches) |

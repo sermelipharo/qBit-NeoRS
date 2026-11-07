@@ -1,5 +1,4 @@
 use std::{
-    cmp::Reverse,
     net::{Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     str::FromStr,
     sync::{
@@ -23,9 +22,7 @@ use crate::{
 use backon::{ExponentialBuilder, Retryable};
 use bencode::ByteBufOwned;
 use dashmap::DashMap;
-use futures::{
-    FutureExt, Stream, StreamExt, TryFutureExt, future::BoxFuture, stream::FuturesUnordered,
-};
+use futures::{FutureExt, Stream, StreamExt, future::BoxFuture, stream::FuturesUnordered};
 
 use leaky_bucket::RateLimiter;
 use librqbit_core::{
@@ -36,13 +33,13 @@ use librqbit_core::{
     spawn_utils::{spawn, spawn_with_cancel},
 };
 use librqbit_dualstack_sockets::{BindDevice, UdpSocket};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use serde::Serialize;
 use tokio::sync::mpsc::{Sender, UnboundedReceiver, UnboundedSender, channel, unbounded_channel};
 
 use tokio_util::sync::CancellationToken;
-use tracing::{Instrument, debug, debug_span, error, info, trace, warn};
+use tracing::{Instrument, debug, debug_span, info, trace, warn};
 
 /// How often an empty routing table is noticed and bootstrapped again.
 const REBOOTSTRAP_CHECK_INTERVAL: Duration = Duration::from_secs(30);
@@ -64,14 +61,47 @@ pub struct DhtStats {
 const MAX_CONCURRENT_LOOKUPS: usize = 32;
 /// Same, for the first round of each torrent.
 const MAX_CONCURRENT_FIRST_LOOKUPS: usize = 8;
-/// Requests one lookup round keeps in flight.
+/// Requests one lookup round keeps in flight (libtorrent's
+/// `search_branching` is 5; ours also bounds the waiters on the rate limiter).
 const MAX_INFLIGHT_PER_LOOKUP: usize = 8;
 /// Nodes taken from one response (the closest to the target). A response
 /// can carry hundreds of compact nodes; a hostile node would otherwise make
 /// every reply fan out into hundreds of new requests at each depth.
 const MAX_NODES_PER_RESPONSE: usize = 16;
-/// Requests one lookup (one get_peers round, one find_node) may queue.
-const MAX_REQUESTS_PER_LOOKUP: usize = 256;
+/// Requests one lookup (one get_peers round, one find_node) may send. A
+/// converging lookup normally stops after 20 to 60 (see `LOOKUP_K`); this is
+/// only the safety net against networks that keep handing out closer nodes.
+const MAX_REQUESTS_PER_LOOKUP: usize = 100;
+/// A lookup is done when the `LOOKUP_K` closest nodes it knows have all
+/// answered (or failed) and none of the nodes in flight is closer: the
+/// Kademlia bucket size, libtorrent's traversal `m_node.m_table.bucket_size()`.
+/// Nodes farther away than the K-th closest responder are never asked.
+const LOOKUP_K: usize = 8;
+/// Routing table nodes a lookup starts from (libtorrent seeds its traversal
+/// with twice the bucket size). Only the closest are asked unless some fail.
+const LOOKUP_SEEDS: usize = 2 * LOOKUP_K;
+/// Hops away from the routing table a lookup may go. Rounds end by
+/// converging long before this; it bounds walks through hostile nodes.
+const LOOKUP_MAX_DEPTH: usize = 8;
+
+/// Time between two routing table pings of one address family.
+const PING_SPACING: Duration = Duration::from_millis(200);
+
+/// Default session-wide cap on outgoing DHT queries (get_peers, find_node,
+/// ping, announce_peer), shared by all lookups and the routing table upkeep.
+/// libtorrent limits all DHT traffic to `dht_upload_rate_limit` = 8000 B/s.
+/// A query is about 100 bytes of payload plus 28 bytes of UDP/IP headers;
+/// libtorrent's budget also covers its (larger, 250 to 450 byte) replies, so
+/// it leaves room for roughly 30 queries a second. Our replies are limited
+/// per source instead (`query_limit`). A converged lookup sends 20 to 60
+/// queries, so steady seeding (one round per torrent per 15 min) needs well
+/// under 1 query/s; the cap only spreads out bursts such as many torrents
+/// starting at once, which used to reach hundreds of distinct nodes (and as
+/// many NAT mappings on the user's router) within seconds.
+const DEFAULT_QUERIES_PER_SECOND: usize = 32;
+/// Burst the limiter allows on top of the rate: one or two lookups at full
+/// speed.
+const QUERY_BURST_SECONDS: usize = 2;
 
 struct OutstandingRequest {
     done: tokio::sync::oneshot::Sender<crate::Result<ResponseOrError>>,
@@ -84,30 +114,45 @@ pub struct WorkerSendRequest {
     addr: SocketAddr,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LookupNodeState {
+    /// Known, not asked yet.
+    Candidate,
+    InFlight,
+    Responded,
+    /// Timed out, failed to send or answered with an error.
+    Failed,
+}
+
+/// A node one lookup round has heard of.
 #[derive(Debug)]
-struct MaybeUsefulNode {
+struct LookupNode {
     id: Id20,
     addr: SocketAddr,
-    last_request: Instant,
-    last_response: Option<Instant>,
-    errors_in_a_row: usize,
-    returned_peers: bool,
+    depth: u8,
+    state: LookupNodeState,
+    /// get_peers: the token to announce with.
+    token: Option<ByteBufOwned>,
 }
 
 fn make_rate_limiter() -> RateLimiter {
-    // TODO: move to configuration, i'm lazy.
-    let dht_queries_per_second = std::env::var("DHT_QUERIES_PER_SECOND")
-        .map(|v| v.parse().expect("couldn't parse DHT_QUERIES_PER_SECOND"))
-        .unwrap_or(250usize);
+    let qps = std::env::var("DHT_QUERIES_PER_SECOND")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_QUERIES_PER_SECOND);
+    make_rate_limiter_with(qps)
+}
 
-    let per_100_ms = dht_queries_per_second / 10;
-
+fn make_rate_limiter_with(queries_per_second: usize) -> RateLimiter {
+    let qps = queries_per_second.max(1);
+    let burst = qps * QUERY_BURST_SECONDS;
     RateLimiter::builder()
-        .initial(per_100_ms)
-        .max(dht_queries_per_second)
-        .interval(Duration::from_millis(100))
-        .fair(false)
-        .refill(per_100_ms)
+        .initial(burst)
+        .max(burst)
+        .interval(Duration::from_secs(1) / qps as u32)
+        .refill(1)
+        // First come, first served: a lookup is not starved by others.
+        .fair(true)
         .build()
 }
 
@@ -123,7 +168,7 @@ trait RecursiveRequestCallbacks: Sized + Send + Sync + 'static {
 }
 
 struct RecursiveRequestCallbacksGetPeers {
-    // Id20::from_str("00000fffffffffffffffffffffffffffffffffff").unwrap()
+    // Id20::from_str("0000ffffffffffffffffffffffffffffffffffff").unwrap()
     min_distance_to_announce: Id20,
     announce_port: Option<u16>,
     // Announce in the current round (see `DHT_ANNOUNCE_INTERVAL`).
@@ -140,39 +185,20 @@ impl RecursiveRequestCallbacks for RecursiveRequestCallbacksGetPeers {
         addr: SocketAddr,
         resp: &crate::Result<ResponseOrError>,
     ) {
-        let announce_port = match self.announce_port {
-            Some(a) if self.announce_now.load(Ordering::Relaxed) => a,
-            _ => return,
-        };
-        let resp = match resp {
-            Ok(ResponseOrError::Response(resp)) => resp,
-            _ => return,
-        };
-        let token = match &resp.token {
-            Some(token) => token,
-            None => return,
-        };
-        if req.info_hash.distance(&target_node) > self.min_distance_to_announce {
-            trace!(
-                "not announcing, {:?} is too far from {:?}",
-                target_node, req.info_hash
-            );
-            return;
+        // Like libtorrent, every node that answers a lookup is a routing
+        // table candidate, and an answer keeps its entry (and bucket) fresh,
+        // which spares pings and bucket refresh lookups.
+        let mut rt = req.dht.get_table_for_addr(addr).write();
+        match resp {
+            Ok(ResponseOrError::Response(_)) => {
+                if !matches!(rt.add_node(target_node, addr), InsertResult::Ignored) {
+                    rt.mark_response(&target_node, now());
+                }
+            }
+            _ => {
+                rt.mark_error(&target_node);
+            }
         }
-        let (tid, message) = req.dht.create_request(
-            Request::Announce {
-                info_hash: req.info_hash,
-                token: token.clone(),
-                port: announce_port,
-            },
-            addr,
-        );
-
-        let _ = req.dht.worker_sender.send(WorkerSendRequest {
-            our_tid: Some(tid),
-            message,
-            addr,
-        });
     }
 }
 
@@ -204,16 +230,21 @@ impl RecursiveRequestCallbacks for RecursiveRequestCallbacksFindNodes {
     }
 }
 
+/// One iterative lookup (a get_peers round or a find_node), run like
+/// libtorrent's traversal: nodes are asked closest first, and only while
+/// they are closer to the target than the `LOOKUP_K`-th closest node that
+/// answered or is being asked. The round ends when nothing is in flight and
+/// no candidate is left inside that window.
 struct RecursiveRequest<C: RecursiveRequestCallbacks> {
     max_depth: usize,
     useful_nodes_limit: usize,
     info_hash: Id20,
     request: Request,
     dht: Arc<DhtState>,
-    useful_nodes: RwLock<Vec<MaybeUsefulNode>>,
+    // Sorted by distance to `info_hash`.
+    useful_nodes: Mutex<Vec<LookupNode>>,
     peer_tx: tokio::sync::mpsc::UnboundedSender<SocketAddr>,
-    node_tx: tokio::sync::mpsc::UnboundedSender<(Option<Id20>, SocketAddr, usize)>,
-    // Requests queued in the current round (capped by MAX_REQUESTS_PER_LOOKUP).
+    // Requests sent in the current round (capped by MAX_REQUESTS_PER_LOOKUP).
     queued_requests: AtomicUsize,
     callbacks: C,
 }
@@ -233,16 +264,14 @@ impl RequestPeersStream {
     ) -> Self {
         let (peer_tx, peer_rx) = unbounded_channel();
         let make = |is_v4: bool, dht: Arc<DhtState>, peer_tx: UnboundedSender<SocketAddr>| {
-            let (node_tx, node_rx) = unbounded_channel();
             let rp = Arc::new(RecursiveRequest {
-                max_depth: 4,
+                max_depth: LOOKUP_MAX_DEPTH,
                 info_hash,
                 useful_nodes_limit: 128,
                 request: Request::GetPeers(info_hash),
                 dht,
-                useful_nodes: RwLock::new(Vec::new()),
+                useful_nodes: Mutex::new(Vec::new()),
                 peer_tx,
-                node_tx,
                 queued_requests: AtomicUsize::new(0),
                 callbacks: RecursiveRequestCallbacksGetPeers {
                     min_distance_to_announce: Id20::from_str(
@@ -253,7 +282,7 @@ impl RequestPeersStream {
                     announce_now: AtomicBool::new(false),
                 },
             });
-            rp.request_peers_forever(node_rx, is_v4, pacer.clone())
+            rp.request_peers_forever(is_v4, pacer.clone())
         };
 
         let v4 = make(true, dht.clone(), peer_tx.clone());
@@ -287,73 +316,34 @@ impl Stream for RequestPeersStream {
 }
 
 impl RecursiveRequest<RecursiveRequestCallbacksFindNodes> {
+    /// A find_node lookup for `target`, starting from routing table nodes
+    /// (`known`) and hosts known only by address (`addrs`, bootstrap).
     async fn find_node_for_routing_table(
         dht: Arc<DhtState>,
         target: Id20,
+        known: impl Iterator<Item = (Id20, SocketAddr)>,
         addrs: impl Iterator<Item = SocketAddr>,
     ) -> crate::Result<()> {
-        let (node_tx, mut node_rx) = unbounded_channel();
         let req = RecursiveRequest {
-            max_depth: 4,
+            max_depth: LOOKUP_MAX_DEPTH,
             info_hash: target,
             request: Request::FindNode(target),
             dht,
             useful_nodes_limit: 32,
-            useful_nodes: RwLock::new(Vec::new()),
+            useful_nodes: Mutex::new(Vec::new()),
             peer_tx: unbounded_channel().0,
-            node_tx,
             queued_requests: AtomicUsize::new(0),
             callbacks: RecursiveRequestCallbacksFindNodes {},
         };
-
-        let request_one = |id, addr, depth| {
-            req.request_one(id, addr, depth)
-                .map_err(|e| {
-                    debug!("error: {e:#}");
-                    e
-                })
-                .instrument(debug_span!(
-                    "find_node",
-                    target = format!("{target:?}"),
-                    addr = addr.to_string()
-                ))
-        };
-
-        let mut futs = FuturesUnordered::new();
-
-        let mut initial_addrs = 0;
-        for addr in addrs {
-            futs.push(request_one(None, addr, 0));
-            initial_addrs += 1;
+        for (id, addr) in known {
+            req.add_candidate(id, addr, 0);
         }
-
-        let mut successes = 0;
-        let mut errors = 0;
-
-        loop {
-            tokio::select! {
-                biased;
-
-                r = node_rx.recv() => {
-                    let (id, addr, depth) = r.unwrap();
-                    futs.push(request_one(id, addr, depth))
-                },
-                f = futs.next() => {
-                    let f = match f {
-                        Some(f) => f,
-                        None => {
-                            // find_node recursion finished.
-                            break;
-                        }
-                    };
-                    if f.is_ok() {
-                        successes += 1;
-                    } else {
-                        errors += 1;
-                    }
-                }
-            }
-        }
+        let addrs: Vec<SocketAddr> = addrs.collect();
+        let initial_addrs = addrs.len();
+        let (successes, errors) = req
+            .run_round(addrs)
+            .instrument(debug_span!("find_node", target = format!("{target:?}")))
+            .await;
         if successes == 0 {
             return Err(Error::NoSuccessfulLookups { errors });
         }
@@ -367,17 +357,15 @@ impl RecursiveRequest<RecursiveRequestCallbacksFindNodes> {
 impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
     fn request_peers_forever(
         self: &Arc<Self>,
-        mut node_rx: tokio::sync::mpsc::UnboundedReceiver<(Option<Id20>, SocketAddr, usize)>,
         is_v4: bool,
         pacer: Arc<LookupPacer>,
     ) -> tokio::task::JoinHandle<()> {
         let this = self.clone();
-        spawn(
+        spawn::<crate::Error>(
             debug_span!(parent: None, "get_peers", is_v4, info_hash = format!("{:?}", self.info_hash)),
             "get_peers",
             async move {
                 let this = &this;
-                let mut futs = FuturesUnordered::new();
                 let mut iteration = 0;
                 let mut empty_rounds = 0u32;
                 let mut wake_rx = pacer.subscribe();
@@ -405,52 +393,37 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
                     let permit = slots.acquire().await.ok();
                     let announce =
                         forced || last_announce.is_none_or(|t| t.elapsed() >= announce_gap);
-                    this.callbacks.announce_now.store(announce, Ordering::Relaxed);
+                    this.callbacks
+                        .announce_now
+                        .store(announce, Ordering::Relaxed);
                     // `Err`: a fixed retry delay; `Ok`: paced, with an
                     // optional cap.
-                    let next: Result<Option<Duration>, Duration> = match this.get_peers_root(is_v4) {
+                    let n = this.get_peers_root(is_v4);
+                    let next: Result<Option<Duration>, Duration> = if n == 0 {
                         // Nothing to ask yet (routing table still empty, or no
                         // IPv6 nodes at all): retry soon, then back off.
-                        Ok(0) => {
-                            empty_rounds = empty_rounds.saturating_add(1);
-                            Err(Duration::from_secs(1 << (empty_rounds / 3).min(3)))
+                        empty_rounds = empty_rounds.saturating_add(1);
+                        Err(Duration::from_secs(1 << (empty_rounds / 3).min(3)))
+                    } else {
+                        empty_rounds = 0;
+                        let (ok, errors) = this.run_round(Vec::new()).await;
+                        debug!(
+                            ok,
+                            errors,
+                            sent = this.queued_requests.load(Ordering::Relaxed),
+                            "get_peers round done"
+                        );
+                        if announce && this.callbacks.announce_port.is_some() {
+                            this.announce_to_closest().await;
+                            last_announce = Some(tokio::time::Instant::now());
                         }
-                        Ok(n) => {
-                            empty_rounds = 0;
-                            // Drain the round: new nodes are only produced by
-                            // finishing requests, so an empty set is the end.
-                            loop {
-                                while futs.len() < MAX_INFLIGHT_PER_LOOKUP {
-                                    match node_rx.try_recv() {
-                                        Ok((id, addr, depth)) => futs.push(
-                                            this.request_one(id, addr, depth)
-                                                .map_err(|e| debug!("error: {e:#}"))
-                                                .instrument(debug_span!("addr", addr=addr.to_string())),
-                                        ),
-                                        Err(_) => break,
-                                    }
-                                }
-                                if futs.is_empty() {
-                                    break;
-                                }
-                                futs.next().await;
-                            }
-                            if announce && this.callbacks.announce_port.is_some() {
-                                last_announce = Some(tokio::time::Instant::now());
-                            }
-                            // Few nodes near the hash: the routing table is
-                            // still thin, look again sooner.
-                            Ok((n < 8).then(|| REQUERY_INTERVAL / 8 * (n as u32)))
-                        }
-                        Err(e) => {
-                            error!("dht: error in get_peers_root(): {e:#}");
-                            return Err::<(), crate::Error>(e);
-                        }
+                        // Few nodes near the hash: the routing table is
+                        // still thin, look again sooner.
+                        Ok((n < 8).then(|| REQUERY_INTERVAL / 8 * (n as u32)))
                     };
                     drop(permit);
                     // Idle until the next round: give the scratch state back.
-                    futs = FuturesUnordered::new();
-                    *this.useful_nodes.write() = Vec::new();
+                    *this.useful_nodes.lock() = Vec::new();
                     this.queued_requests.store(0, Ordering::Relaxed);
                     forced = match next {
                         Err(d) => {
@@ -470,32 +443,131 @@ impl RecursiveRequest<RecursiveRequestCallbacksGetPeers> {
         )
     }
 
-    fn get_peers_root(&self, is_v4: bool) -> crate::Result<usize> {
-        let mut count = 0;
+    /// Seeds the round with the routing table nodes closest to the hash;
+    /// returns how many.
+    fn get_peers_root(&self, is_v4: bool) -> usize {
         let table = if is_v4 {
             &self.dht.routing_table_v4
         } else {
             &self.dht.routing_table_v6
         };
-        for (id, addr) in table
+        let seeds: Vec<(Id20, SocketAddr)> = table
             .read()
             .sorted_by_distance_from(self.info_hash, now())
             .iter()
             .map(|n| (n.id(), n.addr()))
-            .take(8)
-        {
-            count += 1;
-            self.node_tx
-                .send((Some(id), addr, 0))
-                .ok()
-                .ok_or(Error::DhtDead)?;
+            .take(LOOKUP_SEEDS)
+            .collect();
+        let count = seeds.len();
+        for (id, addr) in seeds {
+            self.add_candidate(id, addr, 0);
         }
+        count
+    }
 
-        Ok(count)
+    /// `announce_peer` to the `LOOKUP_K` closest nodes that answered with a
+    /// token (libtorrent announces to the 8 closest), if they are near
+    /// enough to the hash to be storing it.
+    async fn announce_to_closest(&self) {
+        let Some(port) = self.callbacks.announce_port else {
+            return;
+        };
+        let targets: Vec<(SocketAddr, ByteBufOwned)> = self
+            .useful_nodes
+            .lock()
+            .iter()
+            .filter(|n| n.state == LookupNodeState::Responded)
+            .filter_map(|n| Some((n.id, n.addr, n.token.clone()?)))
+            .take(LOOKUP_K)
+            .filter(|(id, _, _)| {
+                self.info_hash.distance(id) <= self.callbacks.min_distance_to_announce
+            })
+            .map(|(_, addr, token)| (addr, token))
+            .collect();
+        for (addr, token) in targets {
+            self.dht.rate_limiter.acquire_one().await;
+            let (tid, message) = self.dht.create_request(
+                Request::Announce {
+                    info_hash: self.info_hash,
+                    token,
+                    port,
+                },
+                addr,
+            );
+            let _ = self.dht.worker_sender.send(WorkerSendRequest {
+                our_tid: Some(tid),
+                message,
+                addr,
+            });
+        }
     }
 }
 
 impl<C: RecursiveRequestCallbacks> RecursiveRequest<C> {
+    /// Runs the lookup until it converges (see [`RecursiveRequest`]).
+    /// `addrs`: hosts without a known id (bootstrap), asked first; they do
+    /// not count towards the closest nodes. Returns (answers, failures).
+    async fn run_round(&self, addrs: Vec<SocketAddr>) -> (usize, usize) {
+        let request_one = |id: Option<Id20>, addr: SocketAddr, depth: usize| {
+            self.request_one(id, addr, depth)
+                .instrument(debug_span!("addr", addr = addr.to_string()))
+        };
+        let mut futs = FuturesUnordered::new();
+        for addr in addrs {
+            if self.queued_requests.fetch_add(1, Ordering::Relaxed) < MAX_REQUESTS_PER_LOOKUP {
+                futs.push(request_one(None, addr, 0));
+            }
+        }
+        let (mut ok, mut errors) = (0, 0);
+        loop {
+            while futs.len() < MAX_INFLIGHT_PER_LOOKUP {
+                match self.next_request() {
+                    Some((id, addr, depth)) => futs.push(request_one(Some(id), addr, depth)),
+                    None => break,
+                }
+            }
+            match futs.next().await {
+                Some(Ok(())) => ok += 1,
+                Some(Err(e)) => {
+                    debug!("error: {e:#}");
+                    errors += 1;
+                }
+                None => break,
+            }
+        }
+        (ok, errors)
+    }
+
+    /// The closest candidate inside the window of the `LOOKUP_K` closest
+    /// nodes that answered or are being asked (failed nodes do not count),
+    /// marked in flight; `None` if the window is full or the budget used up.
+    fn next_request(&self) -> Option<(Id20, SocketAddr, usize)> {
+        let mut nodes = self.useful_nodes.lock();
+        let mut alive_or_pending = 0;
+        for n in nodes.iter_mut() {
+            match n.state {
+                LookupNodeState::Failed => {}
+                LookupNodeState::Responded | LookupNodeState::InFlight => {
+                    alive_or_pending += 1;
+                    if alive_or_pending >= LOOKUP_K {
+                        return None;
+                    }
+                }
+                LookupNodeState::Candidate => {
+                    if self.queued_requests.fetch_add(1, Ordering::Relaxed)
+                        >= MAX_REQUESTS_PER_LOOKUP
+                    {
+                        trace!("lookup request budget used up");
+                        return None;
+                    }
+                    n.state = LookupNodeState::InFlight;
+                    return Some((n.id, n.addr, n.depth as usize));
+                }
+            }
+        }
+        None
+    }
+
     async fn request_one(
         &self,
         id: Option<Id20>,
@@ -506,13 +578,8 @@ impl<C: RecursiveRequestCallbacks> RecursiveRequest<C> {
             self.callbacks.on_request_start(self, id, addr);
         }
 
-        let response = self
-            .dht
-            .request(self.request.clone(), addr)
-            .await
-            .inspect(|r| {
-                self.mark_node_responded(addr, r);
-            });
+        let response = self.dht.request(self.request.clone(), addr).await;
+        self.mark_node_done(addr, &response);
         // Nodes we only know by address (bootstrap hosts) identify themselves
         // in the reply; a node that answered is a routing table candidate
         // like any other, even if it hands out no other nodes.
@@ -533,10 +600,7 @@ impl<C: RecursiveRequestCallbacks> RecursiveRequest<C> {
                 debug!("error response: {e:?}");
                 return Err(Error::ErrorResponse);
             }
-            Err(e) => {
-                self.mark_node_error(addr);
-                return Err(e);
-            }
+            Err(e) => return Err(e),
         };
 
         if let Some(peers) = response.values {
@@ -567,127 +631,81 @@ impl<C: RecursiveRequestCallbacks> RecursiveRequest<C> {
             nodes.truncate(MAX_NODES_PER_RESPONSE);
         }
 
-        let now = now();
-
         for node in nodes {
-            let should_request = self.should_request_node(node.id, node.addr, depth, now);
+            let added = self.add_candidate(node.id, node.addr, depth + 1);
             trace!(
-                "should_request={}, id={:?}, addr={}, depth={}/{}",
-                should_request, node.id, node.addr, depth, self.max_depth
+                "added={}, id={:?}, addr={}, depth={}/{}",
+                added,
+                node.id,
+                node.addr,
+                depth + 1,
+                self.max_depth
             );
-            if should_request {
-                if self.queued_requests.fetch_add(1, Ordering::Relaxed) >= MAX_REQUESTS_PER_LOOKUP {
-                    trace!("lookup request budget used up");
-                    break;
-                }
-                self.node_tx
-                    .send((Some(node.id), node.addr, depth + 1))
-                    .ok()
-                    .ok_or(Error::ReceiverDead)?;
-            }
         }
         Ok(())
     }
 
-    fn mark_node_error(&self, addr: SocketAddr) -> bool {
-        self.useful_nodes
-            .write()
-            .iter_mut()
-            .find(|n| n.addr == addr)
-            .map(|n| {
-                n.errors_in_a_row += 1;
-            })
-            .is_some()
-    }
-
-    fn mark_node_responded(&self, addr: SocketAddr, response: &ResponseOrError) -> bool {
-        self.useful_nodes
-            .write()
-            .iter_mut()
-            .find(|n| n.addr == addr)
-            .map(|node| {
-                node.last_response = Some(now());
-                node.errors_in_a_row = 0;
-                match response {
-                    ResponseOrError::Response(r) => {
-                        node.returned_peers =
-                            r.values.as_ref().map(|c| !c.is_empty()).unwrap_or(false)
-                    }
-                    ResponseOrError::Error(_) => {
-                        node.returned_peers = false;
-                    }
+    /// Records the outcome of a request to a node of this round.
+    fn mark_node_done(&self, addr: SocketAddr, response: &crate::Result<ResponseOrError>) {
+        if let Some(node) = self.useful_nodes.lock().iter_mut().find(|n| n.addr == addr) {
+            match response {
+                Ok(ResponseOrError::Response(r)) => {
+                    node.state = LookupNodeState::Responded;
+                    node.token = r.token.clone();
                 }
-            })
-            .is_some()
+                Ok(ResponseOrError::Error(_)) | Err(_) => node.state = LookupNodeState::Failed,
+            }
+        }
     }
 
-    fn should_request_node(
-        &self,
-        node_id: Id20,
-        addr: SocketAddr,
-        depth: usize,
-        now: Instant,
-    ) -> bool {
-        if depth >= self.max_depth {
+    /// Adds a node heard of at `depth` hops from the routing table as a
+    /// candidate of this round. False if it is known already, too deep, us,
+    /// on a host the round already has, or farther than the
+    /// `useful_nodes_limit` closest nodes.
+    fn add_candidate(&self, node_id: Id20, addr: SocketAddr, depth: usize) -> bool {
+        if depth >= self.max_depth || node_id == self.dht.id {
             return false;
         }
-
-        let mut closest_nodes = self.useful_nodes.write();
-
-        // If recently requested, ignore
-        if let Some(existing) = closest_nodes.iter_mut().find(|n| n.id == node_id) {
-            if now - existing.last_request > Duration::from_secs(60) {
-                existing.last_request = now;
-                return true;
-            }
+        let mut nodes = self.useful_nodes.lock();
+        if nodes.iter().any(|n| n.id == node_id) {
             return false;
         }
         // One node per IP address and lookup: a host handing out many ids
         // for itself (or for one victim address) gets one request.
         // (Loopback is keyed by port: only reachable from a loopback node, and
         // local test swarms share one address.)
-        let same_host = |n: &MaybeUsefulNode| {
+        let same_host = |n: &LookupNode| {
             if addr.ip().is_loopback() {
                 n.addr == addr
             } else {
                 n.addr.ip() == addr.ip()
             }
         };
-        if closest_nodes.iter().any(same_host) {
+        if nodes.iter().any(same_host) {
             return false;
         }
-
-        if closest_nodes.capacity() == 0 {
+        let distance = node_id.distance(&self.info_hash);
+        let pos = nodes.partition_point(|n| n.id.distance(&self.info_hash) < distance);
+        if pos >= self.useful_nodes_limit {
+            return false;
+        }
+        if nodes.capacity() == 0 {
             // One allocation of the final size instead of doubling past it.
-            closest_nodes.reserve_exact(self.useful_nodes_limit + 1);
+            nodes.reserve_exact(self.useful_nodes_limit + 1);
         }
-        closest_nodes.push(MaybeUsefulNode {
-            id: node_id,
-            addr,
-            last_request: now,
-            last_response: None,
-            returned_peers: false,
-            errors_in_a_row: 0,
-        });
-
-        closest_nodes.sort_by_key(|n| {
-            let has_returned_peers_desc = Reverse(n.returned_peers);
-            let has_responded_desc = Reverse(n.last_response.is_some() as u8);
-            let distance = n.id.distance(&self.info_hash);
-            let freshest_response = n.last_response.map(|r| now - r).unwrap_or(Duration::MAX);
-            (
-                has_returned_peers_desc,
-                has_responded_desc,
-                distance,
-                freshest_response,
-            )
-        });
-        if closest_nodes.len() > self.useful_nodes_limit {
-            let popped = closest_nodes.pop().unwrap();
-            if popped.id == node_id {
-                return false;
-            }
-        }
+        nodes.insert(
+            pos,
+            LookupNode {
+                id: node_id,
+                addr,
+                depth: depth as u8,
+                state: LookupNodeState::Candidate,
+                token: None,
+            },
+        );
+        // The farthest node is beyond the window anyway; if it is still in
+        // flight, its answer is simply not recorded.
+        nodes.truncate(self.useful_nodes_limit);
         true
     }
 }
@@ -753,14 +771,12 @@ impl DhtState {
     }
 
     async fn request(&self, request: Request, addr: SocketAddr) -> crate::Result<ResponseOrError> {
-        // Bound the wait for the rate limiter too: a request queued behind it
-        // used to wait without limit, before RESPONSE_TIMEOUT began.
-        if tokio::time::timeout(RESPONSE_TIMEOUT, self.rate_limiter.acquire_one())
-            .await
-            .is_err()
-        {
-            return Err(Error::ResponseTimeout(RESPONSE_TIMEOUT));
-        }
+        // Wait for the session-wide query budget. The wait is not bounded by
+        // a timeout: giving up would count as the node failing (and mark
+        // routing table nodes bad). The waiters are bounded instead: every
+        // caller keeps a fixed number of requests in flight (8 per lookup,
+        // 40 lookup rounds, pings paced, refreshes one per stale bucket).
+        self.rate_limiter.acquire_one().await;
         let (tid, message) = self.create_request(request, addr);
         let key = (tid, addr);
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1148,6 +1164,7 @@ impl DhtWorker {
         let v4 = RecursiveRequest::find_node_for_routing_table(
             self.dht.clone(),
             self.dht.id,
+            std::iter::empty(),
             addrs.iter().copied().filter(|a| a.is_ipv4()),
         )
         .instrument(debug_span!("v4"));
@@ -1155,6 +1172,7 @@ impl DhtWorker {
         let v6 = RecursiveRequest::find_node_for_routing_table(
             self.dht.clone(),
             self.dht.id,
+            std::iter::empty(),
             addrs.iter().copied().filter(|a| a.is_ipv6()),
         )
         .instrument(debug_span!("v6"));
@@ -1241,15 +1259,16 @@ impl DhtWorker {
                 _ = &mut filler => {},
                 random_id = rx.recv() => {
                     let random_id = random_id.unwrap();
-                    let addrs = table
+                    let known = table
                         .read()
                         .sorted_by_distance_from(random_id, now())
                         .iter()
-                        .map(|n| n.addr())
-                        .take(8).collect::<Vec<_>>();
+                        .map(|n| (n.id(), n.addr()))
+                        .take(LOOKUP_SEEDS)
+                        .collect::<Vec<_>>();
                     futs.push(
                         RecursiveRequest::find_node_for_routing_table(
-                            self.dht.clone(), random_id, addrs.into_iter()
+                            self.dht.clone(), random_id, known.into_iter(), std::iter::empty()
                         ).instrument(debug_span!("refresh_bucket"))
                     );
                 },
@@ -1266,23 +1285,35 @@ impl DhtWorker {
         };
         let mut futs = FuturesUnordered::new();
         let mut interval = tokio::time::interval(INACTIVITY_TIMEOUT / 4);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let (tx, mut rx) = unbounded_channel();
         let looper = async {
             let mut iteration = 0;
             loop {
                 interval.tick().await;
-                let mut found = 0;
                 let now = now();
-                for node in table.read().iter() {
-                    if matches!(
-                        node.status(now),
-                        NodeStatus::Questionable | NodeStatus::Unknown
-                    ) {
-                        found += 1;
-                        tx.send((node.id(), node.addr())).unwrap();
+                let due: Vec<(Id20, SocketAddr)> = table
+                    .read()
+                    .iter()
+                    .filter(|node| {
+                        matches!(
+                            node.status(now),
+                            NodeStatus::Questionable | NodeStatus::Unknown
+                        )
+                    })
+                    .map(|node| (node.id(), node.addr()))
+                    .collect();
+                trace!("iteration {}, pinging {} nodes", iteration, due.len());
+                // Spread the pings out instead of sending to the whole table
+                // at once (after a restart every saved node is due): a full
+                // table of 512 takes under two minutes, less than the
+                // interval, and stays far below the session query cap.
+                for (i, node) in due.into_iter().enumerate() {
+                    if i > 0 {
+                        tokio::time::sleep(PING_SPACING).await;
                     }
+                    tx.send(node).unwrap();
                 }
-                trace!("iteration {}, pinging {} nodes", iteration, found);
                 iteration += 1;
             }
         };
@@ -1551,7 +1582,11 @@ impl DhtState {
         info_hash: Id20,
         announce_port: Option<u16>,
     ) -> RequestPeersStream {
-        self.get_peers_paced(info_hash, announce_port, LookupPacer::fixed(REQUERY_INTERVAL))
+        self.get_peers_paced(
+            info_hash,
+            announce_port,
+            LookupPacer::fixed(REQUERY_INTERVAL),
+        )
     }
 
     /// Like [`Self::get_peers`], with the time between lookup rounds chosen
@@ -1773,7 +1808,10 @@ mod tests {
         let answered = (0..100)
             .filter(|_| l.allow("198.51.100.1".parse().unwrap(), now))
             .count();
-        assert_eq!(answered, crate::query_limit::MAX_QUERIES_PER_SOURCE as usize);
+        assert_eq!(
+            answered,
+            crate::query_limit::MAX_QUERIES_PER_SOURCE as usize
+        );
     }
 
     #[tokio::test]
@@ -1817,7 +1855,9 @@ mod tests {
         const SOCKETS: usize = 20;
         let mut socks = Vec::new();
         for _ in 0..SOCKETS {
-            socks.push(Arc::new(UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap()));
+            socks.push(Arc::new(
+                UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap(),
+            ));
         }
         let addrs: Vec<SocketAddr> = socks.iter().map(|s| s.local_addr().unwrap()).collect();
         let queries = Arc::new(AtomicUsize::new(0));
@@ -1828,8 +1868,13 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 loop {
-                    let Ok((len, from)) = sock.recv_from(&mut buf).await else { continue };
-                    let Ok(msg) = bprotocol::deserialize_message::<ByteBufOwned>(&buf[..len]) else { continue };
+                    let Ok((len, from)) = sock.recv_from(&mut buf).await else {
+                        continue;
+                    };
+                    let Ok(msg) = bprotocol::deserialize_message::<ByteBufOwned>(&buf[..len])
+                    else {
+                        continue;
+                    };
                     if matches!(msg.kind, MessageKind::Response(_) | MessageKind::Error(_)) {
                         continue;
                     }
@@ -1863,10 +1908,360 @@ mod tests {
             t.abort();
         }
         drop(dht);
-        // Without the bounds this hits the 250 queries/s limiter (about
-        // 750 in 3 s); with them, each bootstrap lookup asks each of the 20
-        // addresses at most once.
+        // Without the bounds this is only held back by the query rate cap;
+        // with them, each bootstrap lookup asks each of the 20 addresses at
+        // most once.
         assert!(n <= 20 * 8, "{n} queries sent to hostile nodes");
     }
-}
 
+    /// All DHT queries share one budget: after a burst of
+    /// `QUERY_BURST_SECONDS` worth, they go out at the configured rate, in
+    /// order, and every waiting query is sent eventually (none is dropped).
+    #[tokio::test(start_paused = true)]
+    async fn test_query_rate_is_capped() {
+        use super::{DEFAULT_QUERIES_PER_SECOND as QPS, QUERY_BURST_SECONDS};
+        use std::sync::Arc;
+
+        let limiter = Arc::new(super::make_rate_limiter_with(QPS));
+        let start = tokio::time::Instant::now();
+        // 40 lookups with 8 requests in flight each, all wanting to send.
+        const WAITERS: usize = 320;
+        let mut tasks = Vec::new();
+        for _ in 0..WAITERS {
+            let limiter = limiter.clone();
+            tasks.push(tokio::spawn(async move {
+                limiter.acquire_one().await;
+                start.elapsed()
+            }));
+        }
+        let mut sent = Vec::new();
+        for t in tasks {
+            sent.push(t.await.unwrap());
+        }
+        sent.sort();
+        let burst = QPS * QUERY_BURST_SECONDS;
+        let in_window =
+            |from: Duration, to: Duration| sent.iter().filter(|t| **t >= from && **t < to).count();
+        assert!(in_window(Duration::ZERO, Duration::from_secs(1)) <= burst + QPS);
+        for s in 1..8 {
+            let n = in_window(Duration::from_secs(s), Duration::from_secs(s + 1));
+            assert!(n <= QPS + 1, "{n} queries in second {s}");
+        }
+        let expected = Duration::from_secs_f64((WAITERS - burst) as f64 / QPS as f64);
+        let last = *sent.last().unwrap();
+        assert!(
+            last >= expected - Duration::from_millis(100)
+                && last <= expected + Duration::from_secs(1),
+            "last of {WAITERS} queries sent after {last:?}, expected about {expected:?}"
+        );
+    }
+
+    /// A simulated network of `SIM_NODES` loopback nodes with Kademlia
+    /// routing tables (up to 8 nodes per bucket). All ids share their first
+    /// 16 bits with `SIM_INFO_HASH` (so they are close enough to announce
+    /// to), and the 8 closest nodes to it have a peer stored for it.
+    mod sim {
+        use std::{
+            collections::HashMap,
+            net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+            sync::Arc,
+        };
+
+        use bencode::ByteBufOwned;
+        use librqbit_core::compact_ip::{Compact, CompactListInBuffer};
+        use parking_lot::Mutex;
+        use tokio::net::UdpSocket;
+
+        use crate::{
+            Id20,
+            bprotocol::{self, Message, MessageKind, Node, Response},
+        };
+
+        pub const SIM_NODES: usize = 1000;
+        pub const K: usize = 8;
+
+        pub fn sim_info_hash() -> Id20 {
+            let mut h = [0x5a; 20];
+            h[0] = 0xab;
+            h[1] = 0xcd;
+            Id20::new(h)
+        }
+
+        #[derive(Default)]
+        pub struct Counters {
+            /// get_peers queries for the info hash, per node index.
+            pub get_peers: HashMap<usize, usize>,
+            /// Nodes that received an announce_peer with their own token.
+            pub announced: Vec<usize>,
+            pub bad_tokens: usize,
+            pub other_queries: usize,
+        }
+
+        pub struct SimNetwork {
+            pub ids: Vec<Id20>,
+            pub addrs: Vec<SocketAddr>,
+            pub counters: Arc<Mutex<Counters>>,
+            tasks: Vec<tokio::task::JoinHandle<()>>,
+        }
+
+        impl Drop for SimNetwork {
+            fn drop(&mut self) {
+                for t in &self.tasks {
+                    t.abort();
+                }
+            }
+        }
+
+        fn splitmix(state: &mut u64) -> u64 {
+            *state = state.wrapping_add(0x9e3779b97f4a7c15);
+            let mut z = *state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+            z ^ (z >> 31)
+        }
+
+        fn leading_zeros(d: &Id20) -> usize {
+            let mut n = 0;
+            for b in d.0 {
+                if b == 0 {
+                    n += 8;
+                } else {
+                    return n + b.leading_zeros() as usize;
+                }
+            }
+            n
+        }
+
+        pub fn peer_of(node: usize) -> SocketAddr {
+            (Ipv4Addr::LOCALHOST, 20_000 + node as u16).into()
+        }
+
+        impl SimNetwork {
+            /// The `K` nodes closest to the info hash.
+            pub fn closest(&self) -> Vec<usize> {
+                let h = sim_info_hash();
+                let mut idx: Vec<usize> = (0..self.ids.len()).collect();
+                idx.sort_by_key(|&i| self.ids[i].distance(&h));
+                idx.truncate(K);
+                idx
+            }
+
+            pub async fn start() -> Self {
+                let _ = rlimit::increase_nofile_limit(4096);
+                let mut rng = 0x1234_5678_u64;
+                let h = sim_info_hash();
+                let mut ids = Vec::new();
+                for _ in 0..SIM_NODES {
+                    let mut id = [0u8; 20];
+                    for chunk in id.chunks_mut(8) {
+                        let r = splitmix(&mut rng).to_be_bytes();
+                        chunk.copy_from_slice(&r[..chunk.len()]);
+                    }
+                    id[0] = h.0[0];
+                    id[1] = h.0[1];
+                    ids.push(Id20::new(id));
+                }
+                let mut socks = Vec::new();
+                for _ in 0..SIM_NODES {
+                    socks.push(UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap());
+                }
+                let addrs: Vec<SocketAddr> =
+                    socks.iter().map(|s| s.local_addr().unwrap()).collect();
+                // Kademlia tables: up to K nodes per bucket (prefix length
+                // shared with the owner), picked in a shuffled order.
+                let mut tables = Vec::new();
+                for i in 0..SIM_NODES {
+                    let mut order: Vec<usize> = (0..SIM_NODES).filter(|&j| j != i).collect();
+                    for k in (1..order.len()).rev() {
+                        let r = (splitmix(&mut rng) % (k as u64 + 1)) as usize;
+                        order.swap(k, r);
+                    }
+                    let mut per_bucket: HashMap<usize, usize> = HashMap::new();
+                    let mut table = Vec::new();
+                    for j in order {
+                        let b = leading_zeros(&ids[i].distance(&ids[j]));
+                        let c = per_bucket.entry(b).or_default();
+                        if *c < K {
+                            *c += 1;
+                            table.push(j);
+                        }
+                    }
+                    tables.push(table);
+                }
+                let ids_arc = Arc::new(ids.clone());
+                let addrs_arc = Arc::new(addrs.clone());
+                let mut by_dist: Vec<usize> = (0..SIM_NODES).collect();
+                by_dist.sort_by_key(|&i| ids[i].distance(&h));
+                let holders: Arc<Vec<usize>> = Arc::new(by_dist[..K].to_vec());
+                let counters = Arc::new(Mutex::new(Counters::default()));
+                let mut tasks = Vec::new();
+                for (i, (sock, table)) in socks.into_iter().zip(tables).enumerate() {
+                    let ids = ids_arc.clone();
+                    let addrs = addrs_arc.clone();
+                    let holders = holders.clone();
+                    let counters = counters.clone();
+                    tasks.push(tokio::spawn(async move {
+                        let token = format!("tok{i}");
+                        let mut buf = vec![0u8; 4096];
+                        let mut out = Vec::new();
+                        loop {
+                            let Ok((len, from)) = sock.recv_from(&mut buf).await else {
+                                continue;
+                            };
+                            let Ok(msg) =
+                                bprotocol::deserialize_message::<ByteBufOwned>(&buf[..len])
+                            else {
+                                continue;
+                            };
+                            let target = match &msg.kind {
+                                MessageKind::GetPeersRequest(r) => {
+                                    if r.info_hash == h {
+                                        *counters.lock().get_peers.entry(i).or_default() += 1;
+                                    }
+                                    Some(r.info_hash)
+                                }
+                                MessageKind::FindNodeRequest(r) => {
+                                    counters.lock().other_queries += 1;
+                                    Some(r.target)
+                                }
+                                MessageKind::PingRequest(_) => {
+                                    counters.lock().other_queries += 1;
+                                    None
+                                }
+                                MessageKind::AnnouncePeer(a) => {
+                                    let mut c = counters.lock();
+                                    if a.info_hash == h && a.token.as_ref() == token.as_bytes() {
+                                        c.announced.push(i);
+                                    } else {
+                                        c.bad_tokens += 1;
+                                    }
+                                    None
+                                }
+                                _ => continue,
+                            };
+                            let is_get_peers = matches!(msg.kind, MessageKind::GetPeersRequest(_));
+                            let nodes = target.map(|t| {
+                                let mut near = table.clone();
+                                near.sort_by_key(|&j| ids[j].distance(&t));
+                                CompactListInBuffer::new_from_iter(near.into_iter().take(K).map(
+                                    |j| {
+                                        let SocketAddr::V4(a) = addrs[j] else {
+                                            unreachable!()
+                                        };
+                                        Node::<SocketAddrV4> {
+                                            id: ids[j],
+                                            addr: a,
+                                        }
+                                    },
+                                ))
+                            });
+                            let values = (is_get_peers && holders.contains(&i))
+                                .then(|| vec![Compact(peer_of(i))]);
+                            let response = Response {
+                                id: ids[i],
+                                nodes,
+                                nodes6: None,
+                                values,
+                                token: is_get_peers.then(|| ByteBufOwned::from(token.as_bytes())),
+                            };
+                            let reply = Message {
+                                transaction_id: msg.transaction_id,
+                                version: None,
+                                ip: None,
+                                kind: MessageKind::Response(response),
+                            };
+                            out.clear();
+                            bprotocol::serialize_message(
+                                &mut out,
+                                reply.transaction_id,
+                                reply.version,
+                                reply.ip,
+                                reply.kind,
+                            )
+                            .unwrap();
+                            let _ = sock.send_to(&out, from).await;
+                        }
+                    }));
+                }
+                Self {
+                    ids,
+                    addrs,
+                    counters,
+                    tasks,
+                }
+            }
+        }
+    }
+
+    /// One get_peers round in a simulated network of a thousand nodes: it
+    /// reaches the nodes closest to the info hash (gets the peers they store
+    /// and announces to them) while querying a few dozen nodes at most, like
+    /// libtorrent's traversal. (Before rounds converged, this one asked 127
+    /// nodes, and announced to all of them; 59 with 300 nodes. In the real
+    /// network it used up the whole budget of 256.)
+    #[tokio::test]
+    async fn test_lookup_converges_in_simulated_network() {
+        use futures::StreamExt;
+        use std::collections::HashSet;
+
+        let net = sim::SimNetwork::start().await;
+        // Our id is far from the cluster, so the lookup starts from the few
+        // nodes of one bucket and has to walk towards the info hash.
+        let mut own = [0x11u8; 20];
+        own[0] = 0x2b;
+        let dht = DhtState::with_config(DhtConfig {
+            peer_id: Some(Id20::new(own)),
+            listen_addr: Some((Ipv4Addr::LOCALHOST, 0).into()),
+            bootstrap_addrs: Some(vec![net.addrs[0].to_string()]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        wait_for_nodes(&dht, 8).await;
+        // Let the bootstrap lookup finish.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        let closest = net.closest();
+        let expected_peers: HashSet<SocketAddr> =
+            closest.iter().map(|&i| sim::peer_of(i)).collect();
+        let mut stream = dht.get_peers_paced(
+            sim::sim_info_hash(),
+            Some(6881),
+            crate::LookupPacer::fixed(Duration::from_secs(3600)),
+        );
+        let mut found = HashSet::new();
+        let _ = tokio::time::timeout(Duration::from_secs(5), async {
+            while let Some(p) = stream.next().await {
+                found.insert(p);
+                if found.len() == expected_peers.len() {
+                    break;
+                }
+            }
+        })
+        .await;
+        // Let the round finish (and its announces arrive).
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        let c = net.counters.lock();
+        let distinct = c.get_peers.len();
+        let total: usize = c.get_peers.values().sum();
+        let announced: HashSet<usize> = c.announced.iter().copied().collect();
+        eprintln!(
+            "get_peers round: {distinct} distinct nodes, {total} queries, {} peers found, announced to {:?}, closest {:?}",
+            found.len(),
+            announced,
+            closest
+        );
+        assert_eq!(found, expected_peers, "peers stored at the closest nodes");
+        assert!(distinct <= 60, "{distinct} nodes queried in one round");
+        assert_eq!(total, distinct, "a node is asked once per round");
+        assert_eq!(c.bad_tokens, 0);
+        assert_eq!(
+            announced,
+            closest.iter().copied().collect::<HashSet<_>>(),
+            "announced to the closest nodes that returned a token"
+        );
+        assert_eq!(c.announced.len(), sim::K, "one announce per node");
+        drop(c);
+        drop(stream);
+    }
+}

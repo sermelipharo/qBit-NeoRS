@@ -2392,6 +2392,7 @@ dependencies = [
  "librqbit-dualstack-sockets",
  "parking_lot",
  "rand 0.10.3",
+ "rlimit",
  "serde",
  "serde_derive",
  "serde_json",

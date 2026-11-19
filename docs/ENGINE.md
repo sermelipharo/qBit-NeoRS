@@ -1,7 +1,7 @@
 # Engine fork (librqbit 9.0.1) — changes and capability map
 
 The engine lives in `engine/` (fork of rqbit's library crates at upstream
-commit `57e95d1`). This file records every capability the qBittorrent feature
+commit `57e95d1`, synced up to `f23bacdd`). This file records every capability the qBittorrent feature
 set needs, whether upstream had it, and what the fork adds. "Syncing with
 upstream" at the end describes how upstream changes are merged and logs what
 was ported or skipped.
@@ -1837,6 +1837,28 @@ Procedure:
    changes to the log below.
 
 ### Sync log
+
+**2026-11-19** — sync point `f23bacdd` (upstream `main`, 2026-11-03; latest
+release v9.1.0, 2026-10-29). Several of the commits are pull requests from the
+previous sync that upstream has now merged.
+
+| Upstream change | Kind | Result |
+|---|---|---|
+| `f1849ca1` ut_metadata bounds check off by one (remote panic) | security | already fixed (`metadata_piece_range`, with a regression test; same as PR #704) |
+| `f4ca7d91` duplicate `.pad/<len>` names reject hybrid torrents | bug fix | already ported (PR #701) |
+| `e0e9348c` LSD announce task outlives its torrent | bug fix | already fixed (PR #700) |
+| `bdc3cd71` `CurrentPiece::piece_offset` was the piece number | bug fix | already ported (PR #695, with its test) |
+| `23c3a8ae` middlewares drop `on_piece_completed` | bug fix | already fixed (PR #653; the fork's middlewares also forward `layout()`); upstream's probe tests not taken, the middlewares are debugging aids the app doesn't use |
+| `582a0d9c` concurrent adds get the same ID, all but one silently dropped | bug fix | ported; qbt-core was affected (concurrent add reconciles took the other torrent's handle) |
+| `374588c8` no HAVE for pieces the peer's bitfield claims | bug fix | the fork already sent those but skipped seeds; seeds now get every HAVE too (anti-leech tools on seeds) |
+| `f23bacdd` several LSD registrations for one info hash | bug fix | ported (replaces the fork's newest-wins generation check) |
+| `4491b61e` wire-level fake peer test harness | test | ported, used by the HAVE tests |
+| `7d70feaa` metrics name `rqbit_peers_seen` | metrics | skipped: the Prometheus export isn't shipped |
+| `c96c21db` URL-encode `output_folder` in the web UI | web UI | skipped: upstream web UI dropped |
+
+Dependencies: v9.1.0 (`4309d387`) bumps the crate versions and refreshes
+`Cargo.lock`; no dependency requirement changed, and the fork keeps its own
+lock file.
 
 **2026-10-18** — sync point `57e95d1` (upstream `main`, 2026-10-09; latest
 release v9.0.1, 2026-08-20). Upstream `main` has no commits after the fork

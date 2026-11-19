@@ -594,6 +594,25 @@ mod tests {
         assert_eq!(r["torrents"]["aa"]["progress"], 0.1);
     }
 
+    /// A hybrid torrent added by its v1 hash takes its v2-based ID once the
+    /// metadata arrives (qBittorrent 5.3.1 #25080 fixed `sync/maindata`
+    /// ignoring that): the old ID is removed, the torrent is sent whole
+    /// under the new one and its trackers list the new ID.
+    #[test]
+    fn maindata_torrent_id_change() {
+        let mut s = MaindataSync::default();
+        s.poll(0, input(vec![torrent("aa", 0.1)], &[], 0));
+        let mut inp = input(vec![torrent("bb", 0.1)], &[], 0);
+        inp.torrents[0].name = "AA".into();
+        inp.trackers = BTreeMap::from([("http://t/a".into(), vec!["bb".into()])]);
+        let r = s.poll(1, inp);
+        assert_eq!(r["torrents_removed"], json!(["aa"]));
+        assert_eq!(r["torrents"]["bb"]["name"], "AA");
+        assert_eq!(r["torrents"]["bb"]["progress"], 0.1);
+        assert_eq!(r["trackers"], json!({"http://t/a": ["bb"]}));
+        assert!(r.get("trackers_removed").is_none());
+    }
+
     #[test]
     fn rid_wraps() {
         let mut s = MaindataSync { last_sent_id: RID_CYCLE, accepted_id: 0, ..Default::default() };

@@ -146,6 +146,22 @@ mod tests {
         assert_eq!(u.torrents.len(), 1);
     }
 
+    /// A torrent whose ID changes (hybrid added by its v1 hash, metadata
+    /// received) is removed under the old ID and sent whole under the new.
+    #[test]
+    fn torrent_id_change() {
+        let mut s = GuiSyncState::default();
+        let map = |h: &str| BTreeMap::from([("udp://t".to_string(), vec![h.to_string()])]);
+        let snap = |h: &str, fp| MainDataSnapshot { torrents: vec![t(h, 0.5)], trackers: map(h), trackers_fp: fp, ..Default::default() };
+        s.diff(snap("v1", 1));
+        let u = s.diff(snap("v2", 2));
+        assert_eq!(u.torrents_removed, vec!["v1".to_string()]);
+        assert_eq!(u.torrents.len(), 1);
+        assert_eq!(u.torrents[0].hash, "v2");
+        assert_eq!(u.trackers.len(), 1);
+        assert_eq!(u.trackers[0].hashes, vec!["v2".to_string()]);
+    }
+
     #[test]
     fn unchanged_tracker_fingerprint_skips_the_map() {
         let mut s = GuiSyncState::default();

@@ -400,4 +400,53 @@ mod tests {
             http::StatusCode::INTERNAL_SERVER_ERROR
         );
     }
+
+    /// The built-in UI sets every string from the server (names, tracker
+    /// messages, RSS, search results, plugin output) and every UI string as
+    /// text; nothing is ever parsed as HTML (qBittorrent 5.3.1 #25145 fixed
+    /// the places its WebUI did). Keep it that way: no HTML sinks in the
+    /// sources. RSS descriptions are only parsed in an inert `DOMParser`
+    /// document and read back as text (`rss.ts`).
+    #[test]
+    fn built_in_ui_sources_have_no_html_sinks() {
+        const SINKS: [&str; 10] = [
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "document.write",
+            "createContextualFragment",
+            "srcdoc",
+            "setHTML",
+            "parseHTMLUnsafe",
+            "eval(",
+            "new Function",
+        ];
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("webui/src");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+            if !matches!(ext, "ts" | "html") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            for sink in SINKS {
+                assert!(!text.contains(sink), "{} uses {sink}", path.display());
+            }
+            if ext == "html" {
+                // No inline script or handlers (the CSP refuses them anyway).
+                let handler = text.match_indices(" on").any(|(i, _)| {
+                    let rest = &text[i + 3..];
+                    let name = rest.bytes().take_while(u8::is_ascii_alphabetic).count();
+                    name > 0 && rest.as_bytes().get(name) == Some(&b'=')
+                });
+                assert!(!text.contains("<script>") && !handler, "{}", path.display());
+            }
+            if path.file_name().is_some_and(|n| n != "rss.ts") {
+                assert!(!text.contains("DOMParser"), "{} parses HTML", path.display());
+            }
+            checked += 1;
+        }
+        assert!(checked >= 20, "only {checked} files checked in {}", dir.display());
+    }
 }

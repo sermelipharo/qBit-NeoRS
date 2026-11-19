@@ -333,6 +333,17 @@ Mitigations:
   `Transfer-Encoding`, ...). They can replace security headers such as
   `X-Frame-Options` or `Content-Security-Policy` (as in qBittorrent; only an
   authenticated user can set them). Download file names are sanitized.
+* The built-in UI never parses a string as HTML: server data (names,
+  paths, tracker and peer data, RSS, search results, plugin and log text)
+  and UI strings are set as text (`util.ts` `h()`/`put()` create text
+  nodes), links open only for http(s), RSS descriptions are read as text
+  from an inert `DOMParser` document. Audited again against qBittorrent
+  5.3.1's #25145 (its WebUI inserted translated strings as HTML); a test
+  (`built_in_ui_sources_have_no_html_sinks`) fails on any HTML sink
+  (`innerHTML`, `insertAdjacentHTML`, `document.write`, inline handlers,
+  ...) in the sources. Translation markers of an alternative UI are
+  replaced by their own source text only (no translation files), and
+  `${LANG}` is two ASCII letters.
 * Static files: the built-in UI is embedded (no file system access);
   decoded paths containing `\`, NUL or `.`/`..` segments are rejected (so
   `%2e%2e`, `%2f` and `%5c` tricks are refused). The alternative UI folder

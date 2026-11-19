@@ -1852,13 +1852,13 @@ impl PeerConnectionHandler for &'_ PeerHandler {
     }
 
     fn resync_haves(&self, advertised: &mut AdvertisedHaves, emit: &mut dyn FnMut(u32) -> bool) {
-        // Same rules as `should_transmit_have`; a super-seed reveals its
-        // pieces one by one and must not announce them all here.
+        // Same rules as `should_transmit_have`; when we super-seed to this
+        // peer we reveal pieces one by one and must not announce them all here.
         let skip = self.state.shared.options.disable_upload()
             || self
                 .state
                 .peers
-                .with_live(self.addr, |l| l.seeder || l.super_seeding)
+                .with_live(self.addr, |l| l.super_seeding)
                 .unwrap_or(true);
         if skip {
             advertised.cancel_resync();
@@ -2104,19 +2104,13 @@ impl PeerConnectionHandler for &'_ PeerHandler {
     }
 
     fn should_transmit_have(&self, _id: ValidPieceIndex) -> bool {
-        if self.state.shared.options.disable_upload() {
-            return false;
-        }
-        // Skip "have" only for peers with the whole torrent. A peer that
-        // merely has this piece still needs it: a super-seeding seed (BEP 16)
-        // reveals its pieces one by one and waits for our "have" to reveal
-        // the next one.
-        let seed = self
-            .state
-            .peers
-            .with_live(self.addr, |l| l.seeder)
-            .unwrap_or(true);
-        !seed
+        // Announce every completed piece to every peer, seeds included (as
+        // libtorrent's default `send_redundant_have`). Anti-leech tools on the
+        // uploading side (e.g. PeerBanHelper's ProgressCheatBlocker) ban a
+        // peer whose reported progress doesn't grow with what it downloaded,
+        // and a super-seeding seed (BEP 16) waits for our "have" to reveal
+        // its next piece.
+        !self.state.shared.options.disable_upload()
     }
 
     fn update_my_extended_handshake(

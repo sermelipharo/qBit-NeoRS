@@ -151,9 +151,11 @@ incoming, utp, encrypted, holepunched, seed, super_seeding }`.
 * `add_peers` on a torrent that isn't live queues up to 500 addresses and
   connects them when it starts. `disconnect_peer` closes the connection and
   doesn't reconnect it (the hook for banning; the ban list itself is session
-  IP filtering). A "have" is now sent to every peer that doesn't have the
-  whole torrent, even one that already has the piece (needed by super-seeding
-  seeds).
+  IP filtering). A "have" is sent to every peer, even one that already has
+  the piece or the whole torrent (libtorrent's `send_redundant_have`, on by
+  default): super-seeding seeds wait for it, and anti-leech tools on the
+  uploading side ban a peer whose reported progress doesn't grow. Nothing is
+  sent while uploads are disabled.
 * HAVEs are never lost: each writer remembers which pieces it advertised
   (BITFIELD + HAVE, one bit per piece, nothing for connections that started
   with every piece). Upstream dropped HAVEs when a writer fell more than 128

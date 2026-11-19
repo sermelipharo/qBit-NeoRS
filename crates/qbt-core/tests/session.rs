@@ -173,6 +173,15 @@ fn torrent_lifecycle_and_persistence() {
     assert!(err.is_err(), "a file cannot become a folder");
     rt.block_on(app.rename_folder(hash.clone(), "Album/sub".into(), "Album/Sub2".into())).unwrap();
     assert!(downloads.join("Album/Sub2/02.bin").exists());
+    // A folder inside a renamed folder can be renamed under its new path
+    // (qBittorrent 5.3.1, #25135), then both go back.
+    rt.block_on(app.rename_folder(hash.clone(), "Album".into(), "Disc".into())).unwrap();
+    rt.block_on(app.rename_folder(hash.clone(), "Disc/Sub2".into(), "Disc/Sub3".into())).unwrap();
+    assert!(downloads.join("Disc/Sub3/02.bin").exists());
+    assert!(rt.block_on(app.rename_folder(hash.clone(), "Album/Sub2".into(), "Album/x".into())).is_err());
+    rt.block_on(app.rename_folder(hash.clone(), "Disc".into(), "Album".into())).unwrap();
+    rt.block_on(app.rename_folder(hash.clone(), "Album/Sub3".into(), "Album/Sub2".into())).unwrap();
+    assert!(downloads.join("Album/Sub2/02.bin").exists());
 
     // Move the data.
     let new_location = tmp.path().join("moved");

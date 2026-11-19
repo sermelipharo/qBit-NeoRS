@@ -3954,7 +3954,7 @@ Errors `400`: `Cannot specify filePriorities when adding multiple torrents`, `Ca
 
 Per-session caches: `torrentSourceCache` (source string -> infohash) and `torrentMetadataCache` (TorrentID -> TorrentDescriptor). Metadata-only downloads use the session's "download metadata" facility (magnet resolved without adding the torrent).
 
-- `torrents/fetchMetadata` (POST): params `source` (required; trimmed, percent-decoded; magnet, bare hash or http(s) URL), `downloader` (optional search plugin).
+- `torrents/fetchMetadata` (POST): params `source` (required; trimmed; used as received, without a second percent-decoding, so a URL keeps its own escapes such as `%2B` (5.3.1, #25113); magnet, bare hash or http(s) URL), `downloader` (optional search plugin).
   - Empty source -> `400 Must specify URI or hash`. Invalid downloader -> `400 downloader must be a valid search plugin`.
   - Magnet/hash: if metadata cached -> `200` with full info object; else if the torrent is already in the transfer list with metadata -> `200` info from it; else if a metadata download is already running (`isKnownTorrent`) -> `202` `{infohash_v1, infohash_v2, hash}`; else start metadata download -> `202` same object (failure to start -> `400 Unable to download metadata for '%1'`).
   - http(s) URL: starts (once) a download of the .torrent (or plugin download); responds `202 {}`. When finished: .torrent is parsed and cached; a redirect to magnet starts a metadata download. Client polls again; once cached the infohash path answers `200`.
@@ -3962,7 +3962,7 @@ Per-session caches: `torrentSourceCache` (source string -> infohash) and `torren
   - Info object: `{infohash_v1, infohash_v2, hash, info: {files: [{path, length}], length, name, piece_length, pieces_num, private}, trackers: [{url, tier}], webseeds: [url], created_by, creation_date, comment}`.
   - qBittorrent 5.3 (#24246): while "Excluded file names" is on, every file entry also has `priority` (`0` = matches an excluded name, else `1`; `applyFilenameFilter` at serialization time, so the current patterns apply to cached metadata too); with the setting off the key is absent. qBit NeoRS also reports `priority` when a magnet's `so` leaves files out (those are `0`).
 - `torrents/parseMetadata` (POST multipart): uploaded .torrent files -> caches each and returns an **array** of info objects in upload order (2.13.0). None -> `400 Must specify torrent file(s)`; invalid -> `415 '%1' is not a valid torrent file.`
-- `torrents/saveMetadata` (GET/POST): `source` -> returns the cached metadata as a .torrent file (`application/x-bittorrent`, `<id>.torrent`). Unknown source -> `404`; not yet available -> `409 Metadata is not yet available`; export failure -> `409 Unable to export torrent metadata. Error: %1`.
+- `torrents/saveMetadata` (GET/POST): `source` (as received, like `fetchMetadata`) -> returns the cached metadata as a .torrent file (`application/x-bittorrent`, `<id>.torrent`). Unknown source -> `404`; not yet available -> `409 Metadata is not yet available`; export failure -> `409 Unable to export torrent metadata. Error: %1`.
 - When a metadata download finishes, the cached descriptor is completed (hybrid torrents also matched via their v1 id).
 
 #### 6.15.7 Mutating torrent endpoints (all POST)

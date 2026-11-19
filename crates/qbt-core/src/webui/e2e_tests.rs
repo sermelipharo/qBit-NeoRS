@@ -1284,6 +1284,54 @@ fn search_jobs_are_restored_and_shared_by_sessions() {
     });
 }
 
+/// 5.3.1 (#25113): `fetchMetadata` / `saveMetadata` use the source as sent
+/// (decoded once by the form parser); a URL's own escapes such as `%2B`
+/// reach the server unchanged.
+#[test]
+fn metadata_source_keeps_its_url_encoding() {
+    let h = Harness::new(|_| {});
+    h.block(async {
+        let c = h.login().await;
+        let tor = crate::migrate::libtorrent::tests::sample_torrent(16, &[7u8; 48], b"nfo!");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let paths = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen = paths.clone();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 4096];
+                let n = s.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let path = req.split(' ').nth(1).unwrap_or_default().to_owned();
+                seen.lock().unwrap().push(path);
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/x-bittorrent\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    tor.len()
+                );
+                let _ = s.write_all(head.as_bytes()).await;
+                let _ = s.write_all(&tor).await;
+            }
+        });
+        let source = format!("http://127.0.0.1:{port}/a%2Bb%20c.torrent");
+        let mut info = Value::Null;
+        for _ in 0..200 {
+            let r = h.post("/api/v2/torrents/fetchMetadata", &[("source", &source)], Some(&c)).await;
+            if r.status() == 200 {
+                let v = r.json::<Value>().await.unwrap();
+                if v.get("info").is_some() {
+                    info = v;
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(info.get("info").is_some(), "no metadata: {info}");
+        assert_eq!(*paths.lock().unwrap(), vec!["/a%2Bb%20c.torrent".to_string()]);
+        let r = h.post("/api/v2/torrents/saveMetadata", &[("source", &source)], Some(&c)).await;
+        assert_eq!(r.status(), 200);
+    });
+}
+
 /// 5.3 (#24246): `parseMetadata` / `fetchMetadata` file entries carry
 /// `priority` (0 = excluded by name) while excluded file names are on, and
 /// the Add sheet's changed selection is added through the cached metadata.

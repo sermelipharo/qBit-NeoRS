@@ -598,7 +598,9 @@ async fn save_metadata(c: &mut Call<'_>) -> ApiResult {
     if raw.is_empty() {
         return Err(ApiError::bad_params("Must specify URI or hash"));
     }
-    let source = percent_decode_str(raw);
+    // The form/query value is already decoded once; decoding it again
+    // would change a URL's own escapes (qBittorrent 5.3.1 #25113).
+    let source = raw.to_owned();
     let id = {
         let d = c.session.data.lock().await;
         d.source_id(&source).filter(|s| !s.is_empty()).or_else(|| parse_info_hash(&source).map(|x| x.2))
@@ -625,7 +627,8 @@ async fn fetch_metadata(c: &mut Call<'_>) -> ApiResult {
     if !downloader.is_empty() && !plugin_exists(c, downloader) {
         return Err(ApiError::bad_params("downloader must be a valid search plugin"));
     }
-    let source = percent_decode_str(&raw);
+    // Already decoded once (see `save_metadata`).
+    let source = raw;
     let parsed = parse_info_hash(&source);
     let mut data = c.session.data.lock().await;
     let cached_id = data.source_id(&source);

@@ -257,4 +257,4 @@ so the script also copies a rebuilt library and headers there.
 
 Sibling project: qBittorrent Neo — separate repo, C++ qBittorrent core with this SwiftUI UI.
 
-Peer ID: Azureus-style `-NR<major><minor><patch>0-` from the crate version (`-NR0330-` for 0.3.3; client code `NR`).
+Peer ID: Azureus-style `-NR<major><minor><patch>0-` from the crate version (`-NR0340-` for 0.3.4; client code `NR`).

@@ -1,6 +1,7 @@
 mod e2e;
 mod e2e_another_local_client;
 mod e2e_live;
+mod fake_peer;
 mod e2e_net;
 mod e2e_storage;
 mod e2e_stream;

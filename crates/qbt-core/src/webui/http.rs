@@ -415,6 +415,31 @@ pub fn http_date(t: chrono::DateTime<chrono::Utc>) -> String {
 mod tests {
     use super::*;
 
+    /// qBittorrent 5.3.1 (#25114): `+` means a space only where it is
+    /// literal; an encoded `%2B` stays a plus sign, in names and values,
+    /// in query strings and form bodies (upstream's test rows).
+    #[test]
+    fn encoded_plus_signs_are_preserved() {
+        let rows: [(&str, &str, &str, &[u8]); 10] = [
+            ("name", "value", "name", b"value"),
+            ("display+name", "one+two", "display name", b"one two"),
+            ("display%2Bname", "value", "display+name", b"value"),
+            ("name", "one%2Btwo", "name", b"one+two"),
+            ("ke%2By+name", "one%2Btwo+three", "ke+y name", b"one+two three"),
+            ("name", "one%252Btwo", "name", b"one%2Btwo"),
+            ("name", "one%20two", "name", b"one two"),
+            ("name", "a%26b%3Dc%3Fd%23e", "name", b"a&b=c?d#e"),
+            ("name", "%25", "name", b"%"),
+            ("%E5%90%8D", "%E5%80%BC%2B", "名", &[0xe5, 0x80, 0xbc, 0x2b]),
+        ];
+        for (enc_name, enc_value, name, value) in rows {
+            let pair = format!("{enc_name}={enc_value}");
+            let value = std::str::from_utf8(value).unwrap();
+            assert_eq!(parse_query(&pair).get(name), Some(value), "query {pair}");
+            assert_eq!(parse_form(pair.as_bytes()).get(name), Some(value), "form {pair}");
+        }
+    }
+
     #[test]
     fn query_parsing() {
         let p = parse_query("a=1&b=x%20y&c=a+b&=skip&noeq&d=%zz&a=2&e=%E2%9C%93&f=");

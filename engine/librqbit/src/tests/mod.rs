@@ -1,4 +1,5 @@
 mod e2e;
+mod e2e_add;
 mod e2e_another_local_client;
 mod e2e_live;
 mod e2e_have;

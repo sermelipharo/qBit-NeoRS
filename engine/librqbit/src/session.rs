@@ -1882,16 +1882,20 @@ impl Session {
         let (managed_torrent, metadata) = {
             let mut g = self.db.write();
             if let Some((id, handle)) = g.torrents.iter().find_map(|(eid, t)| {
-                if t.has_info_hash(info_hash)
-                    || info_hash_alt.is_some_and(|a| t.has_info_hash(a))
-                    || *eid == id
-                {
+                if t.has_info_hash(info_hash) || info_hash_alt.is_some_and(|a| t.has_info_hash(a)) {
                     Some((*eid, t.clone()))
                 } else {
                     None
                 }
             }) {
                 return Ok(AddTorrentResponse::AlreadyManaged(id, handle));
+            }
+            // Never hand back another torrent's handle for a colliding ID.
+            if let Some(existing) = g.torrents.get(&id) {
+                bail!(
+                    "torrent id {id} is already used by a different torrent {:?}",
+                    existing.info_hash()
+                );
             }
 
             let span = debug_span!(parent: self.rs(), "torrent", id);

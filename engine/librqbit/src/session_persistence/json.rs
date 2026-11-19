@@ -1,4 +1,9 @@
-use std::{any::TypeId, collections::HashMap, path::PathBuf};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use crate::{
     api::TorrentIdOrHash,
@@ -30,6 +35,10 @@ pub struct JsonSessionPersistenceStore {
     output_folder: PathBuf,
     db_filename: PathBuf,
     db_content: tokio::sync::RwLock<SerializedSessionDatabase>,
+    // IDs must be allocated atomically: a torrent is only inserted into
+    // db_content after next_id() returns, so concurrent adds would otherwise
+    // get the same ID.
+    next_id: AtomicUsize,
     spawner: BlockingSpawner,
     /// Only the fast-resume bitfields (`<hash>.bitv`) are kept on disk. The
     /// database holds an id -> info hash entry per torrent and is never
@@ -72,10 +81,14 @@ impl JsonSessionPersistenceStore {
             }
         };
 
+        let db: SerializedSessionDatabase = db;
+        let next_id = db.torrents.keys().copied().max().map_or(0, |max| max + 1);
+
         Ok(Self {
             db_filename,
             output_folder,
             db_content: tokio::sync::RwLock::new(db),
+            next_id: AtomicUsize::new(next_id),
             spawner,
             bitv_only,
         })
@@ -313,16 +326,7 @@ impl BitVFactory for JsonSessionPersistenceStore {
 #[async_trait]
 impl SessionPersistenceStore for JsonSessionPersistenceStore {
     async fn next_id(&self) -> anyhow::Result<TorrentId> {
-        Ok(self
-            .db_content
-            .read()
-            .await
-            .torrents
-            .keys()
-            .copied()
-            .max()
-            .map(|max| max + 1)
-            .unwrap_or(0))
+        Ok(self.next_id.fetch_add(1, Ordering::Relaxed))
     }
 
     async fn delete(&self, id: TorrentId) -> anyhow::Result<()> {
@@ -408,5 +412,32 @@ impl SessionPersistenceStore for JsonSessionPersistenceStore {
         torrent: &ManagedTorrentHandle,
     ) -> anyhow::Result<()> {
         self.update_db(id, torrent, false).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn next_id_is_unique_before_the_torrent_is_stored() {
+        let dir = tempfile::TempDir::with_prefix("rqbit_json_ids").unwrap();
+        let store = JsonSessionPersistenceStore::new(dir.path().into(), BlockingSpawner::new(1), true)
+            .await
+            .unwrap();
+        assert_eq!(store.next_id().await.unwrap(), 0);
+        assert_eq!(store.next_id().await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn next_id_continues_after_the_stored_ids() {
+        let dir = tempfile::TempDir::with_prefix("rqbit_json_ids").unwrap();
+        let db = r#"{"torrents":{"4":{"info_hash":"0000000000000000000000000000000000000000","trackers":[],"output_folder":"/x","only_files":null,"is_paused":false}}}"#;
+        std::fs::write(dir.path().join("session.json"), db).unwrap();
+        let store = JsonSessionPersistenceStore::new(dir.path().into(), BlockingSpawner::new(1), false)
+            .await
+            .unwrap();
+        assert_eq!(store.next_id().await.unwrap(), 5);
+        assert_eq!(store.next_id().await.unwrap(), 6);
     }
 }

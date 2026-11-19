@@ -927,6 +927,27 @@ fn edit_category_keeps_what_the_call_leaves_out() {
 
 /// qBittorrent 5.3's share limits mode on torrents: `torrents/add`,
 /// `torrents/info` and `setShareLimits` (where the mode stays optional).
+/// 5.3.1 (#25070): piece and file information of a torrent without
+/// metadata is empty, not an error.
+#[test]
+fn pieces_info_without_metadata_is_empty() {
+    let h = Harness::new(|_| {});
+    let base = h._dir.path().to_string_lossy().into_owned();
+    h.block(async {
+        let c = h.login().await;
+        let id = "4444444444444444444444444444444444444444";
+        let urls = format!("magnet:?xt=urn:btih:{id}&dn=four");
+        let save = format!("{base}/m4");
+        let form = [("urls", urls.as_str()), ("savepath", save.as_str()), ("stopped", "true")];
+        assert_eq!(h.post("/api/v2/torrents/add", &form, Some(&c)).await.status(), 200);
+        for action in ["pieceStates", "pieceHashes", "pieceAvailability", "files"] {
+            let r = h.get(&format!("/api/v2/torrents/{action}?hash={id}"), Some(&c)).await;
+            assert_eq!(r.status(), 200, "{action}");
+            assert_eq!(r.json::<Value>().await.unwrap(), json!([]), "{action}");
+        }
+    });
+}
+
 #[test]
 fn torrent_share_limits_mode() {
     let h = Harness::new(|_| {});

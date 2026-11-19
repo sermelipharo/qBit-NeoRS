@@ -1084,6 +1084,7 @@ mod tests {
         assert_eq!(v["share_limits_mode"], "MatchAny");
         assert_eq!(v["random_port"], false);
         assert_eq!(v["alt_dl_limit"], 10240);
+        assert_eq!(v["request_queue_size"], 1500, "5.3.1 default");
         assert_eq!(v["scan_dirs"], json!({}));
         assert_eq!(v["banned_IPs"], "");
         assert_eq!(v["file_log_age_type"], 1);

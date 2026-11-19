@@ -125,7 +125,7 @@ extension AdvancedPrefs {
         blockPeersOnPrivilegedPorts: false, uploadSlotsBehavior: .fixedSlots,
         uploadChokingAlgorithm: .fastestUpload, announceToAllTrackers: false, announceToAllTiers: true,
         announceIp: "", announcePort: 0, maxConcurrentHttpAnnounces: 50, stopTrackerTimeout: 2,
-        peerTurnover: 4, peerTurnoverCutoff: 90, peerTurnoverInterval: 300, requestQueueSize: 500,
+        peerTurnover: 4, peerTurnoverCutoff: 90, peerTurnoverInterval: 300, requestQueueSize: 1500,
         maxOutstandingBlockRequests: 2000,
         dhtBootstrapNodes: "dht.libtorrent.org:25401, dht.transmissionbt.com:6881, router.bittorrent.com:6881",
         webtorrentStunServer: "stun.l.google.com:19302", pluginsEnabled: false

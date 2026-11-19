@@ -721,7 +721,7 @@ impl Default for AdvancedPrefs {
             peer_turnover: 4,
             peer_turnover_cutoff: 90,
             peer_turnover_interval: 300,
-            request_queue_size: 500,
+            request_queue_size: 1500,
             max_outstanding_block_requests: 2000,
             dht_bootstrap_nodes: DEFAULT_DHT_BOOTSTRAP_NODES.into(),
             webtorrent_stun_server: "stun.l.google.com:19302".into(),
